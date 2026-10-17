@@ -1,15 +1,18 @@
 #include "Board.h"
 
-Board::Board(Model model) : model_(model)
+namespace R2BOY::Core
 {
-}
+    Board::Board(Model model) : model_(model)
+    {
+    }
 
-Model Board::model() const
-{
-    return model_;
-}
+    Model Board::model() const
+    {
+        return model_;
+    }
 
-ExecutionMode Board::executionMode() const
-{
-    return executionMode_;
+    ExecutionMode Board::executionMode() const
+    {
+        return executionMode_;
+    }
 }

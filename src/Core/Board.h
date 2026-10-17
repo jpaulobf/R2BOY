@@ -13,27 +13,45 @@
 #include "Memory/Memory.h"
 #include "PPU/PPU.h"
 
-// Owns the emulated hardware. Component wiring and cycle scheduling come next.
-class Board
+namespace R2BOY::Core
 {
-public:
-    explicit Board(Model model = Model::DMG);
+    /**
+     * Reúne e mantém vivos os componentes do hardware emulado.
+     * É o ponto de composição do Core, independente de SDL e ImGui. As conexões
+     * entre os dispositivos, o reset e a sincronização por ciclos ainda serão
+     * implementados. Por enquanto, armazena o modelo e o cartucho carregado.
+     */
+    class Board
+    {
+    public:
+        // Define o modelo físico; não inicia nem executa o hardware.
+        explicit Board(Model model = Model::DMG);
 
-    Model model() const;
-    ExecutionMode executionMode() const;
+        // Modelo físico escolhido na construção, independente da ROM carregada.
+        Model model() const;
 
-private:
-    Model model_;
-    ExecutionMode executionMode_ = ExecutionMode::DMG;
-    APU apu_;
-    BUS bus_;
-    CPU cpu_;
-    Cartridge cartridge_;
-    DMA dma_;
-    Interrupts interrupts_;
-    Joypad joypad_;
-    Serial serial_;
-    Timer timer_;
-    Memory memory_;
-    PPU ppu_;
-};
+        // Modo de execução atual; permanece DMG até a implementação da seleção de modo.
+        ExecutionMode executionMode() const;
+
+        // Acesso ao cartucho pertencente à placa para realizar seu carregamento.
+        Cartridge::Cartridge &cartridge() { return cartridge_; }
+
+        // Consulta ao cartucho sem permitir alterações, utilizada pela interface.
+        const Cartridge::Cartridge &cartridge() const { return cartridge_; }
+
+    private:
+        Model model_;
+        ExecutionMode executionMode_ = ExecutionMode::DMG;
+        APU::APU apu_;
+        BUS::BUS bus_;
+        CPU::CPU cpu_;
+        Cartridge::Cartridge cartridge_;
+        IO::DMA dma_;
+        IO::Interrupts interrupts_;
+        IO::Joypad joypad_;
+        IO::Serial serial_;
+        IO::Timer timer_;
+        Memory::Memory memory_;
+        PPU::PPU ppu_;
+    };
+}
