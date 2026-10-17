@@ -1,7 +1,7 @@
 # R2BOY
 
 <div align="center">
-  <img src="https://github.com/jpaulobf/R2BOY/blob/main/assets/r2boy.png" height="600"/>
+  <img src="https://github.com/jpaulobf/R2BOY/blob/main/assets/r2boy2.png" height="600"/>
 </div>
 
 ---
