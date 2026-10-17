@@ -69,7 +69,6 @@ add_executable(R2BOY
     src/Core/PPU/PPU.cpp
     src/Core/PPU/PPU.h
     src/Emulator.cpp
-    src/Emulator.h
     src/System/Audio.cpp
     src/System/Audio.h
     src/System/Engine.cpp
