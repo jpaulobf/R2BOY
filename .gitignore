@@ -1,0 +1,17 @@
+# Build outputs
+/build*/
+/bin/
+/release_pkg/
+/R2BOY_Windows_x64.zip
+
+# Local editor settings
+/.vs/
+/.vscode/
+
+# Games, saves and boot ROMs
+*.gb
+*.gbc
+*.sav
+*.srm
+/roms/
+/bootroms/
