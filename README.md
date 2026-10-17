@@ -1,5 +1,11 @@
 # R2BOY
 
+<div align="center">
+  <img src="https://github.com/jpaulobf/R2BOY/blob/main/assets/r2boy.png"/>
+</div>
+
+---
+
 A Game Boy and Game Boy Color emulator written from scratch in C++17, developed
 alongside R2NES.
 
