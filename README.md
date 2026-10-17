@@ -1,86 +1,51 @@
 # R2BOY
 
-Emulador de Game Boy / Game Boy Color em C++17, desenvolvido do zero em paralelo ao R2NES.
+A Game Boy and Game Boy Color emulator written from scratch in C++17, developed
+alongside R2NES.
 
-O projeto está no início: a interface usa Dear ImGui sobre SDL2, com uma área
-de vídeo provisória na proporção de 160×144 pixels. Carrega ROMs e exibe os
-dados do cartucho, mas ainda não emula o hardware. Use File > Exit ou feche a janela para sair; Esc também
-fecha quando o ImGui não está capturando o teclado.
+R2BOY is taking its first steps toward bringing the Game Boy library to the desktop,
+with an interface built on SDL2 and Dear ImGui.
 
-`src/Emulator.cpp` contém o launcher e inicia `System/Engine`, que controla
-o gameloop. `Window` gerencia a janela, os eventos e a interface ImGui.
-`Window/FileManager` concentra a navegação e a seleção de ROMs, incluindo membros
-de ZIP e mensagens de erro; `System/RomFile` lê os arquivos e extrai os bytes.
+**Early development:** you can browse ROMs and explore cartridge details, but games
+are not playable yet. Hardware emulation is the next major milestone.
 
-## Abrir uma ROM
+## Getting started
 
-Use **File > Open** ou **Ctrl+O** para abrir o navegador de arquivos ImGui.
-Use duplo clique na lista para entrar em pastas ou abrir uma ROM. O caminho atual
-aparece acima dos botões **Up** e **Cancel**; use **Up** para voltar à pasta anterior.
-São aceitos `.gb`, `.gbc` e `.zip`, inclusive com extensões em maiúsculas.
-No Windows, o seletor **Drive**, acima do caminho atual, permite navegar para a raiz
-de outra unidade.
+Use **File > Open** or **Ctrl+O** to browse your ROM collection. Double-click a
+folder to navigate or a ROM to open it. Use **Up** to go back; on Windows, the
+**Drive** selector lets you switch drives.
 
-ZIPs são lidos em memória, sem extrair arquivos no disco. Quando há uma única
-ROM, ela é aberta diretamente; quando há várias, a interface pede a seleção.
-Nesse caso, **Up** retorna à pasta que contém o ZIP.
-O limite é de 8 MiB por ROM e 128 MiB por ZIP. Arquivos corrompidos, membros
-criptografados e ROMs truncadas produzem uma mensagem no seletor; o cartucho
-anterior permanece carregado se a abertura falhar.
+- Open `.gb` and `.gbc` files, including ROMs inside `.zip` archives.
+- Choose a ROM when an archive contains more than one game.
+- Explore the title, GB/GBC compatibility, cartridge type, ROM/RAM sizes, and more
+  in **Cartridge details**.
 
-**Cartridge details** mostra título, compatibilidade GB/GBC, tipo de cartucho,
-tamanhos de ROM/RAM, versão, região, fabricante e licença. Logo e checksums
-divergentes são avisos para permitir ROMs de desenvolvimento. A extensão não
-determina o modelo: a compatibilidade vem do header. Os offsets e checksums
-seguem [Pan Docs](https://gbdev.io/pandocs/The_Cartridge_Header.html).
-Reconhecer o tipo de cartucho ainda não implementa seu controlador MBC.
+ZIP archives are opened without extracting files to disk. If a file cannot be
+opened, the browser shows an error and keeps the previous cartridge loaded.
+ROMs up to 8 MiB and ZIP archives up to 128 MiB are supported.
 
-## Organização do código
+Close the window or use **File > Exit** to quit.
+
+## Project structure
 
 ```text
 src/
-├── Common/                 Tipos e constantes compartilhados
-├── Core/
-│   ├── Board.h / .cpp      Composição do hardware emulado
-│   ├── Model.h             Modelo físico (DMG/CGB) e modo de execução
-│   ├── APU/                Áudio emulado
-│   ├── BUS/                Mapa de endereços e roteamento de acessos
-│   ├── CPU/                CPU SM83
-│   ├── PPU/                Vídeo emulado
-│   ├── Cartridge/
-│   │   ├── Cartridge.h / .cpp
-│   │   ├── Header.h / .cpp
-│   │   └── MBC/            Controladores de bancos do cartucho
-│   ├── Memory/             WRAM, HRAM, VRAM, OAM e boot ROM
-│   └── IO/                 Joypad, Timer, Serial, Interrupts e DMA
-├── System/                 Engine, entrada e saída de áudio na plataforma
-├── Util/                   Utilitários criados conforme a necessidade
-├── Window/                 Janela, eventos e apresentação com SDL/ImGui
-└── Emulator.h / .cpp       Entrada da aplicação
+├── Common/            Shared types and constants
+├── Core/              Game Boy hardware: CPU, video, audio, memory, and cartridges
+├── System/            Main loop and platform input/audio
+├── Util/              Utilities
+├── Window/            Desktop interface and ROM browser
+└── Emulator.h / .cpp  Application entry point
 ```
 
-Os componentes de hardware são esqueletos compiláveis, ainda sem emulação.
-Os namespaces acompanham as pastas: `R2BOY::Common`, `R2BOY::System`,
-`R2BOY::Window` e `R2BOY::Core` para a placa e os modelos. Cada subsistema
-do núcleo possui seu namespace, como `R2BOY::Core::APU`,
-`R2BOY::Core::Cartridge` e `R2BOY::Core::IO`; os controladores ficam em
-`R2BOY::Core::Cartridge::MBC`. Os testes usam `R2BOY::Test`.
+The hardware components are currently scaffolding. Game Boy and Game Boy Color
+will share an emulation core, kept independent of the desktop interface.
 
-`Board` possui os componentes; suas conexões, reset e sincronização por ciclos
-serão implementados junto com o hardware. O `Core` deve permanecer independente
-de SDL e ImGui. GB e GBC compartilham esse núcleo; o modelo físico e o modo de
-execução são conceitos separados para permitir jogos de GB no GBC.
+## Building
 
-`IO` reúne os periféricos menores. Os registradores de áudio e vídeo pertencem
-a `APU` e `PPU`, respectivamente, com os acessos encaminhados pelo `BUS`.
-`System/Input` fará o mapeamento de controles físicos para `Core/IO/Joypad`;
-`System/Audio` enviará à plataforma as amostras produzidas pela `APU`.
-
-## Compilar
-
-Requisitos: CMake 3.14 ou superior, compilador C++17 e Git. O CMake baixa
-a SDL2, o Dear ImGui e o miniz (leitura de ZIP) na primeira configuração;
-essa etapa precisa de acesso à internet.
+You will need **CMake 3.14+**, a **C++17 compiler**, and **Git**. CMake downloads
+SDL2, Dear ImGui, and miniz during the first configuration, so an internet
+connection is required for that step.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
@@ -88,19 +53,20 @@ cmake --build build --config Debug
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
-O executável é gerado em `bin/` (ou `bin/Debug/` com geradores de múltiplas
-configurações). No Windows com MinGW e Ninja, acrescente `-G Ninja` à configuração.
+The executable is generated in `bin/` (or `bin/Debug/` with multi-configuration
+generators). On Windows with MinGW and Ninja, add `-G Ninja` to the configuration
+command.
 
-No Linux, instale também as ferramentas de compilação e os pacotes de
-desenvolvimento de X11 ou Wayland usados pela SDL2. O build Linux ainda não foi validado.
+On Linux, you will also need build tools and the X11 or Wayland development
+packages used by SDL2. Linux builds have not been validated yet.
 
-## Próximos passos
+## What's next
 
-- Controladores MBC, RAM de cartucho e mapa de memória do Game Boy clássico (DMG).
-- CPU SM83 e validação das instruções.
-- Temporizadores, interrupções, vídeo, controles e áudio.
-- Suporte a Game Boy Color (GBC).
+- Cartridge bank controllers, cartridge RAM, and the original Game Boy memory map.
+- SM83 CPU implementation and instruction testing.
+- Timers, interrupts, video, controls, and audio.
+- Game Boy Color support.
 
-## Licença
+## License
 
-Distribuído sob a GNU General Public License v3.0. Consulte [LICENSE](LICENSE).
+Released under the GNU General Public License v3.0. See [LICENSE](LICENSE).
