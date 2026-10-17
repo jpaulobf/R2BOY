@@ -1,11 +1,11 @@
 #include <SDL.h>
 #include "Emulator.h"
-#include "Window/Window.h"
+#include "System/Engine.h"
 
 int Emulator::run()
 {
-    Window window;
-    return window.run();
+    Engine engine;
+    return engine.run();
 }
 
 int main(int, char **)

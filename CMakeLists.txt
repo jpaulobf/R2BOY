@@ -36,7 +36,49 @@ add_library(r2boy_imgui STATIC
 target_include_directories(r2boy_imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
 target_link_libraries(r2boy_imgui PUBLIC SDL2::SDL2-static)
 
-add_executable(R2BOY src/Emulator.cpp src/Emulator.h src/Window/Window.cpp src/Window/Window.h)
+add_executable(R2BOY
+    src/Common/Constants.h
+    src/Common/Types.h
+    src/Core/APU/APU.cpp
+    src/Core/APU/APU.h
+    src/Core/BUS/BUS.cpp
+    src/Core/BUS/BUS.h
+    src/Core/Board.cpp
+    src/Core/Board.h
+    src/Core/CPU/CPU.cpp
+    src/Core/CPU/CPU.h
+    src/Core/Cartridge/Cartridge.cpp
+    src/Core/Cartridge/Cartridge.h
+    src/Core/Cartridge/Header.cpp
+    src/Core/Cartridge/Header.h
+    src/Core/Cartridge/MBC/MBC.cpp
+    src/Core/Cartridge/MBC/MBC.h
+    src/Core/IO/DMA.cpp
+    src/Core/IO/DMA.h
+    src/Core/IO/Interrupts.cpp
+    src/Core/IO/Interrupts.h
+    src/Core/IO/Joypad.cpp
+    src/Core/IO/Joypad.h
+    src/Core/IO/Serial.cpp
+    src/Core/IO/Serial.h
+    src/Core/IO/Timer.cpp
+    src/Core/IO/Timer.h
+    src/Core/Memory/Memory.cpp
+    src/Core/Memory/Memory.h
+    src/Core/Model.h
+    src/Core/PPU/PPU.cpp
+    src/Core/PPU/PPU.h
+    src/Emulator.cpp
+    src/Emulator.h
+    src/System/Audio.cpp
+    src/System/Audio.h
+    src/System/Engine.cpp
+    src/System/Engine.h
+    src/System/Input.cpp
+    src/System/Input.h
+    src/Window/Window.cpp
+    src/Window/Window.h
+)
 target_compile_features(R2BOY PRIVATE cxx_std_17)
 set_target_properties(R2BOY PROPERTIES CXX_EXTENSIONS OFF)
 target_include_directories(R2BOY PRIVATE src)
