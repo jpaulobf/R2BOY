@@ -4,14 +4,23 @@
 #include "Audio.h"
 #include "Input.h"
 
-// Controls the application loop and, later, real-time hardware execution.
-class Engine
+namespace R2BOY::System
 {
-public:
-    int run();
+    /**
+     * Coordena o ciclo da aplicação e a integração entre a plataforma e o Core.
+     * Possui a Board e os adaptadores de entrada/áudio. Configura a abertura de ROMs,
+     * processa eventos e solicita a renderização à Window. A execução do hardware
+     * em tempo real ainda será integrada ao ciclo.
+     */
+    class Engine
+    {
+    public:
+        // Executa até o encerramento; retorna 0 ao sair normalmente ou 1 em falha de janela/renderização.
+        int run();
 
-private:
-    Board board_;
-    Input input_;
-    Audio audio_;
-};
+    private:
+        Core::Board board_;
+        Input input_;
+        Audio audio_;
+    };
+}
