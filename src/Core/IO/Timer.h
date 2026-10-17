@@ -1,7 +1,13 @@
 #pragma once
 
-// Hardware divider and timer registers.
-// Initial scaffold; hardware/platform behavior is not implemented yet.
-class Timer
+namespace R2BOY::Core::IO
 {
-};
+    /**
+     * Reserva o divisor de frequência e o temporizador do console.
+     * Representará os registradores DIV, TIMA, TMA e TAC e sua evolução por ciclos,
+     * incluindo pedidos de interrupção. A temporização ainda não está implementada.
+     */
+    class Timer
+    {
+    };
+}
