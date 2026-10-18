@@ -44,8 +44,35 @@ src/
 └── Emulator.h / .cpp  Application entry point
 ```
 
-The hardware components are currently scaffolding. Game Boy and Game Boy Color
-will share an emulation core, kept independent of the desktop interface.
+The memory subsystem and cartridge bank switching are implemented. CPU, PPU,
+APU, DMA and the other peripherals remain scaffolding. The emulation core stays
+independent of the desktop interface.
+
+## Memory and battery saves
+
+ROM reads and MBC register writes are routed through the bus, alongside cartridge
+RAM, WRAM (including its echo), VRAM, OAM and HRAM. CGB mode supports the VRAM and
+WRAM bank registers. Loading a cartridge clears volatile memory and resets bank
+selection; resetting memory preserves cartridge RAM.
+
+Supported controllers are ROM-only (including ROM+RAM), standard MBC1, MBC2,
+MBC3 without RTC, and MBC5. Bank selection and RAM enable behavior follow
+[Pan Docs](https://gbdev.io/pandocs/Memory_Map.html). MBC2 stores 512 four-bit cells;
+MBC5 rumble state is tracked but is not sent to a physical controller.
+
+Battery-backed RAM is restored from `saves/<CRC32>.sav` beside the executable.
+Modified RAM is saved when switching games, every five seconds, and on normal
+exit. The same ROM shares its save whether opened directly or from a ZIP.
+Writes use a temporary file before replacing the previous save. A save with an
+incompatible size produces an error and prevents replacing the current cartridge.
+Saves contain raw RAM; MBC2 uses one byte per four-bit cell (512 bytes total).
+
+RTC cartridges, MBC1M compilations and other controllers are not implemented;
+unsupported types are rejected, as are MBC1M images detected by their secondary
+logo. Boot ROM, peripheral registers, CPU execution and PPU/DMA access restrictions
+are still pending. RAM starts with deterministic values for development, not
+hardware-accurate power-on contents. ROM size codes outside 0x00–0x08 are rejected
+for mapping even though the header parser can describe legacy sizes.
 
 ## Building
 
@@ -68,7 +95,7 @@ packages used by SDL2. Linux builds have not been validated yet.
 
 ## What's next
 
-- Cartridge bank controllers, cartridge RAM, and the original Game Boy memory map.
+- MBC3 RTC, additional controllers, boot ROM and memory-mapped peripheral registers.
 - SM83 CPU implementation and instruction testing.
 - Timers, interrupts, video, controls, and audio.
 - Game Boy Color support.
