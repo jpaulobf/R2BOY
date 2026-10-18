@@ -56,40 +56,45 @@ file(GLOB_RECURSE R2BOY_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
 )
 
-# O cartucho é compartilhado com os testes e deve ser compilado apenas na biblioteca.
-file(GLOB_RECURSE R2BOY_CARTRIDGE_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/Cartridge/*.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/Cartridge/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/Cartridge/*.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/Cartridge/*.hpp"
+# O núcleo é compartilhado com os testes e deve ser compilado apenas na biblioteca.
+file(GLOB_RECURSE R2BOY_CORE_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/*.hpp"
 )
-list(APPEND R2BOY_CARTRIDGE_SOURCES
+list(APPEND R2BOY_CORE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/System/RomFile.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/System/RomFile.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/System/SaveFile.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/System/SaveFile.h"
 )
-list(REMOVE_ITEM R2BOY_SOURCES ${R2BOY_CARTRIDGE_SOURCES})
+list(REMOVE_ITEM R2BOY_SOURCES ${R2BOY_CORE_SOURCES})
 
-add_library(r2boy_cartridge STATIC ${R2BOY_CARTRIDGE_SOURCES})
-target_compile_features(r2boy_cartridge PUBLIC cxx_std_17)
-target_include_directories(r2boy_cartridge PUBLIC src)
-target_link_libraries(r2boy_cartridge PRIVATE miniz)
+add_library(r2boy_core STATIC ${R2BOY_CORE_SOURCES})
+target_compile_features(r2boy_core PUBLIC cxx_std_17)
+target_include_directories(r2boy_core PUBLIC src)
+target_link_libraries(r2boy_core PRIVATE miniz)
 
 add_executable(R2BOY ${R2BOY_SOURCES})
 target_compile_features(R2BOY PRIVATE cxx_std_17)
 set_target_properties(R2BOY PROPERTIES CXX_EXTENSIONS OFF)
 target_include_directories(R2BOY PRIVATE src)
-target_link_libraries(R2BOY PRIVATE SDL2::SDL2main r2boy_imgui r2boy_cartridge)
+target_link_libraries(R2BOY PRIVATE SDL2::SDL2main r2boy_imgui r2boy_core)
 if(MSVC)
     target_compile_options(R2BOY PRIVATE /W4)
-    target_compile_options(r2boy_cartridge PRIVATE /W4)
+    target_compile_options(r2boy_core PRIVATE /W4)
 else()
     target_compile_options(R2BOY PRIVATE -Wall -Wextra -Wpedantic)
-    target_compile_options(r2boy_cartridge PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(r2boy_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 include(CTest)
 if(BUILD_TESTING)
     add_executable(cartridge_tests tests/CartridgeTests.cpp)
-    target_link_libraries(cartridge_tests PRIVATE r2boy_cartridge miniz)
+    target_link_libraries(cartridge_tests PRIVATE r2boy_core miniz)
     add_test(NAME cartridge_tests COMMAND cartridge_tests)
+    add_executable(memory_tests tests/MemoryTests.cpp)
+    target_link_libraries(memory_tests PRIVATE r2boy_core)
+    add_test(NAME memory_tests COMMAND memory_tests)
 endif()
