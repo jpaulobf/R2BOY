@@ -13,7 +13,8 @@ R2BOY is taking its first steps toward bringing the Game Boy library to the desk
 with an interface built on SDL2 and Dear ImGui.
 
 **Early development:** you can browse ROMs and explore cartridge details, but games
-are not playable yet. Hardware emulation is the next major milestone.
+are not playable yet. The CPU executes instructions, while video, audio and
+peripheral timing are still under development.
 
 ## Getting started
 
@@ -44,8 +45,9 @@ src/
 └── Emulator.h / .cpp  Application entry point
 ```
 
-The memory subsystem and cartridge bank switching are implemented. CPU, PPU,
-APU, DMA and the other peripherals remain scaffolding. The emulation core stays
+The SM83 CPU, memory subsystem, cartridge bank switching and IF/IE interrupt
+registers, timer/divider and standalone serial transfers are implemented. PPU, APU, DMA and
+other peripherals remain scaffolding. The emulation core stays
 independent of the desktop interface.
 
 ## Memory and battery saves
@@ -69,10 +71,93 @@ Saves contain raw RAM; MBC2 uses one byte per four-bit cell (512 bytes total).
 
 RTC cartridges, MBC1M compilations and other controllers are not implemented;
 unsupported types are rejected, as are MBC1M images detected by their secondary
-logo. Boot ROM, peripheral registers, CPU execution and PPU/DMA access restrictions
+logo. Boot ROM, other peripheral registers and PPU/DMA access restrictions
 are still pending. RAM starts with deterministic values for development, not
 hardware-accurate power-on contents. ROM size codes outside 0x00–0x08 are rejected
 for mapping even though the header parser can describe legacy sizes.
+
+## CPU
+
+The SM83 interpreter implements the defined base and CB-prefixed opcodes, flags,
+stack operations and conditional timing. `Board::step()` runs one instruction
+or interrupt entry and returns T-cycles (four per machine cycle). Each CPU bus
+access and internal wait advances the Board by one M-cycle; bus accesses occur
+at the end of that cycle. The Board advances peripherals in four one-T-cycle
+steps, including during HALT. IF/IE, interrupt
+priority, delayed EI, DI, RETI, HALT and the HALT bug are connected through the bus.
+Invalid opcodes lock the CPU until reset. STOP currently waits for an explicit
+wake-up; its API wait units do not advance the hardware clock. `clockCycles()`
+reports the Board's actual hardware time, excluding those STOP waits. CGB speed
+switching and detailed STOP behavior are not implemented.
+
+Loading a ROM resets the CPU without executing a boot ROM: PC starts at `0x0100`,
+SP at `0xFFFE`, and CPU registers follow DMG/CGB profiles, including the title-based
+CGB compatibility values. This does not yet reproduce the entire machine's
+post-boot state: video, audio and joypad still need their implementations.
+The desktop loop advances the CPU at the nominal normal-speed rate, with bounded
+catch-up after pauses. Instruction totals come from the individual M-cycles,
+without adding missing cycles at the end; Debug builds also check them against
+the expected instruction totals. This is M-cycle synchronization, not a model
+of the electrical phases within each T-cycle or all interrupt/DMA hardware quirks.
+`CPU::setCycleObserver()` optionally traces reads, writes and internal cycles.
+
+References: [Pan Docs instruction set](https://gbdev.io/pandocs/CPU_Instruction_Set.html),
+[interrupts](https://gbdev.io/pandocs/Interrupts.html) and
+[post-boot state](https://gbdev.io/pandocs/Power_Up_Sequence.html).
+The CPU test suite covers all opcode slots and CB instructions, exhaustive 8-bit
+ALU inputs, decimal arithmetic, signed SP offsets, branches, stack boundaries,
+interrupts, serial transfers and execution of a synthetic ROM. Timing tests also
+verify bus-access ordering, internal waits around stack operations and branches,
+interrupt entry, HALT/STOP, and peripheral changes visible during an instruction.
+
+## Timer and divider
+
+`FF04`–`FF07` map DIV, TIMA, TMA and TAC. The 16-bit system divider advances every
+T-cycle; TIMA increments on falling edges of divider bit 9, 3, 5 or 7 according
+to TAC, giving periods of 1024, 16, 64 or 256 T-cycles. Writing DIV resets the
+whole divider and can trigger an early TIMA increment. TAC changes also model
+falling-edge increments, including the DMG/CGB difference when disabling it.
+
+TIMA overflow exposes zero for four T-cycles before reloading TMA and requesting
+the timer interrupt. Writes to TIMA during that delay cancel the reload/IRQ;
+during the reload M-cycle, TIMA writes are ignored and TMA writes also update
+TIMA. The timer keeps running during HALT; STOP resets DIV and suspends the clock.
+Tests cover the frequency boundaries, write conflicts, IRQ entry and CPU reads
+across an overflow/reload boundary. Behavior follows
+[Pan Docs](https://gbdev.io/pandocs/Timer_Obscure_Behaviour.html).
+
+Without a boot ROM, reset uses deterministic divider phases: `ABCC` on DMG,
+`1EA0` on CGB native mode and `267C` on CGB compatibility mode. These do not
+reproduce variable boot duration or user input. The revision-dependent race on
+CGB timer enabling is modeled deterministically without an extra pulse. CGB
+double-speed switching and the APU's divider-driven events remain pending.
+
+## Running Blargg tests
+
+With `BUILD_TESTING` enabled, `rom_runner` runs a Blargg ROM without
+SDL or save files and prints the serial output:
+
+```powershell
+.\bin\rom_runner.exe "path\to\cpu_instrs\individual\01-special.gb" 500000000
+```
+
+The optional second argument limits T-cycles (default: one billion); a third
+argument selects `dmg` (default) or `cgb`. Exit codes are 0 for a serial `Passed`
+result, 1 for failure/error/CPU lock, and 2 when no result arrives before the limit.
+The test ROMs are downloaded separately from
+[Blargg's test ROM collection](https://github.com/retrio/gb-test-roms).
+
+Validated: **all 11 individual `cpu_instrs` tests pass on both DMG and CGB models**.
+The combined `cpu_instrs.gb` reports **"Passed all tests"** in DMG mode, and
+`instr_timing.gb` also passes in DMG mode. Mooneye has not yet been validated.
+These results do not validate all peripheral timing details or full game compatibility.
+
+Serial SB/SC transfers advance during each CPU M-cycle, not in a batch after an
+instruction. A write to SC starts the transfer at that write boundary. With no cable attached,
+internal-clock transfers receive `0xFF` and request the serial interrupt on
+completion; external-clock transfers wait indefinitely. The transmitted bytes
+are also printed in the desktop console. Physical link communication and exact
+serial clock phase are not implemented.
 
 ## Building
 
@@ -96,8 +181,8 @@ packages used by SDL2. Linux builds have not been validated yet.
 ## What's next
 
 - MBC3 RTC, additional controllers, boot ROM and memory-mapped peripheral registers.
-- SM83 CPU implementation and instruction testing.
-- Timers, interrupts, video, controls, and audio.
+- More hardware timing validation, including Mooneye and memory/interrupt edge cases.
+- DMA, video, controls, audio, and further T-cycle timing refinement.
 - Game Boy Color support.
 
 ## License
