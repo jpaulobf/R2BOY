@@ -18,7 +18,7 @@ peripheral timing are still under development.
 
 ## Getting started
 
-Use **File > Open** or **Ctrl+O** to browse your ROM collection. Double-click a
+Use **File > Load ROM** or **Ctrl+O** to browse your ROM collection. Double-click a
 folder to navigate or a ROM to open it. Use **Up** to go back; on Windows, the
 **Drive** selector lets you switch drives.
 
@@ -134,6 +134,24 @@ double-speed switching and the APU's divider-driven events remain pending.
 
 ## Running Blargg tests
 
+To run a test through the desktop application, start `R2BOY.exe` from a terminal,
+choose **File > Load ROM**, and double-click a test ROM such as
+`cpu_instrs/individual/01-special.gb`.
+The ROM's serial output appears live in the same console, including `Passed`,
+`Failed`, or `Passed all tests`. Video output is not required. Keep the emulator
+window open and unminimized while the test runs.
+
+The desktop currently uses CGB hardware. As a temporary workaround, it resumes
+STOP when the ROM has written a speed-switch request to KEY1, and logs a warning
+once per ROM. Execution continues at normal speed: KEY1 and double-speed timing
+are not emulated. Ordinary STOP still waits for wake-up. This allows the combined
+`cpu_instrs` ROM to run, but does not validate CGB speed-switch or timing behavior.
+The headless `rom_runner` retains the Core's STOP behavior without this workaround.
+
+```powershell
+.\bin\R2BOY.exe
+```
+
 With `BUILD_TESTING` enabled, `rom_runner` runs a Blargg ROM without
 SDL or save files and prints the serial output:
 
@@ -149,7 +167,11 @@ The test ROMs are downloaded separately from
 
 Validated: **all 11 individual `cpu_instrs` tests pass on both DMG and CGB models**.
 The combined `cpu_instrs.gb` reports **"Passed all tests"** in DMG mode, and
-`instr_timing.gb` also passes in DMG mode. Mooneye has not yet been validated.
+`instr_timing.gb` also passes in DMG mode. The combined ROM in CGB mode times out
+at its speed-switch STOP without the desktop workaround. With that workaround,
+the combined suite reports **"Passed all tests"** (225,274,856 T-cycles), verified
+with a headless harness using the desktop's observer and resume logic.
+Mooneye has not yet been validated.
 These results do not validate all peripheral timing details or full game compatibility.
 
 Serial SB/SC transfers advance during each CPU M-cycle, not in a batch after an
