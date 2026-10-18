@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Header.h"
+#include "MBC/MBC.h"
 
 namespace R2BOY::Core::Cartridge
 {
@@ -9,15 +10,17 @@ namespace R2BOY::Core::Cartridge
      *
      * Recebe os bytes já lidos pela camada System, sem depender de arquivos, SDL ou
      * ImGui. A ROM fica disponível apenas para consulta após o carregamento.
-     * Controladores MBC e RAM persistente ainda não estão implementados.
+     * O MBC seleciona bancos; a RAM é alocada conforme tipo e tamanho do header.
+     * A persistência em disco cabe a System/SaveFile, mantendo o Core sem I/O.
      */
     class Cartridge
     {
     public:
-
         /**
-         * Valida a imagem e substitui o cartucho atual.
-         * bytes correspondentes ao tamanho conhecido declarado no header.
+         * Valida imagem, tipo de controlador e capacidades antes de substituir o
+         * cartucho atual. Rejeita ROM truncada, controlador/tamanhos não suportados
+         * e combinações incompatíveis de ROM/RAM; aloca RAM apenas quando o tipo
+         * de cartucho a fornece. Inicializa RAM comum em 0xFF e células MBC2 em 0x0F.
          * Em caso de falha na validação, preserva o cartucho anterior. Divergências
          * de logo e checksums são registradas no Header e não impedem a carga.
          */
@@ -35,10 +38,33 @@ namespace R2BOY::Core::Cartridge
         // Origem informada na carga; vazia enquanto não houver cartucho.
         const std::string &source() const { return source_; }
 
+        // Acessos nas faixas 0000–7FFF (ROM/MBC) e A000–BFFF (RAM do cartucho).
+        // Leituras sem cartucho/RAM ou fora dessas faixas retornam 0xFF.
+        std::uint8_t read(std::uint16_t address) const;
+        void write(std::uint16_t address, std::uint8_t value);
+
+        // Reinicia bancos e habilitação da RAM, preservando seus bytes.
+        void resetBanks() { mbc_.reset(); }
+        const MBC::MBC &controller() const { return mbc_; }
+
+        // MBC2 usa um byte por célula de quatro bits, inclusive no arquivo .sav.
+        const std::vector<std::uint8_t> &ram() const { return ram_; }
+        bool hasBattery() const { return loaded() && mbc_.hasBattery(); }
+
+        // Apenas mudanças efetivas nos bytes habilitados marcam a RAM como modificada.
+        bool ramDirty() const { return ramDirty_; }
+        void markRamSaved() { ramDirty_ = false; }
+
+        // Exige bateria e tamanho exato; valida antes de alterar o conteúdo.
+        void restoreBatteryRam(std::vector<std::uint8_t> data);
+
     private:
         // As referências retornadas pelos acessores refletem a próxima carga.
         Header header_;
         std::vector<std::uint8_t> rom_;
         std::string source_;
+        MBC::MBC mbc_;
+        std::vector<std::uint8_t> ram_;
+        bool ramDirty_ = false;
     };
 }
