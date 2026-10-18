@@ -187,7 +187,8 @@ namespace R2BOY::Test
             board.write(0xFF80, 0x77);
             board.write(0xFFFE, 0x88);
             check(board.read(0xFF80) == 0x77 && board.read(0xFFFE) == 0x88, "HRAM boundaries");
-            check(board.read(0xFF00) == 0xFF && board.read(0xFFFF) == 0xFF, "unimplemented IO open bus");
+            check(board.read(0xFF00) == 0xFF, "unimplemented IO open bus");
+            check(board.read(0xFFFF) == 0 && board.read(0xFF0F) == 0xE1, "interrupt post-boot registers");
             board.write(0x8000, 0x10);
             board.write(0xFF4F, 1);
             board.write(0x8000, 0x20);
