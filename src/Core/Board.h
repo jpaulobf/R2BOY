@@ -17,23 +17,42 @@ namespace R2BOY::Core
 {
     /**
      * Reúne e mantém vivos os componentes do hardware emulado.
-     * É o ponto de composição do Core, independente de SDL e ImGui. As conexões
-     * entre os dispositivos, o reset e a sincronização por ciclos ainda serão
-     * implementados. Por enquanto, armazena o modelo e o cartucho carregado.
+     * É o ponto de composição do Core, independente de SDL e ImGui. Conecta o BUS
+     * ao cartucho e às memórias. CPU, periféricos e sincronização ainda são esqueletos.
      */
     class Board
     {
     public:
         // Define o modelo físico; não inicia nem executa o hardware.
         explicit Board(Model model = Model::DMG);
+        // O BUS mantém referências aos membros; a placa não pode ser copiada/movida.
+        Board(const Board &) = delete;
+        Board &operator=(const Board &) = delete;
+
+        // Carrega de forma transacional e reinicia a memória volátil no modo do jogo.
+        // Rejeita jogos exclusivos CGB quando o modelo físico é DMG.
+        void loadCartridge(std::vector<std::uint8_t> rom, std::string source);
+
+        // Instala um cartucho já validado, inclusive com RAM restaurada pela plataforma.
+        void loadCartridge(Cartridge::Cartridge cartridge);
+
+        // Apenas memória e bancos; ainda não executa reset da CPU/periféricos.
+        void resetMemory();
+        
+        // Acesso direto ao barramento, utilizado internamente pelos periféricos.
+        std::uint8_t read(std::uint16_t address) const { return bus_.read(address); }
+        
+        // Acesso direto ao barramento, utilizado internamente pelos periféricos.
+        void write(std::uint16_t address, std::uint8_t value) { bus_.write(address, value); }
 
         // Modelo físico escolhido na construção, independente da ROM carregada.
         Model model() const;
 
-        // Modo de execução atual; permanece DMG até a implementação da seleção de modo.
+        // Modo selecionado a partir do modelo físico e do flag CGB da ROM.
         ExecutionMode executionMode() const;
 
-        // Acesso ao cartucho pertencente à placa para realizar seu carregamento.
+        // Acesso para persistência/estado. Para trocar a ROM e reiniciar a memória,
+        // use loadCartridge() em vez de carregar diretamente neste objeto.
         Cartridge::Cartridge &cartridge() { return cartridge_; }
 
         // Consulta ao cartucho sem permitir alterações, utilizada pela interface.
@@ -43,7 +62,6 @@ namespace R2BOY::Core
         Model model_;
         ExecutionMode executionMode_ = ExecutionMode::DMG;
         APU::APU apu_;
-        BUS::BUS bus_;
         CPU::CPU cpu_;
         Cartridge::Cartridge cartridge_;
         IO::DMA dma_;
@@ -52,6 +70,7 @@ namespace R2BOY::Core
         IO::Serial serial_;
         IO::Timer timer_;
         Memory::Memory memory_;
+        BUS::BUS bus_;
         PPU::PPU ppu_;
     };
 }
