@@ -40,6 +40,7 @@ namespace R2BOY::Core
 
         // Apenas memória e bancos; ainda não executa reset da CPU/periféricos.
         void resetMemory();
+        
         // Inicializa memória, CPU, IF/IE, serial e timer sem executar uma boot ROM.
         // Os perfis seguem DMG/CGB; vídeo/áudio ainda não têm estado pós-boot.
         void reset();
@@ -50,6 +51,11 @@ namespace R2BOY::Core
 
         // Clock efetivamente entregue ao hardware desde reset(); não inclui espera em STOP.
         std::uint64_t clockCycles() const { return clockCycles_; }
+
+        // Controle de diagnóstico: permite observar ciclos e acordar STOP explicitamente.
+        CPU::CPU &cpu() { return cpu_; }
+
+        // Acesso constante à CPU para diagnóstico/testes.
         const CPU::CPU &cpu() const { return cpu_; }
 
         // Saída da porta serial para diagnóstico/testes, sem dependência de console no Core.
