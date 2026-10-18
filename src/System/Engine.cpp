@@ -26,6 +26,16 @@ namespace R2BOY::System
 
         SaveFile saves(std::filesystem::u8path(basePath.get()) / "saves");
         bool cpuFaultReported = false;
+        bool cpuStopReported = false;
+        bool speedSwitchRequested = false;
+        bool speedSwitchWarningReported = false;
+        // Contorno provisório da interface: observa a escrita de preparação em KEY1.
+        // Não altera leituras de KEY1 nem simula a velocidade dupla no Core.
+        board_.cpu().setCycleObserver([&speedSwitchRequested](const Core::CPU::CPU::Cycle &cycle)
+        {
+            if (cycle.type == Core::CPU::CPU::CycleType::Write && cycle.address == 0xFF4D)
+                speedSwitchRequested = (cycle.value & 1) != 0;
+        });
         double cycleCredit = 0;
         const auto flushSave = [&]()
         {
@@ -35,7 +45,7 @@ namespace R2BOY::System
 
         // A interface escolhe o arquivo; a Engine faz a ponte entre leitura e cartucho.
         // Erros propagam para o seletor, que apresenta a mensagem ao usuário.
-        window.setRomOpenHandler([this, &saves, &flushSave, &cpuFaultReported, &cycleCredit](const std::filesystem::path &path, const std::optional<RomFile::Entry> &entry)
+        window.setRomOpenHandler([this, &saves, &flushSave, &cpuFaultReported, &cpuStopReported, &speedSwitchRequested, &speedSwitchWarningReported, &cycleCredit](const std::filesystem::path &path, const std::optional<RomFile::Entry> &entry)
                                  {
             const auto fullPath = std::filesystem::absolute(path).lexically_normal();
             auto source = fullPath.u8string();
@@ -56,6 +66,9 @@ namespace R2BOY::System
                 const bool restored = saves.load(next);
                 board_.loadCartridge(std::move(next));
                 cpuFaultReported = false;
+                cpuStopReported = false;
+                speedSwitchRequested = false;
+                speedSwitchWarningReported = false;
                 cycleCredit = 0;
 
                 // Só registra sucesso depois da validação e substituição do cartucho.
@@ -66,6 +79,7 @@ namespace R2BOY::System
                 if (restored)
                     std::cout << "SaveFile: Loaded RAM -> " << saves.pathFor(board_.cartridge()).u8string() << std::endl;
                 std::cout << "CPU: Reset without boot ROM -> PC=0100, SP=FFFE" << std::endl;
+                std::cout << "Serial: ROM output follows in this console.\n" << std::endl;
             }
             catch (const std::exception &e)
             {
@@ -114,7 +128,24 @@ namespace R2BOY::System
             {
                 cycleCredit += std::min(elapsed, 0.05) * 4194304.0;
                 while (cycleCredit > 0 && !board_.cpu().locked())
+                {
                     cycleCredit -= board_.step();
+                    if (board_.cpu().stopped() && speedSwitchRequested &&
+                        board_.executionMode() == Core::ExecutionMode::CGB)
+                    {
+                        // Consome apenas o pedido de troca; STOP comum continua parando.
+                        board_.cpu().wakeFromStop();
+                        speedSwitchRequested = false;
+                        if (!speedSwitchWarningReported)
+                        {
+                            std::cout << board_.takeSerialOutput()
+                                      << "\nCPU: Skipping CGB speed-switch STOP (temporary workaround). "
+                                         "Continuing at normal speed; timing results are not reliable.\n"
+                                      << std::flush;
+                            speedSwitchWarningReported = true;
+                        }
+                    }
+                }
             }
             if (board_.cpu().locked() && !cpuFaultReported)
             {
@@ -125,6 +156,13 @@ namespace R2BOY::System
             const auto serialOutput = board_.takeSerialOutput();
             if (!serialOutput.empty())
                 std::cout << serialOutput << std::flush;
+            if (board_.cpu().stopped() && !cpuStopReported)
+            {
+                std::cout << "\nCPU: STOP entered; waiting for wake-up."
+                          << std::endl;
+                cpuStopReported = true;
+            }
+            if (!board_.cpu().stopped()) cpuStopReported = false;
             if (!window.renderFrame(running, board_.cartridge()))
             {
                 renderFailed = true;
