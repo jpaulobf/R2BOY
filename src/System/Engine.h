@@ -19,7 +19,8 @@ namespace R2BOY::System
         int run();
 
     private:
-        Core::Board board_;
+        // Hardware CGB executa tanto ROMs DMG quanto jogos exclusivos de Game Boy Color.
+        Core::Board board_{Core::Model::CGB};
         Input input_;
         Audio audio_;
     };
