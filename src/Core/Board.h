@@ -18,13 +18,15 @@ namespace R2BOY::Core
     /**
      * Reúne e mantém vivos os componentes do hardware emulado.
      * É o ponto de composição do Core, independente de SDL e ImGui. Conecta o BUS
-     * ao cartucho e às memórias. CPU, periféricos e sincronização ainda são esqueletos.
+     * ao cartucho, às memórias e a IF/IE. A CPU chama o clock da Board a cada
+     * M-cycle; a Board avança os periféricos em quatro passos de um T-cycle.
      */
     class Board
     {
     public:
         // Define o modelo físico; não inicia nem executa o hardware.
         explicit Board(Model model = Model::DMG);
+
         // O BUS mantém referências aos membros; a placa não pode ser copiada/movida.
         Board(const Board &) = delete;
         Board &operator=(const Board &) = delete;
@@ -38,10 +40,24 @@ namespace R2BOY::Core
 
         // Apenas memória e bancos; ainda não executa reset da CPU/periféricos.
         void resetMemory();
-        
+        // Inicializa memória, CPU, IF/IE, serial e timer sem executar uma boot ROM.
+        // Os perfis seguem DMG/CGB; vídeo/áudio ainda não têm estado pós-boot.
+        void reset();
+
+        // Executa uma instrução com hardware intercalado por M-cycle. Retorna
+        // T-cycles consumidos (ou a unidade de espera STOP); sem cartucho retorna zero.
+        unsigned step();
+
+        // Clock efetivamente entregue ao hardware desde reset(); não inclui espera em STOP.
+        std::uint64_t clockCycles() const { return clockCycles_; }
+        const CPU::CPU &cpu() const { return cpu_; }
+
+        // Saída da porta serial para diagnóstico/testes, sem dependência de console no Core.
+        std::string takeSerialOutput() { return serial_.takeOutput(); }
+
         // Acesso direto ao barramento, utilizado internamente pelos periféricos.
         std::uint8_t read(std::uint16_t address) const { return bus_.read(address); }
-        
+
         // Acesso direto ao barramento, utilizado internamente pelos periféricos.
         void write(std::uint16_t address, std::uint8_t value) { bus_.write(address, value); }
 
@@ -59,10 +75,12 @@ namespace R2BOY::Core
         const Cartridge::Cartridge &cartridge() const { return cartridge_; }
 
     private:
+        // Único ponto de avanço do hardware: não repetir estes ciclos depois de CPU::step().
+        void tickMachineCycle();
+        std::uint64_t clockCycles_ = 0;
         Model model_;
         ExecutionMode executionMode_ = ExecutionMode::DMG;
         APU::APU apu_;
-        CPU::CPU cpu_;
         Cartridge::Cartridge cartridge_;
         IO::DMA dma_;
         IO::Interrupts interrupts_;
@@ -71,6 +89,7 @@ namespace R2BOY::Core
         IO::Timer timer_;
         Memory::Memory memory_;
         BUS::BUS bus_;
+        CPU::CPU cpu_;
         PPU::PPU ppu_;
     };
 }
