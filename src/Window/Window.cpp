@@ -49,7 +49,7 @@ namespace R2BOY::Window
                 {
                     if (ImGui::BeginMenu("File"))
                     {
-                        if (ImGui::MenuItem("Open...", "Ctrl+O"))
+                        if (ImGui::MenuItem("Load ROM...", "Ctrl+O"))
                             fileManager.requestOpen();
                         if (ImGui::MenuItem("Exit", "Esc"))
                             running = false;
