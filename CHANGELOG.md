@@ -4,6 +4,8 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
 
+- Contorno provisório na janela para STOP com pedido de troca de velocidade CGB: segue em velocidade normal e avisa no console; STOP comum preservado.
+
 - Timer DIV/TIMA/TMA/TAC por T-cycle, bordas de DIV/TAC e diferenças DMG/CGB.
 - Overflow com recarga atrasada, conflitos de escrita e interrupção do timer durante HALT.
 - Blargg: 11/11 cpu_instrs individuais aprovados em DMG e CGB; ROM combinada e instr_timing aprovados em DMG.
