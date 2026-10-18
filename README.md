@@ -10,7 +10,7 @@ A Game Boy and Game Boy Color emulator written from scratch in C++17, developed
 alongside R2NES.
 
 R2BOY is taking its first steps toward bringing the Game Boy library to the desktop,
-with an interface built on SDL2 and Dear ImGui.
+with an interface built on SDL3 and Dear ImGui.
 
 **Early development:** you can browse ROMs and explore cartridge details, but games
 are not playable yet. The CPU executes instructions, while video, audio and
@@ -183,8 +183,8 @@ serial clock phase are not implemented.
 
 ## Building
 
-You will need **CMake 3.14+**, a **C++17 compiler**, and **Git**. CMake downloads
-SDL2, Dear ImGui, and miniz during the first configuration, so an internet
+You will need **CMake 3.16+**, a **C++17 compiler**, and **Git**. CMake downloads
+SDL 3.4.18, Dear ImGui 1.92.9b, and miniz during the first configuration, so an internet
 connection is required for that step.
 
 ```sh
@@ -198,7 +198,12 @@ generators). On Windows with MinGW and Ninja, add `-G Ninja` to the configuratio
 command.
 
 On Linux, you will also need build tools and the X11 or Wayland development
-packages used by SDL2. Linux builds have not been validated yet.
+packages used by SDL3. Linux builds have not been validated yet.
+
+When migrating an existing SDL2 checkout, configure a fresh build directory
+(for example, `-B build-sdl3`) to avoid cached dependency paths. The interface
+currently uses SDL_Renderer with the ImGui SDL3 backends; SDL_GPU presentation
+and post-processing shaders are planned for the video implementation.
 
 ## What's next
 

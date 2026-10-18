@@ -1,12 +1,11 @@
 #include "Engine.h"
 
 #include "Window/Window.h"
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <iostream>
 #include <exception>
 #include "SaveFile.h"
 #include <chrono>
-#include <memory>
 #include <algorithm>
 
 namespace R2BOY::System
@@ -17,14 +16,14 @@ namespace R2BOY::System
         if (!window.open())
             return 1;
 
-        std::unique_ptr<char, decltype(&SDL_free)> basePath(SDL_GetBasePath(), SDL_free);
+        const char *basePath = SDL_GetBasePath();
         if (!basePath)
         {
             std::cerr << "Unable to locate save directory: " << SDL_GetError() << '\n';
             return 1;
         }
 
-        SaveFile saves(std::filesystem::u8path(basePath.get()) / "saves");
+        SaveFile saves(std::filesystem::u8path(basePath) / "saves");
         bool cpuFaultReported = false;
         bool cpuStopReported = false;
         bool speedSwitchRequested = false;

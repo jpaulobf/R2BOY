@@ -4,6 +4,9 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
 
+- Migração para SDL 3.4.18 e Dear ImGui 1.92.9b, com backends SDL3/SDLRenderer3.
+- Adaptação de eventos, inicialização, renderização e caminho dos saves à API SDL3.
+
 - Contorno provisório na janela para STOP com pedido de troca de velocidade CGB: segue em velocidade normal e avisa no console; STOP comum preservado.
 
 - Timer DIV/TIMA/TMA/TAC por T-cycle, bordas de DIV/TAC e diferenças DMG/CGB.

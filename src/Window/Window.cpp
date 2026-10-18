@@ -1,10 +1,10 @@
 #include "Window.h"
 #include "Common/Constants.h"
 #include "Core/Cartridge/Cartridge.h"
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <imgui.h>
-#include <imgui_impl_sdl2.h>
-#include <imgui_impl_sdlrenderer2.h>
+#include <imgui_impl_sdl3.h>
+#include <imgui_impl_sdlrenderer3.h>
 #include <algorithm>
 #include <iostream>
 #include <memory>
@@ -29,9 +29,9 @@ namespace R2BOY::Window
             ~ImGuiSession()
             {
                 if (rendererReady)
-                    ImGui_ImplSDLRenderer2_Shutdown();
+                    ImGui_ImplSDLRenderer3_Shutdown();
                 if (platformReady)
-                    ImGui_ImplSDL2_Shutdown();
+                    ImGui_ImplSDL3_Shutdown();
                 ImGui::DestroyContext();
             }
         };
@@ -120,7 +120,7 @@ namespace R2BOY::Window
     {
         if (impl_)
             return true;
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
+        if (!SDL_Init(SDL_INIT_VIDEO))
         {
             std::cerr << "Failed to initialize SDL: " << SDL_GetError() << '\n';
             SDL_Quit();
@@ -131,15 +131,19 @@ namespace R2BOY::Window
         ImGui::CreateContext();
         auto state = std::make_unique<Impl>();
         state->window.reset(SDL_CreateWindow(
-            "R2BOY", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-            screenWidth * 4, screenHeight * 4 + 80,
-            SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI));
+            "R2BOY", screenWidth * 4, screenHeight * 4 + 80,
+            SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY));
         if (!state->window)
         {
             std::cerr << "Failed to create window: " << SDL_GetError() << '\n';
             return false;
         }
-        state->renderer.reset(SDL_CreateRenderer(state->window.get(), -1, 0));
+        if (!SDL_SetWindowPosition(state->window.get(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED))
+        {
+            // Alguns sistemas de janelas não permitem posicionamento pela aplicação.
+            std::cerr << "Unable to center window: " << SDL_GetError() << '\n';
+        }
+        state->renderer.reset(SDL_CreateRenderer(state->window.get(), nullptr));
         if (!state->renderer)
         {
             std::cerr << "Failed to create renderer: " << SDL_GetError() << '\n';
@@ -150,13 +154,13 @@ namespace R2BOY::Window
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.IniFilename = nullptr;
         ImGui::StyleColorsDark();
-        state->gui.platformReady = ImGui_ImplSDL2_InitForSDLRenderer(state->window.get(), state->renderer.get());
+        state->gui.platformReady = ImGui_ImplSDL3_InitForSDLRenderer(state->window.get(), state->renderer.get());
         if (!state->gui.platformReady)
         {
-            std::cerr << "Failed to initialize ImGui SDL2 backend\n";
+            std::cerr << "Failed to initialize ImGui SDL3 backend\n";
             return false;
         }
-        state->gui.rendererReady = ImGui_ImplSDLRenderer2_Init(state->renderer.get());
+        state->gui.rendererReady = ImGui_ImplSDLRenderer3_Init(state->renderer.get());
         if (!state->gui.rendererReady)
         {
             std::cerr << "Failed to initialize ImGui renderer backend\n";
@@ -173,14 +177,14 @@ namespace R2BOY::Window
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
-            ImGui_ImplSDL2_ProcessEvent(&event);
-            if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_o &&
-                (event.key.keysym.mod & KMOD_CTRL) != 0 && !event.key.repeat)
+            ImGui_ImplSDL3_ProcessEvent(&event);
+            if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_O &&
+                (event.key.mod & SDL_KMOD_CTRL) != 0 && !event.key.repeat)
                 impl_->fileManager.requestOpen();
-            if (event.type == SDL_QUIT ||
-                (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE &&
+            if (event.type == SDL_EVENT_QUIT ||
+                (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                  event.window.windowID == SDL_GetWindowID(impl_->window.get())) ||
-                (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE && !io.WantCaptureKeyboard))
+                (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE && !io.WantCaptureKeyboard))
                 running = false;
         }
     }
@@ -197,21 +201,25 @@ namespace R2BOY::Window
 
     bool Window::renderFrame(bool &running, const Core::Cartridge::Cartridge &cartridge)
     {
-        ImGui_ImplSDLRenderer2_NewFrame();
-        ImGui_ImplSDL2_NewFrame();
+        ImGui_ImplSDLRenderer3_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
         drawInterface(running, cartridge, impl_->fileManager);
         ImGui::Render();
         const ImGuiIO &io = ImGui::GetIO();
         SDL_Renderer *renderer = impl_->renderer.get();
-        if (SDL_RenderSetScale(renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y) != 0 ||
-            SDL_SetRenderDrawColor(renderer, 24, 24, 24, 255) != 0 || SDL_RenderClear(renderer) != 0)
+        if (!SDL_SetRenderScale(renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y) ||
+            !SDL_SetRenderDrawColor(renderer, 24, 24, 24, 255) || !SDL_RenderClear(renderer))
         {
             std::cerr << "Failed to prepare frame: " << SDL_GetError() << '\n';
             return false;
         }
-        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData());
-        SDL_RenderPresent(renderer);
+        ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+        if (!SDL_RenderPresent(renderer))
+        {
+            std::cerr << "Failed to present frame: " << SDL_GetError() << '\n';
+            return false;
+        }
         return true;
     }
 }
