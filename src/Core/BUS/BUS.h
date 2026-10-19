@@ -5,15 +5,18 @@
 #include "Core/IO/Interrupts.h"
 #include "Core/IO/Serial.h"
 #include "Core/IO/Timer.h"
+#include "Core/IO/DMA.h"
+#include "Core/IO/Joypad.h"
+#include "Core/PPU/PPU.h"
 #include <cstdint>
 
 namespace R2BOY::Core::BUS
 {
     /**
      * Roteia ROM/MBC e RAM externa ao cartucho, RAM interna à Memory e IF/IE
-     * ao controlador de interrupções, SB/SC à serial e FF04–FF07 ao timer. Os componentes devem viver
-     * mais que o BUS. Os demais registradores de periféricos, boot ROM e temporização
-     * serão conectados depois;
+     * ao controlador de interrupções, SB/SC à serial, FF04–FF07 ao timer e FF46
+     * ao DMA, FF00 ao joypad e os registradores LCD à PPU. Os componentes devem viver mais que o BUS. Os demais registradores
+     * de periféricos e boot ROM serão conectados depois;
      * leituras ainda não implementadas retornam 0xFF e escritas são ignoradas.
      */
     class BUS
@@ -21,24 +24,32 @@ namespace R2BOY::Core::BUS
     public:
         // Recebe os componentes pertencentes à Board, sem assumir sua posse.
         BUS(Cartridge::Cartridge &cartridge, Memory::Memory &memory, IO::Interrupts &interrupts,
-            IO::Serial &serial, IO::Timer &timer);
+            IO::Serial &serial, IO::Timer &timer, IO::DMA &dma, PPU::PPU &ppu, IO::Joypad &joypad);
 
-        // Acesso de leitura ao barramento.
+        // Acessos da CPU, sujeitos aos bloqueios de DMA e PPU.
         std::uint8_t read(std::uint16_t address) const;
 
         // Acesso de escrita ao barramento.
         void write(std::uint16_t address, std::uint8_t value);
+
         // A CPU consulta os pedidos habilitados e reconhece apenas o de maior prioridade.
         std::uint8_t pendingInterrupts() const { return interrupts_.pending(); }
         void acknowledgeInterrupt(unsigned bit) { interrupts_.acknowledge(bit); }
+
         // Evento interno de STOP: reseta DIV sem inventar um acesso extra da CPU.
         void stopDivider() { timer_.write(0xFF04, 0); }
 
     private:
+        friend class IO::DMA;
+        std::uint8_t readDMA(std::uint16_t address) const;
+        void writeOAM(std::uint16_t address, std::uint8_t value) { memory_.write(address, value); }
         Cartridge::Cartridge &cartridge_;
         Memory::Memory &memory_;
         IO::Interrupts &interrupts_;
         IO::Serial &serial_;
         IO::Timer &timer_;
+        IO::DMA &dma_;
+        PPU::PPU &ppu_;
+        IO::Joypad &joypad_;
     };
 }
