@@ -13,12 +13,12 @@ R2BOY is taking its first steps toward bringing the Game Boy library to the desk
 with an interface built on SDL3 and Dear ImGui.
 
 **Early development:** you can browse ROMs and explore cartridge details, but games
-are not playable yet. The CPU executes instructions, while video, audio and
-peripheral timing are still under development.
+are not fully playable yet. The CPU executes instructions and a FIFO PPU now
+generates video; controls, audio and hardware timing accuracy are still under development.
 
 ## Getting started
 
-Use **File > Load ROM** or **Ctrl+O** to browse your ROM collection. Double-click a
+Use **File > Load ROM** or **Ctrl+O** to browse your ROM collection. Click a
 folder to navigate or a ROM to open it. Use **Up** to go back; on Windows, the
 **Drive** selector lets you switch drives.
 
@@ -46,9 +46,14 @@ src/
 ```
 
 The SM83 CPU, memory subsystem, cartridge bank switching and IF/IE interrupt
-registers, timer/divider and standalone serial transfers are implemented. PPU, APU, DMA and
-other peripherals remain scaffolding. The emulation core stays
+registers, timer/divider, standalone serial transfers, OAM DMA and a FIFO PPU
+are implemented. APU and joypad remain scaffolding. The emulation core stays
 independent of the desktop interface.
+
+The PPU emits pixels through separate background/window and object FIFOs, with
+variable mode 3 duration, VBlank/STAT interrupts and CPU video-memory locks.
+It supports DMG graphics and basic CGB attributes and palettes. Completed frames
+are presented by SDL3; see [PPU implementation and accuracy limits](docs/PPU.md).
 
 ## Memory and battery saves
 
@@ -93,7 +98,8 @@ switching and detailed STOP behavior are not implemented.
 Loading a ROM resets the CPU without executing a boot ROM: PC starts at `0x0100`,
 SP at `0xFFFE`, and CPU registers follow DMG/CGB profiles, including the title-based
 CGB compatibility values. This does not yet reproduce the entire machine's
-post-boot state: video, audio and joypad still need their implementations.
+post-boot state: video uses a deterministic initial phase, and audio and joypad
+still need their implementations.
 The desktop loop advances the CPU at the nominal normal-speed rate, with bounded
 catch-up after pauses. Instruction totals come from the individual M-cycles,
 without adding missing cycles at the end; Debug builds also check them against
@@ -135,7 +141,7 @@ double-speed switching and the APU's divider-driven events remain pending.
 ## Running Blargg tests
 
 To run a test through the desktop application, start `R2BOY.exe` from a terminal,
-choose **File > Load ROM**, and double-click a test ROM such as
+choose **File > Load ROM**, and click a test ROM such as
 `cpu_instrs/individual/01-special.gb`.
 The ROM's serial output appears live in the same console, including `Passed`,
 `Failed`, or `Passed all tests`. Video output is not required. Keep the emulator
@@ -209,8 +215,8 @@ and post-processing shaders are planned for the video implementation.
 
 - MBC3 RTC, additional controllers, boot ROM and memory-mapped peripheral registers.
 - More hardware timing validation, including Mooneye and memory/interrupt edge cases.
-- DMA, video, controls, audio, and further T-cycle timing refinement.
-- Game Boy Color support.
+- Controls, audio, PPU hardware-test validation and further T-cycle timing refinement.
+- CGB double speed, VRAM DMA/HDMA and further Game Boy Color compatibility.
 
 ## License
 
