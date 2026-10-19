@@ -9,8 +9,8 @@ namespace R2BOY::System
     /**
      * Coordena o ciclo da aplicação e a integração entre a plataforma e o Core.
      * Possui a Board e os adaptadores de entrada/áudio. Configura a abertura de ROMs,
-     * processa eventos e solicita a renderização à Window. A execução do hardware
-     * em tempo real ainda será integrada ao ciclo.
+     * processa eventos, avança o hardware pelo tempo decorrido e entrega à Window
+     * o último framebuffer completo publicado pela PPU.
      */
     class Engine
     {

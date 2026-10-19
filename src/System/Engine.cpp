@@ -7,6 +7,7 @@
 #include "SaveFile.h"
 #include <chrono>
 #include <algorithm>
+#include <memory>
 
 namespace R2BOY::System
 {
@@ -15,6 +16,16 @@ namespace R2BOY::System
         Window::Window window;
         if (!window.open())
             return 1;
+
+        // Libera controles antes de a Window encerrar SDL, inclusive em falhas.
+        const auto stopInput = [this](Input *)
+        { input_.shutdown(); };
+        std::unique_ptr<Input, decltype(stopInput)> inputSession(&input_, stopInput);
+        if (!input_.initialize())
+            std::cerr << "Input: Gamepads unavailable: " << SDL_GetError() << '\n';
+
+        window.setInvertBAYBCallback([this](bool invert)
+                                     { input_.configureABBAButtons(invert); });
 
         const char *basePath = SDL_GetBasePath();
         if (!basePath)
@@ -31,10 +42,9 @@ namespace R2BOY::System
         // Contorno provisório da interface: observa a escrita de preparação em KEY1.
         // Não altera leituras de KEY1 nem simula a velocidade dupla no Core.
         board_.cpu().setCycleObserver([&speedSwitchRequested](const Core::CPU::CPU::Cycle &cycle)
-        {
+                                      {
             if (cycle.type == Core::CPU::CPU::CycleType::Write && cycle.address == 0xFF4D)
-                speedSwitchRequested = (cycle.value & 1) != 0;
-        });
+                speedSwitchRequested = (cycle.value & 1) != 0; });
         double cycleCredit = 0;
         const auto flushSave = [&]()
         {
@@ -64,6 +74,7 @@ namespace R2BOY::System
 
                 const bool restored = saves.load(next);
                 board_.loadCartridge(std::move(next));
+                input_.clear();
                 cpuFaultReported = false;
                 cpuStopReported = false;
                 speedSwitchRequested = false;
@@ -93,7 +104,11 @@ namespace R2BOY::System
 
         while (running)
         {
-            window.pollEvents(running);
+            window.pollEvents(running, [this](const SDL_Event &event, bool enabled)
+                              { input_.handleEvent(event, enabled); });
+            const bool inputEnabled = window.acceptsGameInput();
+            auto inputFrame = board_.clockCycles() / 70224;
+            board_.setButtons(input_.update(inputFrame, inputEnabled));
             if (!running)
                 break;
 
@@ -120,7 +135,7 @@ namespace R2BOY::System
             const auto now = std::chrono::steady_clock::now();
             const double elapsed = std::chrono::duration<double>(now - lastExecution).count();
             lastExecution = now;
-            
+
             // Limita a recuperação de tempo após pausas e mantém a fração/estouro
             // de ciclos entre frames. Double speed CGB ainda não está implementado.
             if (board_.cartridge().loaded() && !board_.cpu().locked())
@@ -128,6 +143,13 @@ namespace R2BOY::System
                 cycleCredit += std::min(elapsed, 0.05) * 4194304.0;
                 while (cycleCredit > 0 && !board_.cpu().locked())
                 {
+                    // Turbo segue o relógio emulado, inclusive com o LCD desligado.
+                    const auto frame = board_.clockCycles() / 70224;
+                    if (frame != inputFrame)
+                    {
+                        inputFrame = frame;
+                        board_.setButtons(input_.update(frame, inputEnabled));
+                    }
                     cycleCredit -= board_.step();
                     if (board_.cpu().stopped() && speedSwitchRequested &&
                         board_.executionMode() == Core::ExecutionMode::CGB)
@@ -161,8 +183,10 @@ namespace R2BOY::System
                           << std::endl;
                 cpuStopReported = true;
             }
-            if (!board_.cpu().stopped()) cpuStopReported = false;
-            if (!window.renderFrame(running, board_.cartridge()))
+            if (!board_.cpu().stopped())
+                cpuStopReported = false;
+
+            if (!window.renderFrame(running, board_.cartridge(), board_.framebuffer()))
             {
                 renderFailed = true;
                 break;
