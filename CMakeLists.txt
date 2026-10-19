@@ -49,6 +49,16 @@ FetchContent_MakeAvailable(miniz)
 # Usamos a API mz_*; dispensa os aliases zlib que geram avisos de funções não utilizadas.
 target_compile_definitions(miniz PUBLIC MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
 
+add_library(r2boy_common STATIC
+    src/Common/Constants.h
+    src/Common/Framebuffer.h
+    src/Common/RomFile.cpp
+    src/Common/RomFile.h
+)
+target_compile_features(r2boy_common PUBLIC cxx_std_17)
+target_include_directories(r2boy_common PUBLIC src)
+target_link_libraries(r2boy_common PRIVATE miniz)
+
 # Descobre os arquivos do projeto e verifica inclusões/remoções a cada build.
 file(GLOB_RECURSE R2BOY_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
@@ -65,17 +75,16 @@ file(GLOB_RECURSE R2BOY_CORE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/*.hpp"
 )
 list(APPEND R2BOY_CORE_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/System/RomFile.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/System/RomFile.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/System/SaveFile.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/System/SaveFile.h"
 )
 list(REMOVE_ITEM R2BOY_SOURCES ${R2BOY_CORE_SOURCES})
+list(FILTER R2BOY_SOURCES EXCLUDE REGEX "/src/Common/")
 
 add_library(r2boy_core STATIC ${R2BOY_CORE_SOURCES})
 target_compile_features(r2boy_core PUBLIC cxx_std_17)
 target_include_directories(r2boy_core PUBLIC src)
-target_link_libraries(r2boy_core PRIVATE miniz)
+target_link_libraries(r2boy_core PUBLIC r2boy_common)
 
 add_executable(R2BOY ${R2BOY_SOURCES})
 target_compile_features(R2BOY PRIVATE cxx_std_17)
@@ -85,9 +94,11 @@ target_link_libraries(R2BOY PRIVATE r2boy_imgui r2boy_core)
 if(MSVC)
     target_compile_options(R2BOY PRIVATE /W4)
     target_compile_options(r2boy_core PRIVATE /W4)
+    target_compile_options(r2boy_common PRIVATE /W4)
 else()
     target_compile_options(R2BOY PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(r2boy_core PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(r2boy_common PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 include(CTest)
@@ -124,7 +135,7 @@ if(BUILD_TESTING)
     target_link_libraries(input_tests PRIVATE r2boy_core SDL3::SDL3-static)
     add_test(NAME input_tests COMMAND input_tests)
     add_executable(window_input_tests tests/WindowInputTests.cpp src/Window/Window.cpp src/Window/FileManager.cpp)
-    target_link_libraries(window_input_tests PRIVATE r2boy_core r2boy_imgui)
+    target_link_libraries(window_input_tests PRIVATE r2boy_common r2boy_imgui)
     add_test(NAME window_input_tests COMMAND window_input_tests)
     set_tests_properties(window_input_tests PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_RENDER_DRIVER=software")
     add_executable(rom_runner tests/RomRunner.cpp)
