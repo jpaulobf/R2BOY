@@ -110,6 +110,8 @@ namespace R2BOY::System
             return 0;
         }
         std::uint8_t buttons = 0;
+        // O pulso compartilha a fase entre todas as fontes; sobreposições são combinadas
+        // por OR, portanto uma associação sem turbo mantém o botão pressionado.
         const bool pulse = emulatedFrame % 4 == 3;
         const auto apply = [&](const Binding &binding)
         {

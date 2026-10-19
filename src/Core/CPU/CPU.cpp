@@ -317,6 +317,8 @@ namespace R2BOY::Core::CPU
 
     unsigned CPU::execute(std::uint8_t opcode)
     {
+        // Os campos x/y/z agrupam instruções com a mesma codificação de operandos;
+        // p/q separam os pares de registradores e as variantes de cada operação.
         const unsigned x = opcode >> 6, y = (opcode >> 3) & 7, z = opcode & 7;
         const unsigned p = y >> 1, q = y & 1;
         if (x == 1)
@@ -667,11 +669,15 @@ namespace R2BOY::Core::CPU
             return finish(4);
         }
         const auto opcode = read8(r_.pc);
+        
+        // O HALT bug suprime apenas este incremento: a próxima busca reutiliza o endereço.
         if (haltBug_)
             haltBug_ = false;
         else
             ++r_.pc;
         const auto cycles = execute(opcode);
+
+        // EI só passa a valer após a instrução seguinte; DI e RETI tratam IME diretamente.
         if (imeDelay_ != 0 && --imeDelay_ == 0)
             ime_ = true;
         return finish(cycles);

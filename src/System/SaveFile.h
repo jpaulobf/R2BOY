@@ -14,8 +14,10 @@ namespace R2BOY::System
     class SaveFile
     {
     public:
+        // Define o diretório dos saves; a pasta só é criada quando há algo para gravar.
         explicit SaveFile(std::filesystem::path directory);
 
+        // Deriva o nome pelo CRC32 da ROM; lança exceção se o cartucho estiver vazio.
         std::filesystem::path pathFor(const Core::Cartridge::Cartridge &cartridge) const;
 
         // Retorna false se não houver bateria, RAM ou arquivo de save.

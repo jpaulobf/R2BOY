@@ -22,6 +22,8 @@ namespace R2BOY::Core::Cartridge::MBC
             MBC3,
             MBC5
         };
+        
+        // Estado padrão de ROM simples, sem RAM nem bateria, antes da carga do cartucho.
         MBC() = default;
 
         // Decodifica o tipo do header; lança runtime_error para tipos não suportados.
@@ -29,6 +31,8 @@ namespace R2BOY::Core::Cartridge::MBC
 
         // Reinicia registradores; não altera a RAM pertencente ao cartucho.
         void reset();
+        
+        // Interpreta escritas em 0000–7FFF como comandos de bancos, RAM e rumble.
         void write(std::uint16_t address, std::uint8_t value);
 
         // Banco de 16 KiB para 0000–7FFF, antes de aplicar as linhas de endereço disponíveis.
@@ -36,9 +40,17 @@ namespace R2BOY::Core::Cartridge::MBC
 
         // Banco de 8 KiB ou nullopt se a RAM estiver desabilitada/seleção inválida.
         std::optional<std::size_t> ramBank() const;
+        
+        // Família do controlador decodificada a partir do tipo do cartucho.
         Kind kind() const { return kind_; }
+        
+        // Recurso de RAM declarado pelo tipo, independente de estar habilitada agora.
         bool hasRam() const { return hasRam_; }
+        
+        // Informa se o tipo de cartucho possui bateria para persistência da RAM.
         bool hasBattery() const { return battery_; }
+        
+        // Estado lógico do motor MBC5; não aciona dispositivos físicos da plataforma.
         bool rumbleActive() const { return rumbleActive_; }
 
     private:

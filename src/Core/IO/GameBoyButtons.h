@@ -4,6 +4,8 @@
 
 namespace R2BOY::Core::IO
 {
+    // Máscara lógica ativa em 1: direções no nibble baixo, ações no nibble alto.
+    // Joypad converte essa representação para a leitura ativa em 0 de FF00.
     enum GameBoyButtons : std::uint8_t
     {
         BUTTON_RIGHT = 0x01,

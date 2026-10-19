@@ -22,6 +22,8 @@ namespace R2BOY::Core::Memory
         // Endereços aceitos: 8000–9FFF, C000–FDFF, FE00–FE9F, FF80–FFFE,
         // e FF4F/FF70 em modo CGB. Outras leituras retornam 0xFF; escritas são ignoradas.
         std::uint8_t read(std::uint16_t address) const;
+        
+        // Grava nas mesmas faixas de read(); os bloqueios de acesso são responsabilidade do BUS.
         void write(std::uint16_t address, std::uint8_t value);
 
         // Porta interna da PPU: banco explícito, independente de VBK e dos bloqueios da CPU.

@@ -22,10 +22,20 @@ namespace R2BOY::Core::IO
     public:
         // Modelo físico, inclusive quando o CGB executa um cartucho DMG.
         void reset(bool colorHardware = false);
+
+        // Último valor escrito em FF46, inclusive durante o atraso de partida.
         std::uint8_t read() const { return register_; }
+
+        // Agenda a cópia da página de 256 bytes indicada para os 160 bytes de OAM.
         void start(std::uint8_t page);
+
+        // Avança um T-cycle; a cópia efetiva ocorre uma vez a cada quatro chamadas.
         void tick(BUS::BUS &bus);
+
+        // Indica transferência efetiva; o atraso inicial isolado não ativa o bloqueio.
         bool active() const { return active_; }
+
+        // Consulta conflitos da CPU conforme o modelo físico e o barramento de origem.
         bool blocksCPU(std::uint16_t address) const;
 
     private:

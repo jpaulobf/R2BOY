@@ -134,6 +134,7 @@ namespace R2BOY::Core::Cartridge::MBC
         if (!hasRam_ || !ramEnabled_)
             return std::nullopt;
 
+        // Seleções de RTC não expõem RAM; o relógio do MBC3 ainda não é implementado.
         if (kind_ == Kind::MBC3 && secondaryBank_ > 3)
             return std::nullopt;
 

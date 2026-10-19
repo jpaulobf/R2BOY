@@ -29,6 +29,8 @@ namespace R2BOY::Core
 
         // O BUS mantém referências aos membros; a placa não pode ser copiada/movida.
         Board(const Board &) = delete;
+
+        // Impede substituir componentes aos quais CPU e BUS já estão vinculados.
         Board &operator=(const Board &) = delete;
 
         // Carrega de forma transacional e reinicia a memória volátil no modo do jogo.
@@ -63,6 +65,8 @@ namespace R2BOY::Core
 
         // Último frame completo publicado pela PPU, sem dependência da plataforma.
         const Common::Framebuffer &framebuffer() const { return ppu_.framebuffer(); }
+        
+        // Contador de entradas em VBlank da PPU; não representa frames apresentados pela janela.
         std::uint64_t frameNumber() const { return ppu_.frameNumber(); }
 
         // Estado combinado pela plataforma; cada bit em 1 representa um botão pressionado.

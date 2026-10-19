@@ -18,10 +18,16 @@ namespace R2BOY::Window
     class Window
     {
     public:
+        // Constrói a fachada sem criar recursos SDL; open() inicia a sessão.
         Window();
+        
+        // Libera ImGui, textura, renderer e janela antes de encerrar SDL.
         ~Window();
 
+        // A sessão SDL/ImGui e seus recursos têm posse exclusiva.
         Window(const Window &) = delete;
+        
+        // Impede compartilhar ou substituir os recursos nativos por cópia.
         Window &operator=(const Window &) = delete;
 
         // Inicializa SDL/ImGui; retorna false em falha e true se já estiver aberta.
@@ -30,7 +36,11 @@ namespace R2BOY::Window
 
         // Encaminha eventos ao ImGui e pode definir running como false ao solicitar saída.
         using InputHandler = std::function<void(const SDL_Event &, bool)>;
+        
+        // Drena a fila SDL; o callback recebe cada evento e a permissão atual de entrada.
         void pollEvents(bool &running, const InputHandler &inputHandler = {});
+        
+        // Exige foco da janela e ausência de captura de teclado pelo ImGui.
         bool acceptsGameInput() const;
 
         // Indica se a janela está minimizada, permitindo suspender a renderização.
@@ -45,9 +55,13 @@ namespace R2BOY::Window
 
         // Notifica a Engine quando o usuário altera o layout no menu Input.
         using InvertBAYBCallback = std::function<void(bool)>;
+        
+        // Substitui o callback do menu; não aplica o layout imediatamente.
         void setInvertBAYBCallback(InvertBAYBCallback callback);
 
         // Desenha e apresenta um frame; pode solicitar saída via running e retorna false em falha SDL.
+        // gameLoaded controla a exibição do jogo e a medição de FPS, sem consultar o Core.
+        // O framebuffer é usado por referência apenas durante esta chamada.
         bool renderFrame(bool &running, bool gameLoaded, const Common::Framebuffer &framebuffer);
 
     private:

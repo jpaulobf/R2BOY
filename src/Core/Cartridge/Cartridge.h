@@ -41,18 +41,26 @@ namespace R2BOY::Core::Cartridge
         // Acessos nas faixas 0000–7FFF (ROM/MBC) e A000–BFFF (RAM do cartucho).
         // Leituras sem cartucho/RAM ou fora dessas faixas retornam 0xFF.
         std::uint8_t read(std::uint16_t address) const;
+        
+        // Escritas na faixa de ROM configuram o MBC; na RAM habilitada, atualizam os bytes.
         void write(std::uint16_t address, std::uint8_t value);
 
         // Reinicia bancos e habilitação da RAM, preservando seus bytes.
         void resetBanks() { mbc_.reset(); }
+        
+        // Consulta bancos e recursos do controlador, sem permitir reconfiguração externa.
         const MBC::MBC &controller() const { return mbc_; }
 
         // MBC2 usa um byte por célula de quatro bits, inclusive no arquivo .sav.
         const std::vector<std::uint8_t> &ram() const { return ram_; }
+        
+        // Exige cartucho carregado e um tipo de controlador com bateria.
         bool hasBattery() const { return loaded() && mbc_.hasBattery(); }
 
         // Apenas mudanças efetivas nos bytes habilitados marcam a RAM como modificada.
         bool ramDirty() const { return ramDirty_; }
+        
+        // Confirma a persistência dos bytes atuais; deve ser chamado após salvar com sucesso.
         void markRamSaved() { ramDirty_ = false; }
 
         // Exige bateria e tamanho exato; valida antes de alterar o conteúdo.

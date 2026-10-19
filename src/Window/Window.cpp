@@ -26,6 +26,7 @@ namespace R2BOY::Window
         {
             bool platformReady = false;
             bool rendererReady = false;
+            // Cada backend só é encerrado se sua inicialização tiver sido concluída.
             ~ImGuiSession()
             {
                 if (rendererReady)
@@ -191,6 +192,8 @@ namespace R2BOY::Window
             return false;
         }
 
+        // Publica a sessão apenas quando todos os recursos estiverem prontos;
+        // os retornos anteriores liberam automaticamente o estado parcial.
         impl_ = std::move(state);
         impl_->fpsSampleStart = SDL_GetTicksNS();
         return true;
@@ -276,6 +279,8 @@ namespace R2BOY::Window
         ImGui::Render();
         const ImGuiIO &io = ImGui::GetIO();
         SDL_Renderer *renderer = impl_->renderer.get();
+        // O ImGui trabalha em coordenadas lógicas; o renderer acompanha a densidade
+        // de pixels do monitor para manter interface e imagem no tamanho correto.
         if (!SDL_SetRenderScale(renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y) ||
             !SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) || !SDL_RenderClear(renderer))
         {

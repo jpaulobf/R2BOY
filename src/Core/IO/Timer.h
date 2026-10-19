@@ -29,7 +29,9 @@ namespace R2BOY::Core::IO
         void write(std::uint16_t address, std::uint8_t value);
 
     private:
+        // Nível do bit do divisor selecionado por TAC, condicionado à habilitação.
         bool signal() const;
+        // Incrementa TIMA fora das janelas de recarga e agenda o atraso de overflow.
         void increment();
         std::uint16_t divider_ = 0;
         std::uint8_t tima_ = 0;

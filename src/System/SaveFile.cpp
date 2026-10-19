@@ -43,6 +43,7 @@ namespace R2BOY::System
 
         if (!file.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(data.size())))
             throw std::runtime_error("Unable to read complete save RAM: " + path.u8string());
+        // Aplica somente depois da leitura completa, preservando a RAM em caso de falha.
         cartridge.restoreBatteryRam(std::move(data));
 
         return true;
@@ -56,6 +57,7 @@ namespace R2BOY::System
         std::filesystem::create_directories(directory_);
         const auto path = pathFor(cartridge);
         auto temporary = path;
+        // O arquivo definitivo só é substituído após gravar e fechar o temporário.
         temporary += ".tmp";
         std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
 

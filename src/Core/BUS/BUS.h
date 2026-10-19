@@ -34,6 +34,8 @@ namespace R2BOY::Core::BUS
 
         // A CPU consulta os pedidos habilitados e reconhece apenas o de maior prioridade.
         std::uint8_t pendingInterrupts() const { return interrupts_.pending(); }
+        
+        // Limpa em IF somente a fonte reconhecida pela CPU, identificada de 0 a 4.
         void acknowledgeInterrupt(unsigned bit) { interrupts_.acknowledge(bit); }
 
         // Evento interno de STOP: reseta DIV sem inventar um acesso extra da CPU.
@@ -41,7 +43,9 @@ namespace R2BOY::Core::BUS
 
     private:
         friend class IO::DMA;
+        // Roteia a leitura sem os bloqueios da CPU; mantém o bloqueio de VRAM pela PPU.
         std::uint8_t readDMA(std::uint16_t address) const;
+        // Porta de escrita do DMA: atinge OAM sem passar pelos bloqueios da CPU.
         void writeOAM(std::uint16_t address, std::uint8_t value) { memory_.write(address, value); }
         Cartridge::Cartridge &cartridge_;
         Memory::Memory &memory_;

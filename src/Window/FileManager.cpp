@@ -102,6 +102,7 @@ namespace R2BOY::Window
             if (Common::RomFile::isZip(file))
             {
                 auto found = Common::RomFile::entries(file);
+                // Um ZIP com uma única ROM dispensa a etapa de escolha do membro.
                 if (found.size() == 1)
                     return load(file, found.front());
                 archive = file;
@@ -121,6 +122,7 @@ namespace R2BOY::Window
 
     void FileManager::draw()
     {
+        // Adia OpenPopup até existir um frame ImGui, inclusive para pedidos via Ctrl+O.
         if (requested)
         {
             requested = false;

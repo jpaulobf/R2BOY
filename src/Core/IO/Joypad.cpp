@@ -5,10 +5,14 @@ namespace R2BOY::Core::IO
     std::uint8_t Joypad::read() const
     {
         std::uint8_t lines = 0x0F;
+        
+        // Selecionar ambos os grupos combina suas linhas: qualquer pressão baixa o bit.
         if (!(selected_ & 0x10))
             lines &= static_cast<std::uint8_t>(~buttons_);
+        
         if (!(selected_ & 0x20))
             lines &= static_cast<std::uint8_t>(~(buttons_ >> 4));
+        
         return 0xC0 | selected_ | lines;
     }
 

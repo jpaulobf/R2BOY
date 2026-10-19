@@ -25,6 +25,8 @@ namespace R2BOY::Core::PPU
 
     void PPU::updateSTAT(IO::Interrupts &interrupts)
     {
+        // As fontes compartilham uma única linha: trocar de fonte sem baixar o sinal
+        // não produz uma segunda interrupção de STAT.
         const bool signal = enabled() && (((stat_ & 0x40) && ly() == lyc_) ||
                                           ((stat_ & 0x20) && mode_ == 2) ||
                                           ((stat_ & 0x10) && mode_ == 1) ||
@@ -330,6 +332,8 @@ namespace R2BOY::Core::PPU
             const unsigned level = 255 - shade * 85;
             return 0xFF000000 | (level << 16) | (level << 8) | level;
         }
+        // CGB armazena RGB de cinco bits por canal em dois bytes little-endian.
+        // A expansão replica bits para ocupar oito bits, sem simular a resposta do LCD.
         const auto &colors = object ? objColors_ : bgColors_;
         const unsigned offset = palette * 8 + color * 2;
         const unsigned rgb = colors[offset] | (colors[offset + 1] << 8);
@@ -442,6 +446,8 @@ namespace R2BOY::Core::PPU
             {
                 mode_ = 1;
                 interrupts.request(0);
+                // A publicação ocorre de uma vez em VBlank; o primeiro frame após
+                // religar o LCD mantém a imagem branca preparada na escrita de LCDC.
                 if (!blankFirstFrame_)
                     front_ = back_;
                 blankFirstFrame_ = false;

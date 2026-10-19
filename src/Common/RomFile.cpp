@@ -47,12 +47,14 @@ namespace R2BOY::Common
             std::vector<std::uint8_t> data;
             mz_zip_archive archive{};
 
+            // Mantém a imagem do ZIP viva durante toda a sessão de leitura do miniz.
             explicit Zip(const std::filesystem::path &path) : data(readFile(path, maxZipSize))
             {
                 if (!mz_zip_reader_init_mem(&archive, data.data(), data.size(), 0))
                     throw std::runtime_error("Invalid or unsupported ZIP archive.");
             }
 
+            // Libera os recursos internos do leitor antes da destruição de data.
             ~Zip() { mz_zip_reader_end(&archive); }
             Zip(const Zip &) = delete;
             Zip &operator=(const Zip &) = delete;

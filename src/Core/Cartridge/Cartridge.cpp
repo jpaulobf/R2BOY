@@ -73,6 +73,7 @@ namespace R2BOY::Core::Cartridge
 
         if (address < 0x8000)
         {
+            // Restringe o banco à capacidade declarada, espelhando seleções acima dela.
             const auto banks = header_.romSize / 16384;
             return rom_[(mbc_.romBank(address) % banks) * 16384 + (address & 0x3FFF)];
         }
@@ -83,6 +84,8 @@ namespace R2BOY::Core::Cartridge
         const auto bank = mbc_.ramBank();
         if (!bank)
             return 0xFF;
+        
+        // A janela A000–BFFF também espelha RAMs menores que 8 KiB, como a do MBC2.
         const auto value = ram_[(*bank * 8192 + (address - 0xA000)) % ram_.size()];
 
         return mbc_.kind() == MBC::MBC::Kind::MBC2 ? value | 0xF0 : value;

@@ -16,6 +16,7 @@ namespace R2BOY::System
     {
     public:
         // Executa até o encerramento; retorna 0 ao sair normalmente ou 1 em falha de janela/renderização.
+        // Falhas ao localizar a pasta base ou ao salvar no encerramento também retornam 1.
         int run();
 
     private:

@@ -92,6 +92,7 @@ namespace R2BOY::Core
 
     void Board::setButtons(std::uint8_t buttons)
     {
+        // Acordar de STOP depende de uma nova pressão, mesmo fora do grupo selecionado em JOYP.
         if ((buttons & ~buttons_) != 0)
             cpu_.wakeFromStop();
         buttons_ = buttons;
@@ -112,6 +113,7 @@ namespace R2BOY::Core
             ++clockCycles_;
             timer_.tick(interrupts_);
             serial_.tick(1, interrupts_);
+            // A PPU observa no mesmo T-cycle a cópia e o estado ativo atualizados pelo DMA.
             dma_.tick(bus_);
             // Velocidade normal: um dot por T-cycle. Em double speed, a futura
             // divisão de clocks deve entregar um dot a cada dois T-cycles.
