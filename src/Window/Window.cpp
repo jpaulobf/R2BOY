@@ -6,6 +6,7 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <utility>
@@ -48,7 +49,11 @@ namespace R2BOY::Window
                                                ImGuiWindowFlags_NoNavInputs;
             // O foco da área do jogo não deve ativar NavActive/WantCaptureKeyboard.
             // Menus e o seletor modal continuam recebendo a navegação do ImGui.
-            if (ImGui::Begin("R2BOY", nullptr, flags))
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+            const bool visible = ImGui::Begin("R2BOY", nullptr, flags);
+            ImGui::PopStyleVar(2);
+            if (visible)
             {
                 if (ImGui::BeginMenuBar())
                 {
@@ -73,31 +78,6 @@ namespace R2BOY::Window
                     }
                     ImGui::EndMenuBar();
                 }
-                // ImGui::TextUnformatted("R2BOY - Game Boy / Game Boy Color");
-                //  if (cartridge.loaded())
-                //  {
-                //      const auto &header = cartridge.header();
-                //      ImGui::Text("%s | %s", header.title.empty() ? "Untitled ROM" : header.title.c_str(), header.compatibility());
-                //      if (ImGui::CollapsingHeader("Cartridge details"))
-                //      {
-                //          ImGui::TextWrapped("Source: %s", cartridge.source().c_str());
-                //          ImGui::Text("Type: %s (0x%02X)", header.typeName(), header.cartridgeType);
-                //          ImGui::Text("ROM: %zu KiB (header: %zu KiB) | RAM: %zu bytes", cartridge.rom().size() / 1024, header.romSize / 1024, header.ramSize);
-                //          ImGui::Text("Version: %u | SGB: %s | Region: 0x%02X", header.version,
-                //                      header.sgbFlag == 0x03 ? "Yes" : "No", header.destinationCode);
-                //          ImGui::Text("Manufacturer: %s | Licensee: %s (old: 0x%02X)", header.manufacturer.c_str(), header.newLicensee.c_str(), header.oldLicensee);
-                //          ImGui::Text("Logo: %s | Header checksum: %s | Global checksum: %s",
-                //                      header.logoValid ? "OK" : "Warning", header.headerChecksumValid ? "OK" : "Warning",
-                //                      header.globalChecksumValid ? "OK" : "Warning");
-                //          if (!header.romSize || header.romSize != cartridge.rom().size())
-                //              ImGui::TextUnformatted("Warning: ROM size differs from the header.");
-                //          if (header.ramSizeCode > 5)
-                //              ImGui::TextUnformatted("Warning: unknown RAM size code.");
-                //      }
-                //      ImGui::TextUnformatted("ROM loaded. Hardware emulation is not implemented yet.");
-                //  }
-                //  else
-                //      ImGui::TextUnformatted("No cartridge loaded. Use File > Open to select a ROM.");
                 fileManager.draw();
 
                 // Frame completo da PPU, centralizado e com proporção nativa.
@@ -123,7 +103,7 @@ namespace R2BOY::Window
                     }
                     else
                         ImGui::GetWindowDrawList()->AddRectFilled(
-                            topLeft, ImVec2(topLeft.x + size.x, topLeft.y + size.y), IM_COL32(155, 188, 15, 255));
+                            topLeft, ImVec2(topLeft.x + size.x, topLeft.y + size.y), IM_COL32(0, 0, 0, 255));
                     ImGui::Dummy(available);
                 }
             }
@@ -146,6 +126,9 @@ namespace R2BOY::Window
         InvertBAYBCallback invertBAYBCallback;
         Uint64 fpsSampleStart = 0;
         unsigned presentedFrames = 0;
+        bool gameWasLoaded = false;
+        int displayWidth = 0;
+        int displayHeight = 0;
     };
 
     Window::Window() = default;
@@ -166,7 +149,7 @@ namespace R2BOY::Window
         ImGui::CreateContext();
         auto state = std::make_unique<Impl>();
         state->window.reset(SDL_CreateWindow(
-            "R2BOY", screenWidth * 4, screenHeight * 4 + 80,
+            "R2BOY", screenWidth * 4, screenHeight * 4,
             SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY));
         if (!state->window)
         {
@@ -267,13 +250,37 @@ namespace R2BOY::Window
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
+        // A proporção aplica-se à tela abaixo do menu. Usa a dimensão alterada
+        // pelo usuário para ajustar a outra, em coordenadas da janela SDL.
+        int width = 0;
+        int height = 0;
+        if (!SDL_GetWindowSize(impl_->window.get(), &width, &height))
+            return false;
+        const float windowScale = height / ImGui::GetIO().DisplaySize.y;
+        const int menuHeight = static_cast<int>(std::lround(ImGui::GetFrameHeight() * windowScale));
+        int targetWidth = width;
+        int targetHeight = height;
+        if (impl_->displayWidth != 0 && width == impl_->displayWidth && height != impl_->displayHeight)
+            targetWidth = std::max(1, static_cast<int>(std::lround(
+                std::max(1, height - menuHeight) * static_cast<double>(screenWidth) / screenHeight)));
+        else
+            targetHeight = menuHeight + static_cast<int>(std::lround(
+                width * static_cast<double>(screenHeight) / screenWidth));
+        if ((targetWidth != width || targetHeight != height) &&
+            !SDL_SetWindowSize(impl_->window.get(), targetWidth, targetHeight))
+        {
+            std::cerr << "Failed to resize display: " << SDL_GetError() << '\n';
+            return false;
+        }
+        impl_->displayWidth = targetWidth;
+        impl_->displayHeight = targetHeight;
         drawInterface(running, cartridge, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter,
                       impl_->invertBAYB, impl_->invertBAYBCallback);
         ImGui::Render();
         const ImGuiIO &io = ImGui::GetIO();
         SDL_Renderer *renderer = impl_->renderer.get();
         if (!SDL_SetRenderScale(renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y) ||
-            !SDL_SetRenderDrawColor(renderer, 24, 24, 24, 255) || !SDL_RenderClear(renderer))
+            !SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) || !SDL_RenderClear(renderer))
         {
             std::cerr << "Failed to prepare frame: " << SDL_GetError() << '\n';
             return false;
@@ -285,8 +292,18 @@ namespace R2BOY::Window
             return false;
         }
         // Mede apresentações reais por segundo; atualiza o título uma vez por segundo.
-        ++impl_->presentedFrames;
         const auto now = SDL_GetTicksNS();
+        const bool gameLoaded = cartridge.loaded();
+        if (!gameLoaded || !impl_->gameWasLoaded)
+        {
+            impl_->presentedFrames = 0;
+            impl_->fpsSampleStart = now;
+            SDL_SetWindowTitle(impl_->window.get(), "R2BOY");
+        }
+        impl_->gameWasLoaded = gameLoaded;
+        if (!gameLoaded)
+            return true;
+        ++impl_->presentedFrames;
         const auto elapsed = now - impl_->fpsSampleStart;
         if (elapsed >= 1000000000ULL)
         {
