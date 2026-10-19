@@ -40,9 +40,9 @@ namespace R2BOY::Core
 
         // Apenas memória e bancos; ainda não executa reset da CPU/periféricos.
         void resetMemory();
-        
-        // Inicializa memória, CPU, IF/IE, serial e timer sem executar uma boot ROM.
-        // Os perfis seguem DMG/CGB; vídeo/áudio ainda não têm estado pós-boot.
+
+        // Inicializa memória, CPU, IF/IE, joypad, serial, timer, DMA e PPU sem boot ROM.
+        // A PPU começa deterministicamente em LY=0/modo 2; áudio ainda não tem perfil pós-boot.
         void reset();
 
         // Executa uma instrução com hardware intercalado por M-cycle. Retorna
@@ -61,10 +61,17 @@ namespace R2BOY::Core
         // Saída da porta serial para diagnóstico/testes, sem dependência de console no Core.
         std::string takeSerialOutput() { return serial_.takeOutput(); }
 
-        // Acesso direto ao barramento, utilizado internamente pelos periféricos.
+        // Último frame completo publicado pela PPU, sem dependência da plataforma.
+        const PPU::PPU::Framebuffer &framebuffer() const { return ppu_.framebuffer(); }
+        std::uint64_t frameNumber() const { return ppu_.frameNumber(); }
+
+        // Estado combinado pela plataforma; cada bit em 1 representa um botão pressionado.
+        void setButtons(std::uint8_t buttons);
+
+        // Acesso pelo barramento da CPU, sujeito aos bloqueios de DMA e PPU.
         std::uint8_t read(std::uint16_t address) const { return bus_.read(address); }
 
-        // Acesso direto ao barramento, utilizado internamente pelos periféricos.
+        // Acesso pelo barramento da CPU, sujeito aos bloqueios de DMA e PPU.
         void write(std::uint16_t address, std::uint8_t value) { bus_.write(address, value); }
 
         // Modelo físico escolhido na construção, independente da ROM carregada.
@@ -91,11 +98,12 @@ namespace R2BOY::Core
         IO::DMA dma_;
         IO::Interrupts interrupts_;
         IO::Joypad joypad_;
+        std::uint8_t buttons_ = 0;
         IO::Serial serial_;
         IO::Timer timer_;
         Memory::Memory memory_;
+        PPU::PPU ppu_;
         BUS::BUS bus_;
         CPU::CPU cpu_;
-        PPU::PPU ppu_;
     };
 }

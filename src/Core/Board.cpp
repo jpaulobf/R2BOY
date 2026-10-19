@@ -5,7 +5,7 @@
 
 namespace R2BOY::Core
 {
-    Board::Board(Model model) : model_(model), bus_(cartridge_, memory_, interrupts_, serial_, timer_),
+    Board::Board(Model model) : model_(model), bus_(cartridge_, memory_, interrupts_, serial_, timer_, dma_, ppu_, joypad_),
                                 cpu_(bus_, [this]()
                                      { tickMachineCycle(); })
     {
@@ -45,7 +45,11 @@ namespace R2BOY::Core
         clockCycles_ = 0;
         resetMemory();
         interrupts_.reset(true);
+        buttons_ = 0;
+        joypad_.reset();
         serial_.reset(executionMode_ == ExecutionMode::CGB);
+        dma_.reset(model_ == Model::CGB);
+        ppu_.reset(model_ == Model::CGB, executionMode_ == ExecutionMode::CGB);
 
         // Perfil determinístico sem boot ROM: fases conhecidas DMG/CGB, sem
         // reproduzir o tempo variável da animação/interação da boot ROM original.
@@ -86,6 +90,14 @@ namespace R2BOY::Core
         cpu_.reset(registers);
     }
 
+    void Board::setButtons(std::uint8_t buttons)
+    {
+        if ((buttons & ~buttons_) != 0)
+            cpu_.wakeFromStop();
+        buttons_ = buttons;
+        joypad_.setButtons(buttons, interrupts_);
+    }
+
     unsigned Board::step()
     {
         if (!cartridge_.loaded())
@@ -100,7 +112,10 @@ namespace R2BOY::Core
             ++clockCycles_;
             timer_.tick(interrupts_);
             serial_.tick(1, interrupts_);
-            // PPU e DMA serão conectados aqui, sem alterar o decoder da CPU.
+            dma_.tick(bus_);
+            // Velocidade normal: um dot por T-cycle. Em double speed, a futura
+            // divisão de clocks deve entregar um dot a cada dois T-cycles.
+            ppu_.tick(memory_, interrupts_, dma_.active());
         }
     }
 
