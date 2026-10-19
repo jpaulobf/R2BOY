@@ -187,16 +187,13 @@ namespace R2BOY::Window
                 std::error_code status;
                 const auto label = (file.is_directory(status) ? "[DIR] " : "") + file.path().filename().u8string();
                 ImGui::PushID(file.path().u8string().c_str());
-                if (ImGui::Selectable(label.c_str(), selectedFile == file.path(), ImGuiSelectableFlags_AllowDoubleClick))
+                if (ImGui::Selectable(label.c_str(), selectedFile == file.path()))
                 {
                     selectedFile = file.path();
-                    if (ImGui::IsMouseDoubleClicked(0))
-                    {
-                        if (select(file.path()))
-                            ImGui::CloseCurrentPopup();
-                        ImGui::PopID();
-                        break; // A navegação atualiza a lista no próximo frame.
-                    }
+                    if (select(file.path()))
+                        ImGui::CloseCurrentPopup();
+                    ImGui::PopID();
+                    break; // A navegação atualiza a lista no próximo frame.
                 }
                 ImGui::PopID();
             }
