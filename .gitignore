@@ -15,3 +15,4 @@
 *.srm
 /roms/
 /bootroms/
+docs/*
