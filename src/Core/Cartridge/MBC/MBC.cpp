@@ -73,7 +73,7 @@ namespace R2BOY::Core::Cartridge::MBC
         {
             if (address >= 0x4000)
                 return;
-                
+
             if ((address & 0x0100) == 0)
                 ramEnabled_ = (value & 0x0F) == 0x0A;
             else
