@@ -1,5 +1,5 @@
 #include "Core/Cartridge/Cartridge.h"
-#include "System/RomFile.h"
+#include "Common/RomFile.h"
 #include <miniz.h>
 #include <algorithm>
 #include <chrono>
@@ -9,9 +9,9 @@
 
 namespace R2BOY::Test
 {
+    using Common::RomFile;
     using Core::Cartridge::Cartridge;
     using Core::Cartridge::Header;
-    using System::RomFile;
 
     void check(bool condition, const char *message)
     {

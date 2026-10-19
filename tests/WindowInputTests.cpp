@@ -1,5 +1,4 @@
 #include "Window/Window.h"
-#include "Core/Board.h"
 #include <imgui.h>
 #include <SDL3/SDL.h>
 #include <iostream>
@@ -17,11 +16,11 @@ namespace
     {
         R2BOY::Window::Window window;
         check(window.open(), "headless window must open");
-        R2BOY::Core::Board board;
+        R2BOY::Common::Framebuffer framebuffer{};
         bool running = true;
         const auto frame = [&]()
         {
-            check(window.renderFrame(running, board.cartridge(), board.framebuffer()),
+            check(window.renderFrame(running, false, framebuffer),
                   "headless frame must render");
         };
         auto &io = ImGui::GetIO();
