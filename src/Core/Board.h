@@ -62,7 +62,7 @@ namespace R2BOY::Core
         std::string takeSerialOutput() { return serial_.takeOutput(); }
 
         // Último frame completo publicado pela PPU, sem dependência da plataforma.
-        const PPU::PPU::Framebuffer &framebuffer() const { return ppu_.framebuffer(); }
+        const Common::Framebuffer &framebuffer() const { return ppu_.framebuffer(); }
         std::uint64_t frameNumber() const { return ppu_.frameNumber(); }
 
         // Estado combinado pela plataforma; cada bit em 1 representa um botão pressionado.

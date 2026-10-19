@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace R2BOY::System
+namespace R2BOY::Common
 {
     /**
      * Lê arquivos de ROM e membros de ZIP para a camada de emulação.

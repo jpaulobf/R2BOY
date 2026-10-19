@@ -3,20 +3,15 @@
 #include <memory>
 #include <functional>
 #include "FileManager.h"
-#include "Core/PPU/PPU.h"
+#include "Common/Framebuffer.h"
 
 union SDL_Event;
-
-namespace R2BOY::Core::Cartridge
-{
-    class Cartridge;
-}
 
 namespace R2BOY::Window
 {
     /**
      * Gerencia a janela SDL, os eventos e a interface Dear ImGui.
-     * Apresenta o cartucho e o seletor de ROMs, delegando o carregamento ao callback
+     * Apresenta o framebuffer e o seletor de ROMs, delegando o carregamento ao callback
      * configurado pela Engine. Os recursos nativos ficam ocultos em Impl e são
      * liberados automaticamente na destruição. A instância não pode ser copiada.
      */
@@ -53,8 +48,7 @@ namespace R2BOY::Window
         void setInvertBAYBCallback(InvertBAYBCallback callback);
 
         // Desenha e apresenta um frame; pode solicitar saída via running e retorna false em falha SDL.
-        bool renderFrame(bool &running, const Core::Cartridge::Cartridge &cartridge,
-                         const Core::PPU::PPU::Framebuffer &framebuffer);
+        bool renderFrame(bool &running, bool gameLoaded, const Common::Framebuffer &framebuffer);
 
     private:
         // Mantém tipos SDL/ImGui e sua ordem de destruição fora da interface pública.

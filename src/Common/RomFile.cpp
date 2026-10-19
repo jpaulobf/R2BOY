@@ -7,7 +7,7 @@
 #include <iomanip>
 #include <sstream>
 
-namespace R2BOY::System
+namespace R2BOY::Common
 {
     namespace
     {
@@ -29,7 +29,7 @@ namespace R2BOY::System
             if (!file)
                 throw std::runtime_error("Unable to open file.");
             const auto size = file.tellg();
-            
+
             if (size <= 0 || static_cast<std::uintmax_t>(size) > limit)
                 throw std::runtime_error("File is empty or exceeds the supported size limit.");
             std::vector<std::uint8_t> data(static_cast<std::size_t>(size));

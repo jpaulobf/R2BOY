@@ -1,5 +1,5 @@
 #include "SaveFile.h"
-#include "RomFile.h"
+#include "Common/RomFile.h"
 #include <fstream>
 #include <stdexcept>
 #include <utility>
@@ -19,7 +19,7 @@ namespace R2BOY::System
     {
         if (!cartridge.loaded())
             throw std::runtime_error("Cannot identify save for an empty cartridge.");
-        return directory_ / (RomFile::hash(cartridge.rom()) + ".sav");
+        return directory_ / (Common::RomFile::hash(cartridge.rom()) + ".sav");
     }
 
     bool SaveFile::load(Core::Cartridge::Cartridge &cartridge) const

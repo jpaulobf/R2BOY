@@ -1,6 +1,7 @@
 #include "Engine.h"
 
 #include "Window/Window.h"
+#include "Common/RomFile.h"
 #include <SDL3/SDL.h>
 #include <iostream>
 #include <exception>
@@ -12,6 +13,8 @@
 
 namespace R2BOY::System
 {
+    using Common::RomFile;
+
     int Engine::run()
     {
         Window::Window window;
@@ -195,7 +198,7 @@ namespace R2BOY::System
             if (!board_.cpu().stopped())
                 cpuStopReported = false;
 
-            if (!window.renderFrame(running, board_.cartridge(), board_.framebuffer()))
+            if (!window.renderFrame(running, board_.cartridge().loaded(), board_.framebuffer()))
             {
                 renderFailed = true;
                 break;

@@ -1,5 +1,5 @@
 #include "Core/Board.h"
-#include "System/RomFile.h"
+#include "Common/RomFile.h"
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -39,7 +39,7 @@ namespace R2BOY::Test
             }
             const auto path = std::filesystem::u8path(argv[1]);
             Core::Board board(model);
-            board.loadCartridge(System::RomFile::read(path), path.u8string());
+            board.loadCartridge(Common::RomFile::read(path), path.u8string());
             std::string output;
             unsigned poll = 0;
             while (board.cpu().cycles() < limit)

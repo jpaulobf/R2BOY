@@ -1,6 +1,5 @@
 #include "Window.h"
 #include "Common/Constants.h"
-#include "Core/Cartridge/Cartridge.h"
 #include <SDL3/SDL.h>
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
@@ -37,7 +36,7 @@ namespace R2BOY::Window
             }
         };
 
-        void drawInterface(bool &running, const Core::Cartridge::Cartridge &cartridge, FileManager &fileManager,
+        void drawInterface(bool &running, bool gameLoaded, FileManager &fileManager,
                            SDL_Texture *texture, bool &bilinearFilter, bool &invertBAYB,
                            const Window::InvertBAYBCallback &invertBAYBCallback)
         {
@@ -80,7 +79,7 @@ namespace R2BOY::Window
                 }
                 fileManager.draw();
 
-                // Frame completo da PPU, centralizado e com proporção nativa.
+                // Frame completo, centralizado e com proporção nativa.
                 const ImVec2 available = ImGui::GetContentRegionAvail();
                 const float scale = std::min(available.x / screenWidth, available.y / screenHeight);
                 if (scale > 0.0f)
@@ -89,7 +88,7 @@ namespace R2BOY::Window
                     const ImVec2 cursor = ImGui::GetCursorScreenPos();
                     const ImVec2 topLeft(cursor.x + (available.x - size.x) * 0.5f,
                                          cursor.y + (available.y - size.y) * 0.5f);
-                    if (cartridge.loaded())
+                    if (gameLoaded)
                     {
                         ImDrawList *drawList = ImGui::GetWindowDrawList();
                         const ImGuiPlatformIO &platform = ImGui::GetPlatformIO();
@@ -238,10 +237,8 @@ namespace R2BOY::Window
         impl_->invertBAYBCallback = std::move(callback);
     }
 
-    bool Window::renderFrame(bool &running, const Core::Cartridge::Cartridge &cartridge,
-                             const Core::PPU::PPU::Framebuffer &framebuffer)
+    bool Window::renderFrame(bool &running, bool gameLoaded, const Common::Framebuffer &framebuffer)
     {
-        static_assert(screenWidth == Core::PPU::PPU::Width && screenHeight == Core::PPU::PPU::Height);
         if (!SDL_UpdateTexture(impl_->texture.get(), nullptr, framebuffer.data(), screenWidth * sizeof(std::uint32_t)))
         {
             std::cerr << "Failed to update display texture: " << SDL_GetError() << '\n';
@@ -262,10 +259,10 @@ namespace R2BOY::Window
         int targetHeight = height;
         if (impl_->displayWidth != 0 && width == impl_->displayWidth && height != impl_->displayHeight)
             targetWidth = std::max(1, static_cast<int>(std::lround(
-                std::max(1, height - menuHeight) * static_cast<double>(screenWidth) / screenHeight)));
+                                          std::max(1, height - menuHeight) * static_cast<double>(screenWidth) / screenHeight)));
         else
             targetHeight = menuHeight + static_cast<int>(std::lround(
-                width * static_cast<double>(screenHeight) / screenWidth));
+                                            width * static_cast<double>(screenHeight) / screenWidth));
         if ((targetWidth != width || targetHeight != height) &&
             !SDL_SetWindowSize(impl_->window.get(), targetWidth, targetHeight))
         {
@@ -274,7 +271,7 @@ namespace R2BOY::Window
         }
         impl_->displayWidth = targetWidth;
         impl_->displayHeight = targetHeight;
-        drawInterface(running, cartridge, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter,
+        drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter,
                       impl_->invertBAYB, impl_->invertBAYBCallback);
         ImGui::Render();
         const ImGuiIO &io = ImGui::GetIO();
@@ -293,7 +290,6 @@ namespace R2BOY::Window
         }
         // Mede apresentações reais por segundo; atualiza o título uma vez por segundo.
         const auto now = SDL_GetTicksNS();
-        const bool gameLoaded = cartridge.loaded();
         if (!gameLoaded || !impl_->gameWasLoaded)
         {
             impl_->presentedFrames = 0;

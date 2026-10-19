@@ -71,7 +71,7 @@ namespace R2BOY::Window
 #endif
     }
 
-    bool FileManager::load(const std::filesystem::path &file, const std::optional<System::RomFile::Entry> &entry)
+    bool FileManager::load(const std::filesystem::path &file, const std::optional<Common::RomFile::Entry> &entry)
     {
         try
         {
@@ -99,9 +99,9 @@ namespace R2BOY::Window
                 error.clear();
                 return false;
             }
-            if (System::RomFile::isZip(file))
+            if (Common::RomFile::isZip(file))
             {
-                auto found = System::RomFile::entries(file);
+                auto found = Common::RomFile::entries(file);
                 if (found.size() == 1)
                     return load(file, found.front());
                 archive = file;
@@ -175,7 +175,7 @@ namespace R2BOY::Window
             {
                 std::error_code status;
                 if (it->is_directory(status) || (it->is_regular_file(status) &&
-                                                 (System::RomFile::isRom(it->path()) || System::RomFile::isZip(it->path()))))
+                                                 (Common::RomFile::isRom(it->path()) || Common::RomFile::isZip(it->path()))))
                     files.push_back(*it);
             }
             if (ec)

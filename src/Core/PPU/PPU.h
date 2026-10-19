@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include "Common/Framebuffer.h"
 #include "Core/Memory/Memory.h"
 #include "Core/IO/Interrupts.h"
 
@@ -16,9 +17,8 @@ namespace R2BOY::Core::PPU
     class PPU
     {
     public:
-        static constexpr unsigned Width = 160, Height = 144;
-        // Pixels 0xAARRGGBB; o frame publicado só muda em VBlank ou ao desligar LCD.
-        using Framebuffer = std::array<std::uint32_t, Width * Height>;
+        static constexpr unsigned Width = Common::Constants::ScreenWidth;
+        static constexpr unsigned Height = Common::Constants::ScreenHeight;
 
         void reset(bool colorHardware = false, bool colorMode = false, bool afterBoot = true);
         void tick(const Memory::Memory &memory, IO::Interrupts &interrupts, bool dmaActive = false);
@@ -29,7 +29,8 @@ namespace R2BOY::Core::PPU
         unsigned dot() const { return dot_; }
         bool blocksVRAM() const { return enabled() && mode_ == 3; }
         bool blocksOAM() const { return enabled() && (mode_ == 2 || mode_ == 3); }
-        const Framebuffer &framebuffer() const { return front_; }
+        // O frame publicado só muda em VBlank ou ao desligar LCD.
+        const Common::Framebuffer &framebuffer() const { return front_; }
         std::uint64_t frameNumber() const { return frameNumber_; }
 
     private:
@@ -61,7 +62,7 @@ namespace R2BOY::Core::PPU
         std::uint32_t mix(Pixel background, const ObjectPixel &object) const;
         std::uint32_t paletteColor(bool object, unsigned palette, unsigned color) const;
 
-        Framebuffer front_{}, back_{};
+        Common::Framebuffer front_{}, back_{};
         std::array<std::uint8_t, 64> bgColors_{}, objColors_{};
         std::array<Pixel, 16> bgFIFO_{};
         std::array<ObjectPixel, 8> objFIFO_{};

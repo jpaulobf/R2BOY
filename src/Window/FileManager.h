@@ -1,6 +1,6 @@
 #pragma once
 
-#include "System/RomFile.h"
+#include "Common/RomFile.h"
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -12,7 +12,7 @@ namespace R2BOY::Window
     /**
      * Gerencia o seletor de ROMs da interface: navegação por pastas, seleção de
      * membros de ZIP e apresentação de erros. Mantém o estado entre frames.
-     * A leitura dos arquivos usa System::RomFile; o carregamento do cartucho
+     * A leitura dos arquivos usa Common::RomFile; o carregamento do cartucho
      * é delegado ao callback configurado pela Engine.
      */
     class FileManager
@@ -20,7 +20,7 @@ namespace R2BOY::Window
     public:
         // Callback síncrono com caminho e membro opcional do ZIP. Exceções
         // std::exception são capturadas e apresentadas no próprio seletor.
-        using RomOpenHandler = std::function<void(const std::filesystem::path &, const std::optional<System::RomFile::Entry> &)>;
+        using RomOpenHandler = std::function<void(const std::filesystem::path &, const std::optional<Common::RomFile::Entry> &)>;
 
         // Inicia a navegação na pasta atual; não exige um contexto ImGui ativo.
         FileManager();
@@ -39,7 +39,7 @@ namespace R2BOY::Window
         void drawDriveSelector();
 
         // Executa o callback e captura falhas; true indica uma carga bem-sucedida.
-        bool load(const std::filesystem::path &file, const std::optional<System::RomFile::Entry> &entry = std::nullopt);
+        bool load(const std::filesystem::path &file, const std::optional<Common::RomFile::Entry> &entry = std::nullopt);
 
         // Abre pastas, lista ROMs de ZIP ou solicita a carga de uma ROM simples.
         // Retorna true apenas quando o seletor pode fechar após uma carga.
@@ -49,7 +49,7 @@ namespace R2BOY::Window
         std::filesystem::path selectedFile;
         std::filesystem::path directory;
         std::filesystem::path archive;
-        std::vector<System::RomFile::Entry> entries;
+        std::vector<Common::RomFile::Entry> entries;
         std::string error;
         bool requested = false;
         bool chooseArchive = false;
