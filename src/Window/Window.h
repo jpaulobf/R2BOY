@@ -1,7 +1,11 @@
 #pragma once
 
 #include <memory>
+#include <functional>
 #include "FileManager.h"
+#include "Core/PPU/PPU.h"
+
+union SDL_Event;
 
 namespace R2BOY::Core::Cartridge
 {
@@ -30,7 +34,9 @@ namespace R2BOY::Window
         bool open();
 
         // Encaminha eventos ao ImGui e pode definir running como false ao solicitar saída.
-        void pollEvents(bool &running);
+        using InputHandler = std::function<void(const SDL_Event &, bool)>;
+        void pollEvents(bool &running, const InputHandler &inputHandler = {});
+        bool acceptsGameInput() const;
 
         // Indica se a janela está minimizada, permitindo suspender a renderização.
         bool isMinimized() const;
@@ -42,8 +48,13 @@ namespace R2BOY::Window
         // Substitui o callback; configure antes de oferecer a abertura de ROMs.
         void setRomOpenHandler(RomOpenHandler handler);
 
+        // Notifica a Engine quando o usuário altera o layout no menu Input.
+        using InvertBAYBCallback = std::function<void(bool)>;
+        void setInvertBAYBCallback(InvertBAYBCallback callback);
+
         // Desenha e apresenta um frame; pode solicitar saída via running e retorna false em falha SDL.
-        bool renderFrame(bool &running, const Core::Cartridge::Cartridge &cartridge);
+        bool renderFrame(bool &running, const Core::Cartridge::Cartridge &cartridge,
+                         const Core::PPU::PPU::Framebuffer &framebuffer);
 
     private:
         // Mantém tipos SDL/ImGui e sua ordem de destruição fora da interface pública.
