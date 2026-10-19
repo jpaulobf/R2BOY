@@ -168,6 +168,7 @@ namespace R2BOY::Test
             auto image = rom(3, 4, 2);
             image[0x143] = 0x80;
             board.loadCartridge(image, "color");
+            board.write(0xFF40, 0); // Testa armazenamento sem os bloqueios de OAM da PPU.
             check(board.executionMode() == Core::ExecutionMode::CGB, "CGB mode selection");
             board.write(0x2000, 2);
             check(board.read(0x4000) == 2, "BUS routes MBC writes");
@@ -187,7 +188,7 @@ namespace R2BOY::Test
             board.write(0xFF80, 0x77);
             board.write(0xFFFE, 0x88);
             check(board.read(0xFF80) == 0x77 && board.read(0xFFFE) == 0x88, "HRAM boundaries");
-            check(board.read(0xFF00) == 0xFF, "unimplemented IO open bus");
+            check(board.read(0xFF00) == 0xFF, "JOYP with no group selected");
             check(board.read(0xFFFF) == 0 && board.read(0xFF0F) == 0xE1, "interrupt post-boot registers");
             board.write(0x8000, 0x10);
             board.write(0xFF4F, 1);

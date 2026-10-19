@@ -28,7 +28,10 @@ namespace R2BOY::Test
             Core::IO::Interrupts interrupts;
             Core::IO::Serial serial;
             Core::IO::Timer timer;
-            Core::BUS::BUS bus{cartridge, memory, interrupts, serial, timer};
+            Core::IO::DMA dma;
+            Core::PPU::PPU ppu;
+            Core::IO::Joypad joypad;
+            Core::BUS::BUS bus{cartridge, memory, interrupts, serial, timer, dma, ppu, joypad};
             Processor cpu{bus};
 
             static Registers initial()
