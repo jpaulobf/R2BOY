@@ -5,6 +5,7 @@
 #include <iostream>
 #include <exception>
 #include "SaveFile.h"
+#include "FramePacer.h"
 #include <chrono>
 #include <algorithm>
 #include <memory>
@@ -46,6 +47,8 @@ namespace R2BOY::System
             if (cycle.type == Core::CPU::CPU::CycleType::Write && cycle.address == 0xFF4D)
                 speedSwitchRequested = (cycle.value & 1) != 0; });
         double cycleCredit = 0;
+        auto lastExecution = FramePacer::Clock::now();
+        FramePacer framePacer(lastExecution);
         const auto flushSave = [&]()
         {
             if (saves.save(board_.cartridge()))
@@ -54,7 +57,7 @@ namespace R2BOY::System
 
         // A interface escolhe o arquivo; a Engine faz a ponte entre leitura e cartucho.
         // Erros propagam para o seletor, que apresenta a mensagem ao usuário.
-        window.setRomOpenHandler([this, &saves, &flushSave, &cpuFaultReported, &cpuStopReported, &speedSwitchRequested, &speedSwitchWarningReported, &cycleCredit](const std::filesystem::path &path, const std::optional<RomFile::Entry> &entry)
+        window.setRomOpenHandler([this, &saves, &flushSave, &cpuFaultReported, &cpuStopReported, &speedSwitchRequested, &speedSwitchWarningReported, &cycleCredit, &lastExecution, &framePacer](const std::filesystem::path &path, const std::optional<RomFile::Entry> &entry)
                                  {
             const auto fullPath = std::filesystem::absolute(path).lexically_normal();
             auto source = fullPath.u8string();
@@ -90,6 +93,9 @@ namespace R2BOY::System
                     std::cout << "SaveFile: Loaded RAM -> " << saves.pathFor(board_.cartridge()).u8string() << std::endl;
                 std::cout << "CPU: Reset without boot ROM -> PC=0100, SP=FFFE" << std::endl;
                 std::cout << "Serial: ROM output follows in this console.\n" << std::endl;
+                // O carregamento não conta como tempo de execução da nova ROM.
+                lastExecution = FramePacer::Clock::now();
+                framePacer.reset(lastExecution);
             }
             catch (const std::exception &e)
             {
@@ -100,17 +106,18 @@ namespace R2BOY::System
         bool running = true;
         bool renderFailed = false;
         auto nextSave = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-        auto lastExecution = std::chrono::steady_clock::now();
+        lastExecution = FramePacer::Clock::now();
+        framePacer.reset(lastExecution);
 
         while (running)
         {
             window.pollEvents(running, [this](const SDL_Event &event, bool enabled)
                               { input_.handleEvent(event, enabled); });
+            if (!running)
+                break;
             const bool inputEnabled = window.acceptsGameInput();
             auto inputFrame = board_.clockCycles() / 70224;
             board_.setButtons(input_.update(inputFrame, inputEnabled));
-            if (!running)
-                break;
 
             if (std::chrono::steady_clock::now() >= nextSave)
             {
@@ -127,8 +134,10 @@ namespace R2BOY::System
 
             if (window.isMinimized())
             {
-                lastExecution = std::chrono::steady_clock::now();
-                SDL_Delay(16);
+                // Reduz uso de CPU em segundo plano e descarta o tempo pausado.
+                SDL_Delay(50);
+                lastExecution = FramePacer::Clock::now();
+                framePacer.reset(lastExecution);
                 continue;
             }
 
@@ -192,7 +201,11 @@ namespace R2BOY::System
                 break;
             }
 
-            SDL_Delay(16); // Apresentação provisória; o avanço da CPU usa o tempo decorrido.
+            if (!running)
+                break;
+            const auto wait = framePacer.remaining(FramePacer::Clock::now());
+            if (wait > FramePacer::Duration::zero())
+                SDL_DelayPrecise(static_cast<Uint64>(wait.count()));
         }
 
         try
