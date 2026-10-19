@@ -2,6 +2,13 @@
 
 namespace R2BOY::Core::Memory
 {
+    std::uint8_t Memory::readVRAM(std::uint16_t address, unsigned bank) const
+    {
+        if (address < 0x8000 || address >= 0xA000 || bank > 1)
+            return 0xFF;
+        return vram_[bank * 0x2000 + address - 0x8000];
+    }
+
     void Memory::reset(bool cgbMode)
     {
         vram_.fill(0);

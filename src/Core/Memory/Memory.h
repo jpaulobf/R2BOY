@@ -8,8 +8,8 @@ namespace R2BOY::Core::Memory
     /**
      * Armazena WRAM, HRAM, VRAM e OAM; ROM e RAM do cartucho ficam em Cartridge.
      * Implementa o espelhamento da WRAM e os bancos CGB (VBK/SVBK).
-     * Boot ROM, bloqueios de acesso da PPU/DMA e registradores de periféricos
-     * ainda não são emulados. A inicialização em zero é determinística, não uma
+     * Os bloqueios de DMA/PPU ficam no BUS. Boot ROM ainda não é emulada.
+     * A inicialização em zero é determinística, não uma
      * reprodução dos valores indeterminados da RAM ao ligar o hardware.
      */
     class Memory
@@ -23,6 +23,9 @@ namespace R2BOY::Core::Memory
         // e FF4F/FF70 em modo CGB. Outras leituras retornam 0xFF; escritas são ignoradas.
         std::uint8_t read(std::uint16_t address) const;
         void write(std::uint16_t address, std::uint8_t value);
+
+        // Porta interna da PPU: banco explícito, independente de VBK e dos bloqueios da CPU.
+        std::uint8_t readVRAM(std::uint16_t address, unsigned bank) const;
 
     private:
         std::array<std::uint8_t, 0x4000> vram_{};
