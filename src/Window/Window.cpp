@@ -17,6 +17,20 @@ namespace R2BOY::Window
         constexpr int screenWidth = Common::Constants::ScreenWidth;
         constexpr int screenHeight = Common::Constants::ScreenHeight;
 
+        enum class DisplayMode
+        {
+            Windowed,
+            FullscreenStretched,
+            Fullscreen
+        };
+
+        struct DisplaySettings
+        {
+            int scale = 3;
+            DisplayMode mode = DisplayMode::Windowed;
+            bool pending = true;
+        };
+
         struct SDLSession
         {
             ~SDLSession() { SDL_Quit(); }
@@ -39,35 +53,69 @@ namespace R2BOY::Window
 
         void drawInterface(bool &running, bool gameLoaded, FileManager &fileManager,
                            SDL_Texture *texture, bool &bilinearFilter, bool &invertBAYB,
-                           const Window::InvertBAYBCallback &invertBAYBCallback)
+                           const Window::InvertBAYBCallback &invertBAYBCallback, DisplaySettings &display,
+                           Window::RomAction &romAction)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->WorkPos);
             ImGui::SetNextWindowSize(viewport->WorkSize);
-            constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
-                                               ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar |
-                                               ImGuiWindowFlags_NoNavInputs;
+            const bool showMenu = display.mode == DisplayMode::Windowed;
+            ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
+                                     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                     ImGuiWindowFlags_NoNavInputs;
+            if (showMenu)
+                flags |= ImGuiWindowFlags_MenuBar;
             // O foco da área do jogo não deve ativar NavActive/WantCaptureKeyboard.
             // Menus e o seletor modal continuam recebendo a navegação do ImGui.
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(0, 0, 0, 255));
             const bool visible = ImGui::Begin("R2BOY", nullptr, flags);
+            ImGui::PopStyleColor();
             ImGui::PopStyleVar(2);
             if (visible)
             {
-                if (ImGui::BeginMenuBar())
+                if (showMenu && ImGui::BeginMenuBar())
                 {
                     if (ImGui::BeginMenu("File"))
                     {
                         if (ImGui::MenuItem("Load ROM...", "Ctrl+O"))
                             fileManager.requestOpen();
-                        if (ImGui::MenuItem("Exit", "Esc"))
+                        if (ImGui::MenuItem("Unload", nullptr, false, gameLoaded))
+                            romAction = Window::RomAction::Unload;
+                        if (ImGui::MenuItem("Reset", "F12", false, gameLoaded))
+                            romAction = Window::RomAction::Reset;
+                        ImGui::Separator();
+                        if (ImGui::MenuItem("Exit"))
                             running = false;
                         ImGui::EndMenu();
                     }
                     if (ImGui::BeginMenu("Display"))
                     {
                         ImGui::MenuItem("Bilinear Filter", nullptr, &bilinearFilter);
+                        ImGui::Separator();
+                        for (int scale = 1; scale <= 5; ++scale)
+                        {
+                            char label[8];
+                            SDL_snprintf(label, sizeof(label), "%dX", scale);
+                            if (ImGui::MenuItem(label, nullptr, display.scale == scale && display.mode == DisplayMode::Windowed))
+                            {
+                                display.scale = scale;
+                                display.mode = DisplayMode::Windowed;
+                                display.pending = true;
+                            }
+                        }
+                        ImGui::Separator();
+                        const auto fullscreenItem = [&display](const char *label, DisplayMode mode)
+                        {
+                            if (ImGui::MenuItem(label, nullptr, display.mode == mode))
+                            {
+                                display.mode = display.mode == mode ? DisplayMode::Windowed : mode;
+                                display.pending = true;
+                            }
+                        };
+                        fullscreenItem("Borderless Fullscreen Stretched", DisplayMode::FullscreenStretched);
+                        fullscreenItem("Borderless Fullscreen", DisplayMode::Fullscreen);
                         ImGui::EndMenu();
                     }
                     if (ImGui::BeginMenu("Input"))
@@ -85,7 +133,9 @@ namespace R2BOY::Window
                 const float scale = std::min(available.x / screenWidth, available.y / screenHeight);
                 if (scale > 0.0f)
                 {
-                    const ImVec2 size(screenWidth * scale, screenHeight * scale);
+                    const ImVec2 size = display.mode == DisplayMode::FullscreenStretched
+                                            ? available
+                                            : ImVec2(screenWidth * scale, screenHeight * scale);
                     const ImVec2 cursor = ImGui::GetCursorScreenPos();
                     const ImVec2 topLeft(cursor.x + (available.x - size.x) * 0.5f,
                                          cursor.y + (available.y - size.y) * 0.5f);
@@ -121,6 +171,7 @@ namespace R2BOY::Window
         std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)> texture{nullptr, SDL_DestroyTexture};
         ImGuiSession gui;
         FileManager fileManager;
+        RomAction romAction = RomAction::None;
         bool bilinearFilter = false;
         bool invertBAYB = false;
         InvertBAYBCallback invertBAYBCallback;
@@ -129,6 +180,65 @@ namespace R2BOY::Window
         bool gameWasLoaded = false;
         int displayWidth = 0;
         int displayHeight = 0;
+        DisplaySettings display;
+        DisplayMode appliedMode = DisplayMode::Windowed;
+
+        bool updateDisplay(int menuHeight)
+        {
+            SDL_Window *nativeWindow = window.get();
+            if (display.pending)
+            {
+                const bool fullscreen = display.mode != DisplayMode::Windowed;
+                const bool wasFullscreen = appliedMode != DisplayMode::Windowed;
+                if (fullscreen != wasFullscreen)
+                {
+                    // Modo nulo usa o desktop atual: nunca solicita fullscreen exclusivo.
+                    if ((fullscreen && !SDL_SetWindowFullscreenMode(nativeWindow, nullptr)) ||
+                        !SDL_SetWindowFullscreen(nativeWindow, fullscreen) || !SDL_SyncWindow(nativeWindow))
+                        return false;
+                }
+                if (!fullscreen)
+                {
+                    if ((SDL_GetWindowFlags(nativeWindow) & SDL_WINDOW_MAXIMIZED) != 0 &&
+                        (!SDL_RestoreWindow(nativeWindow) || !SDL_SyncWindow(nativeWindow)))
+                        return false;
+                    if (!SDL_SetWindowSize(nativeWindow, screenWidth * display.scale,
+                                           screenHeight * display.scale + menuHeight) ||
+                        !SDL_SyncWindow(nativeWindow))
+                        return false;
+                    const int centered = SDL_WINDOWPOS_CENTERED_DISPLAY(SDL_GetDisplayForWindow(nativeWindow));
+                    if (!SDL_SetWindowPosition(nativeWindow, centered, centered))
+                        std::cerr << "Unable to center window: " << SDL_GetError() << '\n';
+                    // Não confunde a restauração de nX com um redimensionamento manual.
+                    displayWidth = 0;
+                    displayHeight = 0;
+                }
+                appliedMode = display.mode;
+                display.pending = false;
+            }
+            if (appliedMode != DisplayMode::Windowed)
+                return true;
+
+            // Em janela, mantém a proporção abaixo do menu ao redimensionar à mão.
+            int width = 0;
+            int height = 0;
+            if (!SDL_GetWindowSize(nativeWindow, &width, &height))
+                return false;
+            int targetWidth = width;
+            int targetHeight = height;
+            if (displayWidth != 0 && width == displayWidth && height != displayHeight)
+                targetWidth = std::max(1, static_cast<int>(std::lround(
+                                              std::max(1, height - menuHeight) * static_cast<double>(screenWidth) / screenHeight)));
+            else
+                targetHeight = menuHeight + static_cast<int>(std::lround(
+                                                width * static_cast<double>(screenHeight) / screenWidth));
+            if ((targetWidth != width || targetHeight != height) &&
+                !SDL_SetWindowSize(nativeWindow, targetWidth, targetHeight))
+                return false;
+            displayWidth = targetWidth;
+            displayHeight = targetHeight;
+            return true;
+        }
     };
 
     Window::Window() = default;
@@ -149,7 +259,7 @@ namespace R2BOY::Window
         ImGui::CreateContext();
         auto state = std::make_unique<Impl>();
         state->window.reset(SDL_CreateWindow(
-            "R2BOY", screenWidth * 4, screenHeight * 4,
+            "R2BOY", screenWidth * state->display.scale, screenHeight * state->display.scale,
             SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY));
         if (!state->window)
         {
@@ -207,20 +317,27 @@ namespace R2BOY::Window
 
     void Window::pollEvents(bool &running, const InputHandler &inputHandler)
     {
-        ImGuiIO &io = ImGui::GetIO();
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
             ImGui_ImplSDL3_ProcessEvent(&event);
             if (inputHandler)
                 inputHandler(event, acceptsGameInput());
+            if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F12 &&
+                !event.key.repeat && impl_->gameWasLoaded)
+                impl_->romAction = RomAction::Reset;
+            if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE &&
+                !event.key.repeat && impl_->display.mode != DisplayMode::Windowed)
+            {
+                impl_->display.mode = DisplayMode::Windowed;
+                impl_->display.pending = true;
+            }
             if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_O &&
                 (event.key.mod & SDL_KMOD_CTRL) != 0 && !event.key.repeat)
                 impl_->fileManager.requestOpen();
             if (event.type == SDL_EVENT_QUIT ||
                 (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
-                 event.window.windowID == SDL_GetWindowID(impl_->window.get())) ||
-                (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE && !io.WantCaptureKeyboard))
+                 event.window.windowID == SDL_GetWindowID(impl_->window.get())))
                 running = false;
         }
     }
@@ -240,6 +357,11 @@ namespace R2BOY::Window
         impl_->invertBAYBCallback = std::move(callback);
     }
 
+    Window::RomAction Window::takeRomAction()
+    {
+        return std::exchange(impl_->romAction, RomAction::None);
+    }
+
     bool Window::renderFrame(bool &running, bool gameLoaded, const Common::Framebuffer &framebuffer)
     {
         if (!SDL_UpdateTexture(impl_->texture.get(), nullptr, framebuffer.data(), screenWidth * sizeof(std::uint32_t)))
@@ -250,32 +372,19 @@ namespace R2BOY::Window
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
-        // A proporção aplica-se à tela abaixo do menu. Usa a dimensão alterada
-        // pelo usuário para ajustar a outra, em coordenadas da janela SDL.
         int width = 0;
         int height = 0;
         if (!SDL_GetWindowSize(impl_->window.get(), &width, &height))
             return false;
         const float windowScale = height / ImGui::GetIO().DisplaySize.y;
         const int menuHeight = static_cast<int>(std::lround(ImGui::GetFrameHeight() * windowScale));
-        int targetWidth = width;
-        int targetHeight = height;
-        if (impl_->displayWidth != 0 && width == impl_->displayWidth && height != impl_->displayHeight)
-            targetWidth = std::max(1, static_cast<int>(std::lround(
-                                          std::max(1, height - menuHeight) * static_cast<double>(screenWidth) / screenHeight)));
-        else
-            targetHeight = menuHeight + static_cast<int>(std::lround(
-                                            width * static_cast<double>(screenHeight) / screenWidth));
-        if ((targetWidth != width || targetHeight != height) &&
-            !SDL_SetWindowSize(impl_->window.get(), targetWidth, targetHeight))
+        if (!impl_->updateDisplay(menuHeight))
         {
-            std::cerr << "Failed to resize display: " << SDL_GetError() << '\n';
+            std::cerr << "Failed to update display mode: " << SDL_GetError() << '\n';
             return false;
         }
-        impl_->displayWidth = targetWidth;
-        impl_->displayHeight = targetHeight;
         drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter,
-                      impl_->invertBAYB, impl_->invertBAYBCallback);
+                      impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction);
         ImGui::Render();
         const ImGuiIO &io = ImGui::GetIO();
         SDL_Renderer *renderer = impl_->renderer.get();

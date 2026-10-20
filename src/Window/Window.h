@@ -53,6 +53,12 @@ namespace R2BOY::Window
         // Substitui o callback; configure antes de oferecer a abertura de ROMs.
         void setRomOpenHandler(RomOpenHandler handler);
 
+        // Ação solicitada pelo menu File; deve ser consumida pela Engine.
+        enum class RomAction { None, Unload, Reset };
+
+        // Consome a ação do menu File para a Engine aplicá-la após renderFrame().
+        RomAction takeRomAction();
+
         // Notifica a Engine quando o usuário altera o layout no menu Input.
         using InvertBAYBCallback = std::function<void(bool)>;
         
