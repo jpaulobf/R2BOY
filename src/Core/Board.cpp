@@ -34,6 +34,13 @@ namespace R2BOY::Core
         reset();
     }
 
+    void Board::unloadCartridge()
+    {
+        cartridge_ = Cartridge::Cartridge{};
+        executionMode_ = ExecutionMode::DMG;
+        reset();
+    }
+
     void Board::resetMemory()
     {
         memory_.reset(executionMode_ == ExecutionMode::CGB);

@@ -40,6 +40,9 @@ namespace R2BOY::Core
         // Instala um cartucho já validado, inclusive com RAM restaurada pela plataforma.
         void loadCartridge(Cartridge::Cartridge cartridge);
 
+        // Remove o cartucho e reinicia o hardware; a plataforma deve salvar a RAM antes.
+        void unloadCartridge();
+
         // Apenas memória e bancos; ainda não executa reset da CPU/periféricos.
         void resetMemory();
 
