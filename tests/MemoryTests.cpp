@@ -219,6 +219,44 @@ namespace R2BOY::Test
             check(dmgBoard.cartridge().source() == "original" && dmgBoard.read(0xC000) == 0xBB, "failed insertion changed board");
         }
 
+        void resetAndUnload()
+        {
+            Core::Board board(Core::Model::CGB);
+            auto image = rom(3, 2, 2);
+            image[0x143] = 0x80;
+            board.loadCartridge(image, "reset-test.gbc");
+            board.write(0, 0x0A);
+            board.write(0xA000, 0x42);
+            board.write(0xC000, 0x55);
+            board.setButtons(0xFF);
+            for (int i = 0; i < 20; ++i)
+                board.step();
+            check(board.clockCycles() > 0, "game must advance before reset");
+
+            board.reset();
+            check(board.cartridge().loaded() && board.cartridge().source() == "reset-test.gbc",
+                  "reset must retain the current ROM");
+            check(board.executionMode() == Core::ExecutionMode::CGB && board.clockCycles() == 0 &&
+                      board.cpu().registers().pc == 0x100 && board.read(0xC000) == 0,
+                  "reset must restart CPU, clock and volatile memory in the game's mode");
+            board.write(0, 0x0A);
+            check(board.read(0xA000) == 0x42 && board.cartridge().ramDirty(),
+                  "reset must preserve cartridge RAM and its unsaved status");
+
+            board.step();
+            board.write(0xC000, 0x66);
+            board.unloadCartridge();
+            check(!board.cartridge().loaded() && board.cartridge().rom().empty() &&
+                      board.cartridge().ram().empty() && board.cartridge().source().empty(),
+                  "unload must release ROM, cartridge RAM and metadata");
+            check(board.model() == Core::Model::CGB && board.executionMode() == Core::ExecutionMode::DMG &&
+                      board.clockCycles() == 0 && board.frameNumber() == 0 && board.read(0xC000) == 0 &&
+                      board.read(0) == 0xFF && board.step() == 0,
+                  "unload must clear machine state without changing the physical model");
+            board.loadCartridge(image, "reloaded.gbc");
+            check(board.step() > 0, "a new game must run after unload");
+        }
+
         void batterySaves()
         {
             const auto root = std::filesystem::temp_directory_path() /
@@ -286,6 +324,7 @@ namespace R2BOY::Test
         {
             cartridgeBanks();
             memoryMap();
+            resetAndUnload();
             batterySaves();
             std::cout << "Memory, MBC and battery-save tests passed.\n";
             return 0;
