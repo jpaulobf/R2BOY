@@ -57,10 +57,21 @@ namespace R2BOY::System
             if (saves.save(board_.cartridge()))
                 std::cout << "SaveFile: Saved RAM -> " << saves.pathFor(board_.cartridge()).u8string() << std::endl;
         };
+        const auto resetRuntime = [&]()
+        {
+            input_.clear();
+            cpuFaultReported = false;
+            cpuStopReported = false;
+            speedSwitchRequested = false;
+            speedSwitchWarningReported = false;
+            cycleCredit = 0;
+            lastExecution = FramePacer::Clock::now();
+            framePacer.reset(lastExecution);
+        };
 
         // A interface escolhe o arquivo; a Engine faz a ponte entre leitura e cartucho.
         // Erros propagam para o seletor, que apresenta a mensagem ao usuário.
-        window.setRomOpenHandler([this, &saves, &flushSave, &cpuFaultReported, &cpuStopReported, &speedSwitchRequested, &speedSwitchWarningReported, &cycleCredit, &lastExecution, &framePacer](const std::filesystem::path &path, const std::optional<RomFile::Entry> &entry)
+        window.setRomOpenHandler([this, &saves, &flushSave, &resetRuntime](const std::filesystem::path &path, const std::optional<RomFile::Entry> &entry)
                                  {
             const auto fullPath = std::filesystem::absolute(path).lexically_normal();
             auto source = fullPath.u8string();
@@ -80,12 +91,6 @@ namespace R2BOY::System
 
                 const bool restored = saves.load(next);
                 board_.loadCartridge(std::move(next));
-                input_.clear();
-                cpuFaultReported = false;
-                cpuStopReported = false;
-                speedSwitchRequested = false;
-                speedSwitchWarningReported = false;
-                cycleCredit = 0;
 
                 // Só registra sucesso depois da validação e substituição do cartucho.
                 std::cout << "Cartridge '" << source << "' loaded successfully. ROM Hash (CRC32): "
@@ -97,8 +102,7 @@ namespace R2BOY::System
                 std::cout << "CPU: Reset without boot ROM -> PC=0100, SP=FFFE" << std::endl;
                 std::cout << "Serial: ROM output follows in this console.\n" << std::endl;
                 // O carregamento não conta como tempo de execução da nova ROM.
-                lastExecution = FramePacer::Clock::now();
-                framePacer.reset(lastExecution);
+                resetRuntime();
             }
             catch (const std::exception &e)
             {
@@ -202,6 +206,27 @@ namespace R2BOY::System
             {
                 renderFailed = true;
                 break;
+            }
+
+            const auto action = window.takeRomAction();
+            if (action != Window::Window::RomAction::None && board_.cartridge().loaded())
+            {
+                try
+                {
+                    // Em caso de falha ao salvar, mantém o jogo e a RAM atuais.
+                    flushSave();
+                    if (action == Window::Window::RomAction::Unload)
+                        board_.unloadCartridge();
+                    else
+                        board_.reset(); // Reinicia o jogo preservando a RAM do cartucho.
+                    resetRuntime();
+                }
+                catch (const std::exception &e)
+                {
+                    std::cerr << "Engine: Failed to "
+                              << (action == Window::Window::RomAction::Unload ? "unload" : "reset")
+                              << " ROM: " << e.what() << std::endl;
+                }
             }
 
             if (!running)
