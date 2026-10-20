@@ -7,6 +7,8 @@
 A Game Boy and Game Boy Color emulator written from scratch in C++, developed
 alongside R2NES.
 
+**Version 0.0.1** — see the [changelog](CHANGELOG.md) for release notes.
+
 **Work in progress:** games can run with video, keyboard and gamepad controls,
 and automatic battery saves. Compatibility is still improving, and audio is
 not available yet.
@@ -18,11 +20,26 @@ not available yet.
 3. Choose a `.gb`, `.gbc`, or `.zip` file. If a ZIP contains multiple games,
    select the one you want to play.
 
-The window keeps the Game Boy's screen proportions when resized. You can enable
-smoother scaling with **Display > Bilinear Filter**. The title shows FPS while
-a game is loaded, with presentation targeting 60 FPS.
+Use **File > Reset** or **F12** to restart the current game, keeping its battery
+save. **File > Unload** removes the ROM and returns to the black idle screen.
+Both options are disabled when no game is loaded.
 
-To quit, close the window or choose **File > Exit**.
+To quit, close the window or choose **File > Exit**. Escape never closes the emulator.
+
+## Display
+
+The emulator starts at **3X**. Choose **1X to 5X** in the **Display** menu to resize
+and center the window. Resizing it manually also keeps the Game Boy's proportions.
+
+- **Borderless Fullscreen Stretched** fills the screen.
+- **Borderless Fullscreen** preserves the original proportions, adding black bars
+  where needed.
+
+The menu is hidden in both fullscreen modes. Press **Esc** to return to the last
+selected window scale and show the menu again.
+
+Enable **Display > Bilinear Filter** for smoother scaling. Presentation targets
+60 FPS, and the title shows FPS while a game is loaded.
 
 ## Controls
 
@@ -42,11 +59,17 @@ button labels, A / B map to Game Boy B / A, and X / Y provide Turbo B / Turbo A.
 Use **Input > Invert BA/YB Buttons** to switch the action-button layout for both
 keyboard and gamepad.
 
+| Shortcut | Action |
+| --- | --- |
+| Ctrl+O | Open a ROM |
+| F12 | Reset the current game |
+| Esc | Leave fullscreen |
+
 ## Saves
 
 Games with battery saves are saved automatically every five seconds, when
-switching games, and when exiting normally. Save files are stored in the
-`saves/` folder beside the executable.
+switching games, before Reset or Unload, and when exiting normally. Save files
+are stored in the `saves/` folder beside the executable.
 
 Opening the same ROM directly or from a ZIP uses the same save. Save states
 are not available yet.

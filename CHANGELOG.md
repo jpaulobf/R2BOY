@@ -1,43 +1,44 @@
 # Changelog
 
-Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
 ## [Unreleased]
 
-- Migração para SDL 3.4.18 e Dear ImGui 1.92.9b, com backends SDL3/SDLRenderer3.
-- Adaptação de eventos, inicialização, renderização e caminho dos saves à API SDL3.
+## [0.0.1] - 2026-10-20
 
-- Contorno provisório na janela para STOP com pedido de troca de velocidade CGB: segue em velocidade normal e avisa no console; STOP comum preservado.
+Primeira versão do R2BOY, ainda em desenvolvimento.
 
-- Timer DIV/TIMA/TMA/TAC por T-cycle, bordas de DIV/TAC e diferenças DMG/CGB.
-- Overflow com recarga atrasada, conflitos de escrita e interrupção do timer durante HALT.
-- Blargg: 11/11 cpu_instrs individuais aprovados em DMG e CGB; ROM combinada e instr_timing aprovados em DMG.
+### Jogos e controles
 
-- Clock intercalado por M-cycle em leituras, escritas e ciclos internos da CPU.
-- Board avança a serial em T-cycles durante a instrução, sem repetir ciclos no fim.
-- Rastreamento opcional de acessos e testes de ordem da pilha, desvios e interrupções.
+- Emulação de Game Boy e Game Boy Color com vídeo.
+- Abertura de ROMs `.gb`, `.gbc` e `.zip`, incluindo seleção de jogos em arquivos ZIP.
+- Controles por teclado e gamepad, com botões turbo e opção de inverter o layout.
+- Saves de bateria automáticos ao trocar, reiniciar ou descarregar jogos, a cada
+  cinco segundos e ao sair normalmente.
+- Opções **Unload** e **Reset** no menu File, com **F12** para reiniciar o jogo.
 
-- Porta serial SB/SC com clock interno, captura de saída e interrupção ao concluir.
-- Executor rom_runner sem janela para ROMs Blargg, com resultado e limite de ciclos.
+### Janela e imagem
 
-- CPU SM83 com instruções básicas/CB, flags, pilha e contagem de T-cycles por instrução.
-- Registradores IF/IE, prioridade de interrupções, EI/DI/RETI, HALT e HALT bug.
-- Perfis de CPU pós-boot DMG/CGB e execução de instruções no ciclo da aplicação.
-- Testes de opcodes, aritmética, DAA, desvios, pilha, interrupções e ROM sintética.
+- Escalas de **1X a 5X**, com **3X** como padrão e centralização ao aplicar a escala.
+- Fullscreen sem bordas, nos modos esticado e proporcional.
+- Menu oculto em fullscreen; **ESC** retorna à última escala selecionada sem
+  fechar o emulador.
+- Filtro bilinear opcional e preservação da proporção ao redimensionar a janela.
+- Tela preta sem ROM e FPS no título somente com jogo carregado.
+- Apresentação com alvo de 60 FPS e espera ajustada ao tempo de processamento.
 
-- Mapa de memória com BUS, WRAM/echo, VRAM, OAM, HRAM e seleção de bancos CGB.
-- Bancos de ROM/RAM para ROM simples, MBC1, MBC2, MBC3 sem RTC e MBC5.
-- Restauração e gravação de RAM com bateria em saves/<CRC32>.sav junto ao executável.
-- Testes de bancos, memória, persistência e preservação de estado após falhas.
+### Base do emulador
 
-- Abertura de ROMs .gb, .gbc e .zip em File > Open e Ctrl+O.
-- Leitura do header, metadados e avisos de logo e checksums.
-- Seleção de ROM em ZIPs com múltiplos jogos e extração em memória com miniz.
-- Testes de leitura, arquivos inválidos e preservação do cartucho após falhas.
+- CPU, memória, interrupções, timer, vídeo, entrada e saída serial implementados.
+- Suporte a cartuchos ROM simples, MBC1, MBC2, MBC3 sem relógio e MBC5.
+- Interface com SDL3 e Dear ImGui, compilação com CMake e testes automatizados.
+- Executor de ROMs de teste sem janela; testes individuais de CPU Blargg
+  validados nos modelos DMG e CGB.
 
+### Limitações conhecidas
 
-## [0.0.1] - 2026-10-17
-
-- Launcher em Emulator.cpp e interface Dear ImGui/SDL2 em Window/.
-- Esqueleto inicial em C++17 e SDL2, com janela e ciclo de eventos.
-- Configuração de build e documentação inicial do R2BOY.
+- Áudio, relógio de cartuchos e suporte completo aos recursos do Game Boy Color
+  ainda não estão disponíveis.
+- Compatibilidade com jogos e precisão da emulação continuam em desenvolvimento.
+- A troca de velocidade do Game Boy Color usa um contorno temporário no aplicativo
+  e continua executando em velocidade normal.
