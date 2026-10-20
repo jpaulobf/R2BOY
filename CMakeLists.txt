@@ -87,6 +87,13 @@ target_include_directories(r2boy_core PUBLIC src)
 target_link_libraries(r2boy_core PUBLIC r2boy_common)
 
 add_executable(R2BOY ${R2BOY_SOURCES})
+if(WIN32)
+    enable_language(RC)
+    target_sources(R2BOY PRIVATE resources/resource.rc)
+    target_include_directories(R2BOY PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/resources")
+    set_source_files_properties(resources/resource.rc PROPERTIES
+        OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/logob.ico")
+endif()
 target_compile_features(R2BOY PRIVATE cxx_std_17)
 set_target_properties(R2BOY PROPERTIES CXX_EXTENSIONS OFF)
 target_include_directories(R2BOY PRIVATE src)
