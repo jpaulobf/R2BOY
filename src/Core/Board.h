@@ -24,6 +24,12 @@ namespace R2BOY::Core
     class Board
     {
     public:
+        // Captura estados salvos entre instruções da CPU.
+        std::vector<std::uint8_t> saveState();
+
+        // Carrega um estado salvo previamente, restaurando o hardware para o ponto capturado.
+        void loadState(const std::vector<std::uint8_t> &data);
+
         // Define o modelo físico; não inicia nem executa o hardware.
         explicit Board(Model model = Model::DMG);
 
@@ -95,6 +101,8 @@ namespace R2BOY::Core
         const Cartridge::Cartridge &cartridge() const { return cartridge_; }
 
     private:
+        void state(StateArchive &archive);
+
         // Único ponto de avanço do hardware: não repetir estes ciclos depois de CPU::step().
         void tickMachineCycle();
         std::uint64_t clockCycles_ = 0;

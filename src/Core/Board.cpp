@@ -1,5 +1,5 @@
 #include "Board.h"
-
+#include "Common/RomFile.h"
 #include <stdexcept>
 #include <utility>
 
@@ -136,5 +136,80 @@ namespace R2BOY::Core
     ExecutionMode Board::executionMode() const
     {
         return executionMode_;
+    }
+
+    void Board::state(StateArchive &archive)
+    {
+        archive(clockCycles_, buttons_, cartridge_, dma_, interrupts_, joypad_, serial_, timer_, memory_, ppu_, cpu_);
+    }
+
+    std::vector<std::uint8_t> Board::saveState()
+    {
+        if (!cartridge_.loaded())
+            throw std::runtime_error("No ROM loaded.");
+        std::vector<std::uint8_t> payload;
+        StateArchive writer(payload);
+        state(writer);
+        std::vector<std::uint8_t> result;
+        StateArchive header(result);
+        std::string magic = "R2BOY-STATE";
+        std::uint32_t version = 1;
+        auto model = model_;
+        auto mode = executionMode_;
+        auto romHash = Common::RomFile::hash(cartridge_.rom());
+        auto checksum = Common::RomFile::hash(payload);
+        header(magic, version, model, mode, romHash, checksum);
+        result.insert(result.end(), payload.begin(), payload.end());
+        return result;
+    }
+
+    void Board::loadState(const std::vector<std::uint8_t> &data)
+    {
+        if (!cartridge_.loaded())
+            throw std::runtime_error("No ROM loaded.");
+        // Três comprimentos de texto, versão/modelo/modo e textos fixos de assinatura e hash.
+        constexpr std::size_t headerSize = sizeof("R2BOY-STATE") - 1 + 8 + 8 + 6 * 4;
+        if (data.size() < headerSize)
+            throw std::runtime_error("Truncated save state header.");
+        const std::vector<std::uint8_t> headerBytes(data.begin(), data.begin() + headerSize);
+        StateArchive header(headerBytes);
+        std::string magic, romHash, checksum;
+        std::uint32_t version = 0;
+        Model model{};
+        ExecutionMode mode{};
+        header(magic, version, model, mode, romHash, checksum);
+        header.finish();
+        if (magic != "R2BOY-STATE" || version != 1)
+            throw std::runtime_error("Unsupported save state format/version.");
+        if (model != model_ || mode != executionMode_ || romHash != Common::RomFile::hash(cartridge_.rom()))
+            throw std::runtime_error("Save state belongs to a different ROM or hardware model.");
+        const std::vector<std::uint8_t> payload(data.begin() + headerSize, data.end());
+        if (checksum != Common::RomFile::hash(payload))
+            throw std::runtime_error("Save state checksum mismatch.");
+        Board next(model_);
+        next.loadCartridge(cartridge_);
+        StateArchive reader(payload);
+        next.state(reader);
+        reader.finish();
+        // Aplica os componentes validados, preservando o barramento e os callbacks da CPU.
+        clockCycles_ = next.clockCycles_;
+        buttons_ = next.buttons_;
+        cartridge_ = std::move(next.cartridge_);
+        dma_ = std::move(next.dma_);
+        interrupts_ = std::move(next.interrupts_);
+        joypad_ = std::move(next.joypad_);
+        serial_ = std::move(next.serial_);
+        timer_ = std::move(next.timer_);
+        memory_ = std::move(next.memory_);
+        ppu_ = std::move(next.ppu_);
+        cpu_.r_ = next.cpu_.r_;
+        cpu_.ime_ = next.cpu_.ime_;
+        cpu_.imeDelay_ = next.cpu_.imeDelay_;
+        cpu_.halted_ = next.cpu_.halted_;
+        cpu_.stopped_ = next.cpu_.stopped_;
+        cpu_.haltBug_ = next.cpu_.haltBug_;
+        cpu_.locked_ = next.cpu_.locked_;
+        cpu_.cycles_ = next.cpu_.cycles_;
+        cpu_.stepCycles_ = next.cpu_.stepCycles_;
     }
 }
