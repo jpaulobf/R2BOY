@@ -20,13 +20,13 @@ namespace R2BOY::Window
     public:
         // Constrói a fachada sem criar recursos SDL; open() inicia a sessão.
         Window();
-        
+
         // Libera ImGui, textura, renderer e janela antes de encerrar SDL.
         ~Window();
 
         // A sessão SDL/ImGui e seus recursos têm posse exclusiva.
         Window(const Window &) = delete;
-        
+
         // Impede compartilhar ou substituir os recursos nativos por cópia.
         Window &operator=(const Window &) = delete;
 
@@ -36,10 +36,10 @@ namespace R2BOY::Window
 
         // Encaminha eventos ao ImGui e pode definir running como false ao solicitar saída.
         using InputHandler = std::function<void(const SDL_Event &, bool)>;
-        
+
         // Drena a fila SDL; o callback recebe cada evento e a permissão atual de entrada.
         void pollEvents(bool &running, const InputHandler &inputHandler = {});
-        
+
         // Exige foco da janela e ausência de captura de teclado pelo ImGui.
         bool acceptsGameInput() const;
 
@@ -54,14 +54,24 @@ namespace R2BOY::Window
         void setRomOpenHandler(RomOpenHandler handler);
 
         // Ação solicitada pelo menu File; deve ser consumida pela Engine.
-        enum class RomAction { None, Unload, Reset };
+        enum class RomAction
+        {
+            None,
+            Unload,
+            Reset,
+            SaveState,
+            LoadState
+        };
 
         // Consome a ação do menu File para a Engine aplicá-la após renderFrame().
         RomAction takeRomAction();
 
+        // Slot selecionado no submenu File (1 a 3).
+        int stateSlot() const;
+
         // Notifica a Engine quando o usuário altera o layout no menu Input.
         using InvertBAYBCallback = std::function<void(bool)>;
-        
+
         // Substitui o callback do menu; não aplica o layout imediatamente.
         void setInvertBAYBCallback(InvertBAYBCallback callback);
 

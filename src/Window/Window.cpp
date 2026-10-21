@@ -26,7 +26,7 @@ namespace R2BOY::Window
 
         struct DisplaySettings
         {
-            int scale = 3;
+            int scale = 4;
             DisplayMode mode = DisplayMode::Windowed;
             bool pending = true;
         };
@@ -54,7 +54,7 @@ namespace R2BOY::Window
         void drawInterface(bool &running, bool gameLoaded, FileManager &fileManager,
                            SDL_Texture *texture, bool &bilinearFilter, bool &invertBAYB,
                            const Window::InvertBAYBCallback &invertBAYBCallback, DisplaySettings &display,
-                           Window::RomAction &romAction)
+                           Window::RomAction &romAction, int &stateSlot)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -79,12 +79,29 @@ namespace R2BOY::Window
                 {
                     if (ImGui::BeginMenu("File"))
                     {
-                        if (ImGui::MenuItem("Load ROM...", "Ctrl+O"))
+                        if (ImGui::MenuItem("Open ROM...", "Ctrl+O"))
                             fileManager.requestOpen();
-                        if (ImGui::MenuItem("Unload", nullptr, false, gameLoaded))
-                            romAction = Window::RomAction::Unload;
                         if (ImGui::MenuItem("Reset", "F12", false, gameLoaded))
                             romAction = Window::RomAction::Reset;
+                        if (ImGui::MenuItem("Unload", nullptr, false, gameLoaded))
+                            romAction = Window::RomAction::Unload;
+
+                        ImGui::Separator();
+                        if (ImGui::MenuItem("Save State", "F5", false, gameLoaded))
+                            romAction = Window::RomAction::SaveState;
+                        if (ImGui::MenuItem("Load State", "F6", false, gameLoaded))
+                            romAction = Window::RomAction::LoadState;
+                        if (ImGui::BeginMenu("Save State Slot", gameLoaded))
+                        {
+                            for (int slot = 1; slot <= 3; ++slot)
+                            {
+                                char label[16];
+                                SDL_snprintf(label, sizeof(label), "Slot %d", slot);
+                                if (ImGui::MenuItem(label, nullptr, stateSlot == slot))
+                                    stateSlot = slot;
+                            }
+                            ImGui::EndMenu();
+                        }
                         ImGui::Separator();
                         if (ImGui::MenuItem("Exit"))
                             running = false;
@@ -172,6 +189,7 @@ namespace R2BOY::Window
         ImGuiSession gui;
         FileManager fileManager;
         RomAction romAction = RomAction::None;
+        int stateSlot = 1;
         bool bilinearFilter = false;
         bool invertBAYB = false;
         InvertBAYBCallback invertBAYBCallback;
@@ -323,6 +341,9 @@ namespace R2BOY::Window
             ImGui_ImplSDL3_ProcessEvent(&event);
             if (inputHandler)
                 inputHandler(event, acceptsGameInput());
+            if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && impl_->gameWasLoaded &&
+                (event.key.key == SDLK_F5 || event.key.key == SDLK_F6))
+                impl_->romAction = event.key.key == SDLK_F5 ? RomAction::SaveState : RomAction::LoadState;
             if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F12 &&
                 !event.key.repeat && impl_->gameWasLoaded)
                 impl_->romAction = RomAction::Reset;
@@ -362,6 +383,11 @@ namespace R2BOY::Window
         return std::exchange(impl_->romAction, RomAction::None);
     }
 
+    int Window::stateSlot() const
+    {
+        return impl_->stateSlot;
+    }
+
     bool Window::renderFrame(bool &running, bool gameLoaded, const Common::Framebuffer &framebuffer)
     {
         if (!SDL_UpdateTexture(impl_->texture.get(), nullptr, framebuffer.data(), screenWidth * sizeof(std::uint32_t)))
@@ -384,7 +410,7 @@ namespace R2BOY::Window
             return false;
         }
         drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter,
-                      impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction);
+                      impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot);
         ImGui::Render();
         const ImGuiIO &io = ImGui::GetIO();
         SDL_Renderer *renderer = impl_->renderer.get();
