@@ -77,6 +77,8 @@ file(GLOB_RECURSE R2BOY_CORE_SOURCES CONFIGURE_DEPENDS
 list(APPEND R2BOY_CORE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/System/SaveFile.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/System/SaveFile.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/System/StateFile.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/System/StateFile.h"
 )
 list(REMOVE_ITEM R2BOY_SOURCES ${R2BOY_CORE_SOURCES})
 list(FILTER R2BOY_SOURCES EXCLUDE REGEX "/src/Common/")
@@ -117,6 +119,9 @@ if(BUILD_TESTING)
     add_executable(cartridge_tests tests/CartridgeTests.cpp)
     target_link_libraries(cartridge_tests PRIVATE r2boy_core miniz)
     add_test(NAME cartridge_tests COMMAND cartridge_tests)
+    add_executable(state_tests tests/StateTests.cpp)
+    target_link_libraries(state_tests PRIVATE r2boy_core)
+    add_test(NAME state_tests COMMAND state_tests)
     add_executable(memory_tests tests/MemoryTests.cpp)
     target_link_libraries(memory_tests PRIVATE r2boy_core)
     add_test(NAME memory_tests COMMAND memory_tests)
