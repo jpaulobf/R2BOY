@@ -162,6 +162,7 @@ namespace
             reinterpret_cast<intptr_t>(ImGui::GetMainViewport()->PlatformHandle)));
         check(native != nullptr, "SDL window must be available");
         R2BOY::Common::Framebuffer framebuffer{};
+        framebuffer.fill(0xFFFFFFFFu);
         bool running = true;
         const auto frame = [&]()
         {
@@ -236,6 +237,43 @@ namespace
                 check(std::abs(width * 144 - height * 160) < 1,
                       "proportional fullscreen must preserve the Game Boy aspect ratio");
         };
+
+        const auto checkScanlines = [&](Uint8 brightness)
+        {
+            auto *main = ImGui::FindWindowByName("R2BOY");
+            ImGui::ClosePopupsOverWindow(main, false);
+            frame();
+            frame();
+            std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> pixels(
+                SDL_RenderReadPixels(SDL_GetRenderer(native), nullptr), SDL_DestroySurface);
+            check(pixels != nullptr, "renderer pixels must be readable");
+            const int top = static_cast<int>(main->MenuBarHeight);
+            Uint8 r, g, b, alpha;
+            check(SDL_ReadSurfacePixel(pixels.get(), 80, top + 10, &r, &g, &b, &alpha),
+                  "unfiltered line must be readable");
+            check(r == 255 && g == 255 && b == 255, "even rows must retain their original color");
+            check(SDL_ReadSurfacePixel(pixels.get(), 80, top + 14, &r, &g, &b, &alpha),
+                  "scanline must be readable");
+            check(r == brightness && g == brightness && b == brightness,
+                  "scanline brightness must match the selected level");
+            check(framebuffer[160 * 3 + 20] == 0xFFFFFFFFu, "scanlines must preserve the Core framebuffer");
+        };
+        checkScanlines(255);
+        select("Scanlines");
+        checkScanlines(242); // O efeito inicia com intensidade de 5%.
+        const char *levels[] = {"5%", "10%", "15%", "20%", "25%"};
+        const Uint8 brightness[] = {242, 230, 217, 204, 191};
+        for (int level = 0; level < 5; ++level)
+        {
+            select("Scanlines Level");
+            auto *submenu = ImGui::FindWindowByName("Scanlines Level###Menu_01");
+            check(submenu && submenu->Active, "scanlines level submenu must open");
+            ImGui::ActivateItemByID(submenu->GetID(levels[level]));
+            frame();
+            checkScanlines(brightness[level]);
+        }
+        select("Scanlines");
+        checkScanlines(255);
 
         checkScale(4);
         escape();
