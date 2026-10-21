@@ -89,7 +89,60 @@ namespace
         check(window.takeRomAction() == RomAction::None, "Unload must be disabled without a game");
         select("Reset");
         check(window.takeRomAction() == RomAction::None, "Reset must be disabled without a game");
+        select("Save State");
+        check(window.takeRomAction() == RomAction::None, "Save must be disabled without a game");
+        select("Load State");
+        check(window.takeRomAction() == RomAction::None, "Load must be disabled without a game");
+        select("Save State Slot");
+        auto *disabledSlots = ImGui::FindWindowByName("Save State Slot###Menu_01");
+        check(!disabledSlots || !disabledSlots->Active, "Slot submenu must be disabled without a game");
+        const auto key = [&](SDL_Keycode code, bool repeat = false)
+        {
+            SDL_Event event{};
+            event.type = SDL_EVENT_KEY_DOWN;
+            event.key.key = code;
+            event.key.repeat = repeat;
+            check(SDL_PushEvent(&event), "shortcut must enter SDL queue");
+            frame();
+        };
+        key(SDLK_F5);
+        key(SDLK_F6);
+        check(window.takeRomAction() == RomAction::None, "State shortcuts require a ROM");
+        check(window.stateSlot() == 1, "Slot 1 must be selected initially");
         gameLoaded = true;
+        select("Save State");
+        check(window.takeRomAction() == RomAction::SaveState, "Save menu must request save");
+        select("Load State");
+        check(window.takeRomAction() == RomAction::LoadState, "Load menu must request load");
+        key(SDLK_F5);
+        check(window.takeRomAction() == RomAction::SaveState, "F5 must request save");
+        key(SDLK_F6);
+        check(window.takeRomAction() == RomAction::LoadState, "F6 must request load");
+        key(SDLK_F5, true);
+        key(SDLK_F6, true);
+        check(window.takeRomAction() == RomAction::None, "Repeated shortcut keys must be ignored");
+        // Seleciona cada slot pelo submenu real do ImGui.
+        for (int slot : {2, 3, 1})
+        {
+            auto *main = ImGui::FindWindowByName("R2BOY");
+            ImGui::ActivateItemByID(ImHashStr("File", 0, main->GetID("##MenuBar")));
+            frame();
+            frame();
+            auto *menu = ImGui::FindWindowByName("File###Menu_00");
+            check(menu && menu->Active, "File menu must open for slots");
+            ImGui::ActivateItemByID(menu->GetID("Save State Slot"));
+            frame();
+            frame();
+            auto *submenu = ImGui::FindWindowByName("Save State Slot###Menu_01");
+            check(submenu && submenu->Active, "Slot submenu must open");
+            const auto label = "Slot " + std::to_string(slot);
+            ImGui::ActivateItemByID(submenu->GetID(label.c_str()));
+            frame();
+            check(window.stateSlot() == slot, "Slot submenu must update selected slot");
+            check(window.takeRomAction() == RomAction::None, "Selecting a slot must not save or load");
+            ImGui::ClosePopupsOverWindow(main, false);
+            frame();
+        }
         select("Reset");
         check(window.takeRomAction() == RomAction::Reset, "Reset must request a game reset");
         check(window.takeRomAction() == RomAction::None, "menu actions must be consumed only once");
@@ -184,13 +237,13 @@ namespace
                       "proportional fullscreen must preserve the Game Boy aspect ratio");
         };
 
-        checkScale(3);
+        checkScale(4);
         escape();
-        checkScale(3);
+        checkScale(4);
         select("Borderless Fullscreen");
         checkFullscreen(false);
         escape();
-        checkScale(3);
+        checkScale(4);
         for (int scale = 1; scale <= 4; ++scale)
         {
             const char *labels[] = {"1X", "2X", "3X", "4X"};
