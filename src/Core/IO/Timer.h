@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/StateArchive.h"
 #include "Interrupts.h"
 #include <cstdint>
 
@@ -29,6 +30,11 @@ namespace R2BOY::Core::IO
         void write(std::uint16_t address, std::uint8_t value);
 
     private:
+        friend class R2BOY::Core::StateArchive;
+        void state(StateArchive &archive)
+        {
+            archive(divider_, tima_, tma_, tac_, reloadDelay_, reloadWindow_, cgbHardware_);
+        }
         // Nível do bit do divisor selecionado por TAC, condicionado à habilitação.
         bool signal() const;
         // Incrementa TIMA fora das janelas de recarga e agenda o atraso de overflow.

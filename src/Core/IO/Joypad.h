@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/StateArchive.h"
 #include "Interrupts.h"
 #include <cstdint>
 
@@ -26,6 +27,11 @@ namespace R2BOY::Core::IO
         void setButtons(std::uint8_t buttons, Interrupts &interrupts);
 
     private:
+        friend class R2BOY::Core::StateArchive;
+        void state(StateArchive &archive)
+        {
+            archive(selected_, buttons_);
+        }
         // Compara a leitura anterior com a atual nos quatro bits de entrada de JOYP.
         void detectEdge(std::uint8_t previous, Interrupts &interrupts) const;
         std::uint8_t selected_ = 0x30;

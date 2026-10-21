@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/StateArchive.h"
 #include <array>
 #include <cstdint>
 #include "Common/Framebuffer.h"
@@ -55,21 +56,40 @@ namespace R2BOY::Core::PPU
         std::uint64_t frameNumber() const { return frameNumber_; }
 
     private:
+        friend class R2BOY::Core::StateArchive;
+        void state(StateArchive &archive)
+        {
+            archive(front_, back_, bgColors_, objColors_, bgFIFO_, objFIFO_, sprites_);
+            archive(fetchingObject_, lcdc_, stat_, scy_, scx_, lyc_, bgp_);
+            archive(obp0_, obp1_, wy_, wx_, bgIndex_, objIndex_, opri_);
+            archive(tile_, attributes_, tileY_, low_, high_, objectLow_, objectHigh_);
+            archive(tileAddress_, objectAddress_, line_, dot_, mode_, x_, spriteCount_);
+            archive(nextSprite_, objectTicks_, bgHead_, bgSize_, fetchStep_, fetchTicks_, fetchX_);
+            archive(warmup_, discard_, windowDelay_, windowLine_, lastObjectTile_, frameNumber_, colorHardware_);
+            archive(colorMode_, statLine_, windowTriggered_, windowActive_, windowDrawn_, fastWindowFetch_, blankFirstFrame_);
+            if (archive.reading() && (line_ > 153 || dot_ > 455 || mode_ > 3 || x_ > Width ||
+                spriteCount_ > 10 || nextSprite_ > spriteCount_ || bgHead_ > 15 || bgSize_ > 16 ||
+                fetchStep_ > 3 || fetchTicks_ > 2 || objectTicks_ > 11))
+                throw std::runtime_error("Invalid PPU save state.");
+        }
         // Pixel de fundo/window antes da aplicação da paleta e da prioridade com OBJ.
         struct Pixel
         {
             std::uint8_t color = 0, palette = 0, priority = 0;
+            void state(StateArchive &archive) { archive(color, palette, priority); }
         };
         // Pixel de sprite com os dados necessários para desempatar sobreposições.
         struct ObjectPixel
         {
             std::uint8_t color = 0, palette = 0, index = 0xFF, x = 0xFF;
             bool behind = false;
+            void state(StateArchive &archive) { archive(color, palette, index, x, behind); }
         };
         // Entrada selecionada de OAM; index preserva a ordem original para prioridade.
         struct Sprite
         {
             std::uint8_t y = 0, x = 0, tile = 0, attributes = 0, index = 0;
+            void state(StateArchive &archive) { archive(y, x, tile, attributes, index); }
         };
 
         // Valor visível de LY, incluindo a transição para zero no dot 4 da linha 153.

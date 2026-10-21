@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/StateArchive.h"
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -54,6 +55,12 @@ namespace R2BOY::Core::Cartridge::MBC
         bool rumbleActive() const { return rumbleActive_; }
 
     private:
+        friend class R2BOY::Core::StateArchive;
+        void state(StateArchive &archive)
+        {
+            archive(kind_, hasRam_, battery_, rumble_, rumbleActive_, ramEnabled_, romBank_);
+            archive(secondaryBank_, advancedMode_);
+        }
         Kind kind_ = Kind::ROMOnly;
         bool hasRam_ = false;
         bool battery_ = false;

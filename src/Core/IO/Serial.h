@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/StateArchive.h"
 #include "Interrupts.h"
 #include <cstdint>
 #include <string>
@@ -38,6 +39,11 @@ namespace R2BOY::Core::IO
         std::string takeOutput();
 
     private:
+        friend class R2BOY::Core::StateArchive;
+        void state(StateArchive &archive)
+        {
+            archive(data_, control_, transmitted_, bits_, elapsed_, cgbMode_, output_);
+        }
         std::uint8_t data_ = 0;
         std::uint8_t control_ = 0;
         std::uint8_t transmitted_ = 0;

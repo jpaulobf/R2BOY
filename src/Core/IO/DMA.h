@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/StateArchive.h"
 #include <cstdint>
 
 namespace R2BOY::Core::BUS
@@ -39,6 +40,11 @@ namespace R2BOY::Core::IO
         bool blocksCPU(std::uint16_t address) const;
 
     private:
+        friend class R2BOY::Core::StateArchive;
+        void state(StateArchive &archive)
+        {
+            archive(register_, sourcePage_, index_, startup_, phase_, active_, colorHardware_);
+        }
         std::uint8_t register_ = 0xFF;
         std::uint8_t sourcePage_ = 0;
         unsigned index_ = 0;

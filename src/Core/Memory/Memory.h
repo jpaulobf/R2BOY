@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/StateArchive.h"
 #include <array>
 #include <cstdint>
 
@@ -30,6 +31,11 @@ namespace R2BOY::Core::Memory
         std::uint8_t readVRAM(std::uint16_t address, unsigned bank) const;
 
     private:
+        friend class R2BOY::Core::StateArchive;
+        void state(StateArchive &archive)
+        {
+            archive(vram_, wram_, oam_, hram_, cgbMode_, vramBank_, wramBank_);
+        }
         std::array<std::uint8_t, 0x4000> vram_{};
         std::array<std::uint8_t, 0x8000> wram_{};
         std::array<std::uint8_t, 0xA0> oam_{};

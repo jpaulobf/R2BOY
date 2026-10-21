@@ -6,6 +6,7 @@
 #include <iostream>
 #include <exception>
 #include "SaveFile.h"
+#include "StateFile.h"
 #include "FramePacer.h"
 #include <chrono>
 #include <algorithm>
@@ -39,6 +40,7 @@ namespace R2BOY::System
         }
 
         SaveFile saves(std::filesystem::u8path(basePath) / "saves");
+        StateFile states(std::filesystem::u8path(basePath) / "saves");
         bool cpuFaultReported = false;
         bool cpuStopReported = false;
         bool speedSwitchRequested = false;
@@ -213,19 +215,41 @@ namespace R2BOY::System
             {
                 try
                 {
-                    // Em caso de falha ao salvar, mantém o jogo e a RAM atuais.
-                    flushSave();
-                    if (action == Window::Window::RomAction::Unload)
-                        board_.unloadCartridge();
+                    if (action == Window::Window::RomAction::SaveState)
+                    {
+                        states.save(board_, window.stateSlot(), speedSwitchRequested);
+                        std::cout << "Saved state to slot " << window.stateSlot() << std::endl;
+                    }
+                    else if (action == Window::Window::RomAction::LoadState)
+                    {
+                        const bool pendingSwitch = states.load(board_, window.stateSlot());
+                        resetRuntime();
+                        speedSwitchRequested = pendingSwitch;
+                        std::cout << "Loaded state from slot " << window.stateSlot() << std::endl;
+                    }
                     else
-                        board_.reset(); // Reinicia o jogo preservando a RAM do cartucho.
-                    resetRuntime();
+                    {
+                        flushSave();
+                        if (action == Window::Window::RomAction::Unload)
+                            board_.unloadCartridge();
+                        else
+                            board_.reset();
+                        resetRuntime();
+                    }
                 }
                 catch (const std::exception &e)
                 {
-                    std::cerr << "Engine: Failed to "
-                              << (action == Window::Window::RomAction::Unload ? "unload" : "reset")
-                              << " ROM: " << e.what() << std::endl;
+                    if (action == Window::Window::RomAction::SaveState || action == Window::Window::RomAction::LoadState)
+                    {
+                        std::cerr << "Save state: " << e.what() << std::endl;
+                        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Save State", e.what(), nullptr);
+                        lastExecution = FramePacer::Clock::now();
+                        framePacer.reset(lastExecution);
+                    }
+                    else
+                        std::cerr << "Engine: Failed to "
+                                  << (action == Window::Window::RomAction::Unload ? "unload" : "reset")
+                                  << " ROM: " << e.what() << std::endl;
                 }
             }
 

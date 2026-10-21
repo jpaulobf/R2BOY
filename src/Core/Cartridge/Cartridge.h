@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/StateArchive.h"
 #include "Header.h"
 #include "MBC/MBC.h"
 
@@ -67,6 +68,12 @@ namespace R2BOY::Core::Cartridge
         void restoreBatteryRam(std::vector<std::uint8_t> data);
 
     private:
+        friend class R2BOY::Core::StateArchive;
+        void state(StateArchive &archive)
+        {
+            archive(mbc_, ram_);
+            if (archive.reading()) ramDirty_ = true;
+        }
         // As referências retornadas pelos acessores refletem a próxima carga.
         Header header_;
         std::vector<std::uint8_t> rom_;

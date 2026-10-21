@@ -1,9 +1,12 @@
 #pragma once
 
+#include "Core/StateArchive.h"
 #include "Core/BUS/BUS.h"
 #include <cstdint>
 #include <functional>
 #include <utility>
+
+namespace R2BOY::Core { class Board; }
 
 namespace R2BOY::Core::CPU
 {
@@ -119,6 +122,14 @@ namespace R2BOY::Core::CPU
         void wakeFromStop() { stopped_ = false; }
 
     private:
+        friend class R2BOY::Core::Board;
+        friend class R2BOY::Core::StateArchive;
+        void state(StateArchive &archive)
+        {
+            archive(r_.a, r_.f, r_.b, r_.c, r_.d, r_.e, r_.h);
+            archive(r_.l, r_.sp, r_.pc, ime_, imeDelay_, halted_, stopped_);
+            archive(haltBug_, locked_, cycles_, stepCycles_);
+        }
         // Um acesso ou idle consome exatamente um M-cycle, sem completar ciclos no fim da instrução.
         void machineCycle();
         // Avança um M-cycle interno e o informa ao observador, sem acessar memória.

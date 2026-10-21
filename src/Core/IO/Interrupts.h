@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/StateArchive.h"
 #include <cstdint>
 
 namespace R2BOY::Core::IO
@@ -48,6 +49,11 @@ namespace R2BOY::Core::IO
         }
 
     private:
+        friend class R2BOY::Core::StateArchive;
+        void state(StateArchive &archive)
+        {
+            archive(enabled_, requested_);
+        }
         std::uint8_t enabled_ = 0;
         std::uint8_t requested_ = 0;
     };
