@@ -27,6 +27,8 @@ namespace R2BOY::Window
         struct DisplaySettings
         {
             int scale = 4;
+            bool scanlines = false;
+            int scanlinesLevel = 5;
             DisplayMode mode = DisplayMode::Windowed;
             bool pending = true;
         };
@@ -110,6 +112,18 @@ namespace R2BOY::Window
                     if (ImGui::BeginMenu("Display"))
                     {
                         ImGui::MenuItem("Bilinear Filter", nullptr, &bilinearFilter);
+                        ImGui::MenuItem("Scanlines", nullptr, &display.scanlines);
+                        if (ImGui::BeginMenu("Scanlines Level", display.scanlines))
+                        {
+                            for (int level = 5; level <= 25; level += 5)
+                            {
+                                char label[8];
+                                SDL_snprintf(label, sizeof(label), "%d%%", level);
+                                if (ImGui::MenuItem(label, nullptr, display.scanlinesLevel == level))
+                                    display.scanlinesLevel = level;
+                            }
+                            ImGui::EndMenu();
+                        }
                         ImGui::Separator();
                         for (int scale = 1; scale <= 5; ++scale)
                         {
@@ -199,6 +213,7 @@ namespace R2BOY::Window
         int displayWidth = 0;
         int displayHeight = 0;
         DisplaySettings display;
+        Common::Framebuffer filteredFrame{};
         DisplayMode appliedMode = DisplayMode::Windowed;
 
         bool updateDisplay(int menuHeight)
@@ -390,11 +405,6 @@ namespace R2BOY::Window
 
     bool Window::renderFrame(bool &running, bool gameLoaded, const Common::Framebuffer &framebuffer)
     {
-        if (!SDL_UpdateTexture(impl_->texture.get(), nullptr, framebuffer.data(), screenWidth * sizeof(std::uint32_t)))
-        {
-            std::cerr << "Failed to update display texture: " << SDL_GetError() << '\n';
-            return false;
-        }
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
@@ -411,6 +421,30 @@ namespace R2BOY::Window
         }
         drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter,
                       impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot);
+        const Common::Framebuffer *textureFrame = &framebuffer;
+        if (impl_->display.scanlines)
+        {
+            // Escurece linhas alternadas na textura, preservando o framebuffer do Core.
+            impl_->filteredFrame = framebuffer;
+            const unsigned brightness = 100 - impl_->display.scanlinesLevel;
+            for (int y = 1; y < screenHeight; y += 2)
+            {
+                for (int x = 0; x < screenWidth; ++x)
+                {
+                    auto &pixel = impl_->filteredFrame[y * screenWidth + x];
+                    const unsigned red = (((pixel >> 16) & 0xFF) * brightness + 50) / 100;
+                    const unsigned green = (((pixel >> 8) & 0xFF) * brightness + 50) / 100;
+                    const unsigned blue = ((pixel & 0xFF) * brightness + 50) / 100;
+                    pixel = (pixel & 0xFF000000u) | (red << 16) | (green << 8) | blue;
+                }
+            }
+            textureFrame = &impl_->filteredFrame;
+        }
+        if (!SDL_UpdateTexture(impl_->texture.get(), nullptr, textureFrame->data(), screenWidth * sizeof(std::uint32_t)))
+        {
+            std::cerr << "Failed to update display texture: " << SDL_GetError() << '\n';
+            return false;
+        }
         ImGui::Render();
         const ImGuiIO &io = ImGui::GetIO();
         SDL_Renderer *renderer = impl_->renderer.get();
