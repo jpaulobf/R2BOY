@@ -43,14 +43,6 @@ namespace R2BOY::System
         StateFile states(std::filesystem::u8path(basePath) / "saves");
         bool cpuFaultReported = false;
         bool cpuStopReported = false;
-        bool speedSwitchRequested = false;
-        bool speedSwitchWarningReported = false;
-        // Contorno provisório da interface: observa a escrita de preparação em KEY1.
-        // Não altera leituras de KEY1 nem simula a velocidade dupla no Core.
-        board_.cpu().setCycleObserver([&speedSwitchRequested](const Core::CPU::CPU::Cycle &cycle)
-                                      {
-            if (cycle.type == Core::CPU::CPU::CycleType::Write && cycle.address == 0xFF4D)
-                speedSwitchRequested = (cycle.value & 1) != 0; });
         double cycleCredit = 0;
         auto lastExecution = FramePacer::Clock::now();
         FramePacer framePacer(lastExecution);
@@ -64,6 +56,9 @@ namespace R2BOY::System
         fastForwardEnabled_ = window.isFastForwardEnabled();
         window.setFastForwardCallback([this](bool enabled)
                                       { fastForwardEnabled_ = enabled; });
+        board_.setCPUOverclock(window.isCPUOverclockEnabled());
+        window.setCPUOverclockCallback([this](bool enabled)
+                                       { board_.setCPUOverclock(enabled); });
         const auto setUncappedSpeed = [&](bool enabled)
         {
             if (uncappedSpeed_ == enabled || !window.setVSyncSuppressed(enabled))
@@ -76,7 +71,7 @@ namespace R2BOY::System
         const auto syncFastForward = [&]()
         {
             setUncappedSpeed(fastForwardEnabled_ && input_.isFastForwardPressed() &&
-                             board_.cartridge().loaded() && !window.isMinimized());
+                             board_.cartridge().loaded() && !paused_ && !window.isMinimized());
         };
         const auto flushSave = [&]()
         {
@@ -86,11 +81,10 @@ namespace R2BOY::System
         const auto resetRuntime = [&]()
         {
             input_.clear();
+            paused_ = false;
             setUncappedSpeed(false);
             cpuFaultReported = false;
             cpuStopReported = false;
-            speedSwitchRequested = false;
-            speedSwitchWarningReported = false;
             cycleCredit = 0;
             lastExecution = FramePacer::Clock::now();
             framePacer.reset(lastExecution);
@@ -149,9 +143,21 @@ namespace R2BOY::System
                               { input_.handleEvent(event, enabled); });
             if (!running)
                 break;
+            if (input_.takePauseToggleRequest() && board_.cartridge().loaded())
+            {
+                paused_ = !paused_;
+                input_.clear();
+                cycleCredit = 0;
+                lastExecution = FramePacer::Clock::now();
+                framePacer.reset(lastExecution);
+                std::cout << (paused_ ? "Emulation paused.\n" : "Emulation resumed.\n");
+            }
             const bool inputEnabled = window.acceptsGameInput();
-            auto inputFrame = board_.clockCycles() / 70224;
-            board_.setButtons(input_.update(inputFrame, inputEnabled));
+            auto inputFrame = board_.baseClockCycles() / 70224;
+            const auto buttons = input_.update(inputFrame, inputEnabled);
+            // Entrada continua sendo processada, mas não altera JOYP/IF durante a pausa.
+            if (!paused_)
+                board_.setButtons(buttons);
             syncFastForward();
 
             if (std::chrono::steady_clock::now() >= nextSave)
@@ -183,35 +189,24 @@ namespace R2BOY::System
             // Com VSync ou fast-forward, avança um quadro por apresentação.
             // Fast-forward suspende a espera SDL e o limitador abaixo.
             // Sem VSync, mantém o avanço por tempo decorrido e o cap de 60 FPS.
-            // Preserva o estouro de ciclos; double speed CGB ainda não está implementado.
-            if (board_.cartridge().loaded() && !board_.cpu().locked())
+            // O orçamento usa o clock base, independente de double speed e overclock.
+            if (!paused_ && board_.cartridge().loaded() && !board_.cpu().locked())
             {
                 cycleCredit += (uncappedSpeed_ || vsyncEnabled_) ? 70224.0 : std::min(elapsed, 0.05) * 4194304.0;
                 while (cycleCredit > 0 && !board_.cpu().locked())
                 {
                     // Turbo segue o relógio emulado, inclusive com o LCD desligado.
-                    const auto frame = board_.clockCycles() / 70224;
+                    const auto frame = board_.baseClockCycles() / 70224;
                     if (frame != inputFrame)
                     {
                         inputFrame = frame;
                         board_.setButtons(input_.update(frame, inputEnabled));
                     }
-                    cycleCredit -= board_.step();
-                    if (board_.cpu().stopped() && speedSwitchRequested &&
-                        board_.executionMode() == Core::ExecutionMode::CGB)
-                    {
-                        // Consome apenas o pedido de troca; STOP comum continua parando.
-                        board_.cpu().wakeFromStop();
-                        speedSwitchRequested = false;
-                        if (!speedSwitchWarningReported)
-                        {
-                            std::cout << board_.takeSerialOutput()
-                                      << "\nCPU: Skipping CGB speed-switch STOP (temporary workaround). "
-                                         "Continuing at normal speed; timing results are not reliable.\n"
-                                      << std::flush;
-                            speedSwitchWarningReported = true;
-                        }
-                    }
+                    const auto before = board_.baseClockCycles();
+                    const auto cpuCycles = board_.step();
+                    const auto baseCycles = board_.baseClockCycles() - before;
+                    // STOP comum congela o hardware, mas deve consumir a espera do loop.
+                    cycleCredit -= baseCycles != 0 ? baseCycles : cpuCycles / board_.cpuSpeedMultiplier();
                 }
             }
             if (board_.cpu().locked() && !cpuFaultReported)
@@ -245,14 +240,13 @@ namespace R2BOY::System
                 {
                     if (action == Window::Window::RomAction::SaveState)
                     {
-                        states.save(board_, window.stateSlot(), speedSwitchRequested);
+                        states.save(board_, window.stateSlot());
                         std::cout << "Saved state to slot " << window.stateSlot() << std::endl;
                     }
                     else if (action == Window::Window::RomAction::LoadState)
                     {
-                        const bool pendingSwitch = states.load(board_, window.stateSlot());
+                        states.load(board_, window.stateSlot());
                         resetRuntime();
-                        speedSwitchRequested = pendingSwitch;
                         std::cout << "Loaded state from slot " << window.stateSlot() << std::endl;
                     }
                     else
