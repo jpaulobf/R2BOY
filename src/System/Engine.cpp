@@ -59,6 +59,9 @@ namespace R2BOY::System
         board_.setCPUOverclock(window.isCPUOverclockEnabled());
         window.setCPUOverclockCallback([this](bool enabled)
                                        { board_.setCPUOverclock(enabled); });
+        board_.setUnlimitedSprites(window.isUnlimitedSpritesEnabled());
+        window.setUnlimitedSpritesCallback([this](bool enabled)
+                                           { board_.setUnlimitedSprites(enabled); });
         const auto setUncappedSpeed = [&](bool enabled)
         {
             if (uncappedSpeed_ == enabled || !window.setVSyncSuppressed(enabled))
@@ -227,7 +230,8 @@ namespace R2BOY::System
             if (!board_.cpu().stopped())
                 cpuStopReported = false;
 
-            if (!window.renderFrame(running, board_.cartridge().loaded(), board_.framebuffer()))
+            if (!window.renderFrame(running, board_.cartridge().loaded(), board_.framebuffer(),
+                                    board_.executionMode() == Core::ExecutionMode::DMG))
             {
                 renderFailed = true;
                 break;
