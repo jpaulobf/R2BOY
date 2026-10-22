@@ -89,9 +89,17 @@ namespace R2BOY::System
     {
         pressedKeys_.clear();
         fastForwardPressed_ = false;
+        pauseToggleRequested_ = false;
     }
 
     bool Input::isFastForwardPressed() const { return fastForwardPressed_; }
+
+    bool Input::takePauseToggleRequest()
+    {
+        const bool requested = pauseToggleRequested_;
+        pauseToggleRequested_ = false;
+        return requested;
+    }
 
     void Input::handleEvent(const SDL_Event &event, bool enabled)
     {
@@ -110,6 +118,8 @@ namespace R2BOY::System
         {
             if (event.key.key == SDLK_TAB)
                 fastForwardPressed_ = true;
+            else if (event.key.key == SDLK_PAUSE)
+                pauseToggleRequested_ = !pauseToggleRequested_;
             else if (keyMap_.count(event.key.key))
                 pressedKeys_.insert(event.key.key);
         }
