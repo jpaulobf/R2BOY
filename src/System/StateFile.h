@@ -11,8 +11,8 @@ namespace R2BOY::System
     public:
         explicit StateFile(std::filesystem::path directory);
         std::filesystem::path pathFor(const Core::Board &board, int slot) const;
-        void save(Core::Board &board, int slot, bool speedSwitchRequested = false) const;
-        bool load(Core::Board &board, int slot) const;
+        void save(Core::Board &board, int slot) const;
+        void load(Core::Board &board, int slot) const;
 
     private:
         std::filesystem::path directory_;

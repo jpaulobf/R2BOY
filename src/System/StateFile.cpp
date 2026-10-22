@@ -24,12 +24,10 @@ namespace R2BOY::System
         return directory_ / (Common::RomFile::hash(board.cartridge().rom()) + ".slot" + std::to_string(slot) + ".state");
     }
 
-    void StateFile::save(Core::Board &board, int slot, bool speedSwitchRequested) const
+    void StateFile::save(Core::Board &board, int slot) const
     {
         const auto path = pathFor(board, slot);
         auto data = board.saveState();
-        // Inclui o pedido KEY1 usado pelo contorno provisório de STOP na Engine.
-        data.insert(data.begin(), speedSwitchRequested ? 1 : 0);
         std::filesystem::create_directories(directory_);
         auto temporary = path;
         temporary += ".tmp";
@@ -48,7 +46,7 @@ namespace R2BOY::System
 #endif
     }
 
-    bool StateFile::load(Core::Board &board, int slot) const
+    void StateFile::load(Core::Board &board, int slot) const
     {
         const auto path = pathFor(board, slot);
         std::ifstream file(path, std::ios::binary | std::ios::ate);
@@ -61,11 +59,6 @@ namespace R2BOY::System
         file.seekg(0);
         if (!file.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(data.size())))
             throw std::runtime_error("Unable to read save state.");
-        if (data.front() > 1)
-            throw std::runtime_error("Invalid save state runtime flag.");
-        const bool speedSwitchRequested = data.front() != 0;
-        data.erase(data.begin());
         board.loadState(data);
-        return speedSwitchRequested;
     }
 }
