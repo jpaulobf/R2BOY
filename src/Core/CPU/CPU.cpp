@@ -358,8 +358,7 @@ namespace R2BOY::Core::CPU
                     // STOP básico ocupa dois bytes, mas apenas um M-cycle. Não
                     // inventa uma segunda leitura temporizada para o byte de padding.
                     ++r_.pc;
-                    bus_.stopDivider();
-                    stopped_ = true;
+                    stopped_ = !bus_.stop();
                     return 4;
                 }
                 {
@@ -637,6 +636,11 @@ namespace R2BOY::Core::CPU
             idle(); // O lock impede instruções, mas não desliga os demais circuitos.
             return finish(4);
         }
+        if (bus_.switchingSpeed())
+        {
+            idle(); // Sem instruções ou atendimento de IRQ durante a estabilização.
+            return finish(4);
+        }
         const auto pending = bus_.pendingInterrupts();
         if (pending != 0)
         {
@@ -669,7 +673,7 @@ namespace R2BOY::Core::CPU
             return finish(4);
         }
         const auto opcode = read8(r_.pc);
-        
+
         // O HALT bug suprime apenas este incremento: a próxima busca reutiliza o endereço.
         if (haltBug_)
             haltBug_ = false;

@@ -6,7 +6,10 @@
 #include <functional>
 #include <utility>
 
-namespace R2BOY::Core { class Board; }
+namespace R2BOY::Core
+{
+    class Board;
+}
 
 namespace R2BOY::Core::CPU
 {
@@ -15,7 +18,7 @@ namespace R2BOY::Core::CPU
      * step() continua por instrução, mas cada acesso e ciclo interno avança um
      * M-cycle (4 T-cycles) pelo callback de clock da Board. O acesso ao BUS ocorre
      * no final desse M-cycle. Não modela as fases elétricas dentro de cada T-cycle.
-     * STOP tem comportamento básico, sem troca de velocidade CGB.
+     * STOP solicita ao BUS a troca de velocidade CGB ou entra em standby.
      */
     class CPU
     {
