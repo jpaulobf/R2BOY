@@ -36,6 +36,9 @@ namespace R2BOY::Core::IO
         // Indica transferência efetiva; o atraso inicial isolado não ativa o bloqueio.
         bool active() const { return active_; }
 
+        // Inclui a partida: rotinas de espera contam ciclos desde a escrita em FF46.
+        bool inProgress() const { return active_ || startup_ != 0; }
+
         // Consulta conflitos da CPU conforme o modelo físico e o barramento de origem.
         bool blocksCPU(std::uint16_t address) const;
 
