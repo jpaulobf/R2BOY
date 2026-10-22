@@ -46,6 +46,13 @@ Enable **Display > Bilinear Filter** for smoother scaling. **Scanlines** adds
 alternating dark lines, with **Scanlines Level** adjustable from 5% to 25%.
 Both effects start disabled.
 
+**Display > Palette Preset** offers **Default** (grayscale), **Classic Green**,
+**Pocket**, **Amber**, **Ocean** and **Neon** (saturated pink, violet and deep blue).
+Presets recolor the four DMG tones, including
+DMG games running on CGB hardware, and work with scanlines. Color games keep
+their own palettes. Selection applies immediately, even while paused, and lasts
+for the current application session.
+
 **Display > VSync** starts enabled and follows the monitor refresh rate. This
 also controls emulation speed: a high-refresh monitor can make games run faster.
 Disable VSync to use the 60-FPS presentation limit and elapsed-time emulation.
@@ -95,6 +102,12 @@ While overclock is enabled, the title appends this warning after the FPS:
 
 These options last for the current application session.
 
+**Hacks > Enable Unlimited Sprites** starts enabled. It allows all 40 OAM
+sprites to appear on the same scanline while preserving the timing of the
+original ten-sprite pipeline and the DMG/CGB priority rules. Disable it to
+restore the hardware limit of ten sprites per scanline. Games that hide or
+alternate sprites themselves may still flicker.
+
 ## Saves
 
 Games with battery saves are saved automatically every five seconds, when
@@ -109,10 +122,10 @@ restore the current emulation state. Choose one of three slots in
 **File > Save State Slot**. State files are stored beside battery saves as
 `<ROM hash>.slot1.state`, `.slot2.state` or `.slot3.state`.
 
-Version 0.0.2 uses save state format 2, including native CGB speed-switch state.
-Development builds that wrote format 1 states are incompatible; recreate those
-states. Battery `.sav` files remain compatible. Loading a state keeps the current
-CPU overclock preference.
+Current builds use only save state format 3 to preserve extra sprites selected
+mid-scanline. States from earlier formats must be recreated.
+Battery `.sav` files remain compatible. Loading a state keeps the current
+CPU overclock and unlimited-sprites preferences.
 
 ## Compatibility
 
