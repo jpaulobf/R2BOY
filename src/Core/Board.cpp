@@ -172,7 +172,7 @@ namespace R2BOY::Core
         std::vector<std::uint8_t> result;
         StateArchive header(result);
         std::string magic = "R2BOY-STATE";
-        std::uint32_t version = 2;
+        std::uint32_t version = 3;
         auto model = model_;
         auto mode = executionMode_;
         auto romHash = Common::RomFile::hash(cartridge_.rom());
@@ -198,7 +198,7 @@ namespace R2BOY::Core
         ExecutionMode mode{};
         header(magic, version, model, mode, romHash, checksum);
         header.finish();
-        if (magic != "R2BOY-STATE" || version != 2)
+        if (magic != "R2BOY-STATE" || version != 3)
             throw std::runtime_error("Unsupported save state format/version.");
         if (model != model_ || mode != executionMode_ || romHash != Common::RomFile::hash(cartridge_.rom()))
             throw std::runtime_error("Save state belongs to a different ROM or hardware model.");
@@ -223,7 +223,9 @@ namespace R2BOY::Core
         serial_ = std::move(next.serial_);
         timer_ = std::move(next.timer_);
         memory_ = std::move(next.memory_);
+        const bool unlimitedSprites = ppu_.isUnlimitedSpritesEnabled();
         ppu_ = std::move(next.ppu_);
+        ppu_.setUnlimitedSprites(unlimitedSprites);
         cpu_.r_ = next.cpu_.r_;
         cpu_.ime_ = next.cpu_.ime_;
         cpu_.imeDelay_ = next.cpu_.imeDelay_;

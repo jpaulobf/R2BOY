@@ -72,7 +72,17 @@ namespace R2BOY::Core
         // Hack de 2x somente na CPU, independente de KEY1 e do modo DMG/CGB.
         // Preferência da sessão: preservada em reset, troca de ROM e load state.
         void setCPUOverclock(bool enabled) { cpuOverclockEnabled_ = enabled; }
+
+        // Retorna se o overclock da CPU está habilitado.
         bool isCPUOverclockEnabled() const { return cpuOverclockEnabled_; }
+
+        // Retorna se o hack de sprites ilimitadas está habilitado.
+        void setUnlimitedSprites(bool enabled) { ppu_.setUnlimitedSprites(enabled); }
+
+        // Retorna se o hack de sprites ilimitadas está habilitado.
+        bool isUnlimitedSpritesEnabled() const { return ppu_.isUnlimitedSpritesEnabled(); }
+
+        // Multiplicador efetivo de velocidade da CPU, considerando double speed e overclock.
         unsigned cpuSpeedMultiplier() const
         {
             return (doubleSpeed() ? 2u : 1u) * (cpuOverclockEnabled_ ? 2u : 1u);
@@ -117,8 +127,6 @@ namespace R2BOY::Core
 
     private:
         void state(StateArchive &archive);
-
-        // Único ponto de avanço do hardware: não repetir estes ciclos depois de CPU::step().
         void tickMachineCycle();
         std::uint64_t clockCycles_ = 0;
         std::uint64_t baseClockCycles_ = 0;
