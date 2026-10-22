@@ -97,9 +97,6 @@ speed, while preserving video cadence. It can reduce game slowdowns but may
 cause visual glitches or crashes. Extra CPU cycles are suspended during OAM
 DMA and CGB speed-switch stabilization to protect cycle-counted waits.
 
-While overclock is enabled, the title appends this warning after the FPS:
-` | CPU OVERCLOCK ENABLED! GAMES CAN CRASH!`
-
 These options last for the current application session.
 
 **Hacks > Enable Unlimited Sprites** starts enabled. It allows all 40 OAM
