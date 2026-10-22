@@ -132,11 +132,11 @@ namespace
         for (int slot = 1; slot <= 3; ++slot)
         {
             board.write(0xC000, static_cast<std::uint8_t>(slot));
-            files.save(board, slot, slot == 2);
+            files.save(board, slot);
         }
         for (int slot = 1; slot <= 3; ++slot)
         {
-            check(files.load(board, slot) == (slot == 2), "KEY1 workaround must restore");
+            files.load(board, slot);
             check(board.read(0xC000) == slot, "Each slot must retain independent state");
         }
         board.write(0xC000, 42);

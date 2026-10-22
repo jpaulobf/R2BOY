@@ -308,7 +308,7 @@ namespace
                                       {
             fastForwardEnabled = enabled;
             ++fastForwardChanges; });
-        const auto selectFastForward = [&]()
+        const auto selectHack = [&](const char *label)
         {
             auto *main = ImGui::FindWindowByName("R2BOY");
             ImGui::ClosePopupsOverWindow(main, false);
@@ -318,17 +318,51 @@ namespace
             frame();
             auto *menu = ImGui::FindWindowByName("Hacks###Menu_00");
             check(menu && menu->Active, "Hacks menu must open");
-            ImGui::ActivateItemByID(menu->GetID("Enable Fast Forward"));
+            ImGui::ActivateItemByID(menu->GetID(label));
             frame();
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
         };
-        selectFastForward();
+        selectHack("Enable Fast Forward");
         check(!window.isFastForwardEnabled() && !fastForwardEnabled && fastForwardChanges == 1,
               "Hacks must disable fast-forward and notify the Engine");
-        selectFastForward();
+        selectHack("Enable Fast Forward");
         check(window.isFastForwardEnabled() && fastForwardEnabled && fastForwardChanges == 2,
               "Hacks must reenable fast-forward and notify the Engine");
+        int overclockChanges = 0;
+        bool overclockEnabled = window.isCPUOverclockEnabled();
+        check(!overclockEnabled, "CPU overclock must be disabled by default");
+        window.setCPUOverclockCallback([&](bool enabled)
+                                      {
+            overclockEnabled = enabled;
+            ++overclockChanges; });
+        const std::string warning = " | CPU OVERCLOCK ENABLED! GAMES CAN CRASH!";
+        const auto checkTitle = [&](bool enabled)
+        {
+            const std::string title = SDL_GetWindowTitle(native);
+            const auto position = title.find(warning);
+            check(enabled ? position != std::string::npos && position + warning.size() == title.size()
+                          : position == std::string::npos,
+                  "title must immediately append or remove the complete overclock warning");
+            if (enabled)
+                check(title.find("R2BOY | FPS: ") == 0,
+                      "overclock warning must appear after the FPS value");
+        };
+        checkTitle(false);
+        selectHack("Enable CPU Overclock");
+        check(window.isCPUOverclockEnabled() && overclockEnabled && overclockChanges == 1,
+              "Hacks must enable CPU overclock and notify the Engine once");
+        checkTitle(true);
+        // Verifica que a próxima amostra de FPS preserva o aviso completo.
+        SDL_Delay(1010);
+        frame();
+        checkTitle(true);
+        check(window.renderFrame(running, false, framebuffer), "unloaded frame must render");
+        checkTitle(true);
+        selectHack("Enable CPU Overclock");
+        check(!window.isCPUOverclockEnabled() && !overclockEnabled && overclockChanges == 2,
+              "Hacks must disable CPU overclock and notify the Engine once");
+        checkTitle(false);
         checkScanlines(255);
         select("Scanlines");
         checkScanlines(242); // O efeito inicia com intensidade de 5%.

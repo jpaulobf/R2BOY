@@ -29,7 +29,8 @@ namespace R2BOY::Test
             Core::IO::DMA dma;
             Core::PPU::PPU ppu;
             Core::IO::Joypad joypad;
-            Core::BUS::BUS bus{cartridge, memory, interrupts, serial, timer, dma, ppu, joypad};
+            Core::IO::SpeedSwitch speedSwitch;
+            Core::BUS::BUS bus{cartridge, memory, interrupts, serial, timer, dma, ppu, joypad, speedSwitch};
             Processor cpu{bus, [this]()
                           {
                               for (unsigned t = 0; t < 4; ++t)

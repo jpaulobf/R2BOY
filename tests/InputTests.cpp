@@ -137,6 +137,38 @@ namespace
         check(!input.isFastForwardPressed(), "modified TAB must not start fast-forward");
     }
 
+    void pauseShortcut()
+    {
+        System::Input input;
+        check(!input.takePauseToggleRequest(), "pause must start without a request");
+        key(input, SDLK_PAUSE, true);
+        check(input.takePauseToggleRequest(), "Pause key must request a toggle");
+        check(!input.takePauseToggleRequest() && input.update(0) == 0,
+              "pause request must be consumed once and must not press joypad buttons");
+        SDL_Event event{};
+        event.type = SDL_EVENT_KEY_DOWN;
+        event.key.key = SDLK_PAUSE;
+        event.key.repeat = true;
+        input.handleEvent(event, true);
+        check(!input.takePauseToggleRequest(), "Pause autorepeat must not toggle again");
+        key(input, SDLK_PAUSE, false);
+        check(!input.takePauseToggleRequest(), "Pause release must not toggle");
+        key(input, SDLK_PAUSE, true);
+        check(input.takePauseToggleRequest(), "pressing Pause again must request resume");
+        key(input, SDLK_PAUSE, true, false);
+        check(!input.takePauseToggleRequest(), "UI-captured Pause must be ignored");
+        event.key.repeat = false;
+        event.key.mod = SDL_KMOD_CTRL;
+        input.handleEvent(event, true);
+        check(!input.takePauseToggleRequest(), "modified Pause must be ignored");
+        key(input, SDLK_PAUSE, true);
+        input.clear();
+        check(!input.takePauseToggleRequest(), "runtime reset must discard pending pause requests");
+        key(input, SDLK_PAUSE, true);
+        key(input, SDLK_PAUSE, true);
+        check(!input.takePauseToggleRequest(), "two toggles in the same event batch must cancel");
+    }
+
     void gamepad()
     {
         System::Input input;
@@ -187,6 +219,7 @@ int main()
         joypad();
         keyboard();
         fastForward();
+        pauseShortcut();
         gamepad();
         std::cout << "Input mapping, turbo, virtual gamepad and JOYP tests passed.\n";
         return 0;
