@@ -3,8 +3,9 @@
 namespace R2BOY::Core::BUS
 {
     BUS::BUS(Cartridge::Cartridge &cartridge, Memory::Memory &memory, IO::Interrupts &interrupts,
-             IO::Serial &serial, IO::Timer &timer, IO::DMA &dma, PPU::PPU &ppu, IO::Joypad &joypad)
-        : cartridge_(cartridge), memory_(memory), interrupts_(interrupts), serial_(serial), timer_(timer), dma_(dma), ppu_(ppu), joypad_(joypad) {}
+             IO::Serial &serial, IO::Timer &timer, IO::DMA &dma, PPU::PPU &ppu, IO::Joypad &joypad,
+             IO::SpeedSwitch &speedSwitch)
+        : cartridge_(cartridge), memory_(memory), interrupts_(interrupts), serial_(serial), timer_(timer), dma_(dma), ppu_(ppu), joypad_(joypad), speedSwitch_(speedSwitch) {}
 
     std::uint8_t BUS::read(std::uint16_t address) const
     {
@@ -17,6 +18,8 @@ namespace R2BOY::Core::BUS
 
     std::uint8_t BUS::readDMA(std::uint16_t address) const
     {
+        if (address == 0xFF4D)
+            return speedSwitch_.read();
         if (address == 0xFF00)
             return joypad_.read();
         if (address == 0xFF46)
@@ -50,6 +53,11 @@ namespace R2BOY::Core::BUS
         }
         if (dma_.blocksCPU(address))
             return;
+        if (address == 0xFF4D)
+        {
+            speedSwitch_.write(value);
+            return;
+        }
         if (address == 0xFF00)
         {
             joypad_.write(value, interrupts_);

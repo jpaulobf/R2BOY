@@ -7,6 +7,7 @@
 #include "Core/IO/Timer.h"
 #include "Core/IO/DMA.h"
 #include "Core/IO/Joypad.h"
+#include "Core/IO/SpeedSwitch.h"
 #include "Core/PPU/PPU.h"
 #include <cstdint>
 
@@ -24,7 +25,8 @@ namespace R2BOY::Core::BUS
     public:
         // Recebe os componentes pertencentes à Board, sem assumir sua posse.
         BUS(Cartridge::Cartridge &cartridge, Memory::Memory &memory, IO::Interrupts &interrupts,
-            IO::Serial &serial, IO::Timer &timer, IO::DMA &dma, PPU::PPU &ppu, IO::Joypad &joypad);
+            IO::Serial &serial, IO::Timer &timer, IO::DMA &dma, PPU::PPU &ppu, IO::Joypad &joypad,
+            IO::SpeedSwitch &speedSwitch);
 
         // Acessos da CPU, sujeitos aos bloqueios de DMA e PPU.
         std::uint8_t read(std::uint16_t address) const;
@@ -34,12 +36,19 @@ namespace R2BOY::Core::BUS
 
         // A CPU consulta os pedidos habilitados e reconhece apenas o de maior prioridade.
         std::uint8_t pendingInterrupts() const { return interrupts_.pending(); }
-        
+
         // Limpa em IF somente a fonte reconhecida pela CPU, identificada de 0 a 4.
         void acknowledgeInterrupt(unsigned bit) { interrupts_.acknowledge(bit); }
 
         // Evento interno de STOP: reseta DIV sem inventar um acesso extra da CPU.
-        void stopDivider() { timer_.write(0xFF04, 0); }
+        // Retorna true se STOP iniciou a troca de velocidade em vez de standby.
+        bool stop()
+        {
+            timer_.write(0xFF04, 0);
+            return speedSwitch_.beginSwitch();
+        }
+
+        bool switchingSpeed() const { return speedSwitch_.switching(); }
 
     private:
         friend class IO::DMA;
@@ -55,5 +64,6 @@ namespace R2BOY::Core::BUS
         IO::DMA &dma_;
         PPU::PPU &ppu_;
         IO::Joypad &joypad_;
+        IO::SpeedSwitch &speedSwitch_;
     };
 }
