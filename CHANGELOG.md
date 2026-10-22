@@ -4,6 +4,18 @@ Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
 ## [Unreleased]
 
+- **Hacks > Enable Unlimited Sprites**, habilitado por padrão, permite até 40
+  sprites por linha, mantendo as prioridades DMG/CGB e a temporização do pipeline
+  original. Desligado, restaura o limite de dez sprites por linha.
+- Save states usam exclusivamente o formato 3 para preservar os sprites extras
+  selecionados na linha. Estados de formatos anteriores precisam ser recriados;
+  saves de bateria `.sav` continuam compatíveis.
+- Submenu **Display > Palette Preset** com **Default**, **Classic Green**,
+  **Pocket**, **Amber**, **Ocean** e **Neon** para jogos DMG, inclusive em compatibilidade
+  no CGB. A seleção funciona durante a pausa e em conjunto com scanlines,
+  preservando as paletas dos jogos Color.
+- Preset **Neon** com tons saturados de rosa, violeta e azul profundo.
+
 ## [0.0.2] - 2026-10-22
 
 ### Jogos e controles
