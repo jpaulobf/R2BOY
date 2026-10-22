@@ -85,7 +85,13 @@ namespace R2BOY::System
         mapGamepad(SDL_GAMEPAD_BUTTON_NORTH, invert ? BUTTON_B : BUTTON_A, true);
     }
 
-    void Input::clear() { pressedKeys_.clear(); }
+    void Input::clear()
+    {
+        pressedKeys_.clear();
+        fastForwardPressed_ = false;
+    }
+
+    bool Input::isFastForwardPressed() const { return fastForwardPressed_; }
 
     void Input::handleEvent(const SDL_Event &event, bool enabled)
     {
@@ -94,10 +100,19 @@ namespace R2BOY::System
         else if (event.type == SDL_EVENT_GAMEPAD_REMOVED)
             gamepads_.erase(event.gdevice.which);
         else if (event.type == SDL_EVENT_KEY_UP)
+        {
             pressedKeys_.erase(event.key.key);
+            if (event.key.key == SDLK_TAB)
+                fastForwardPressed_ = false;
+        }
         else if (event.type == SDL_EVENT_KEY_DOWN && enabled && !event.key.repeat &&
-                 !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && keyMap_.count(event.key.key))
-            pressedKeys_.insert(event.key.key);
+                 !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)))
+        {
+            if (event.key.key == SDLK_TAB)
+                fastForwardPressed_ = true;
+            else if (keyMap_.count(event.key.key))
+                pressedKeys_.insert(event.key.key);
+        }
         if (!enabled || event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
             clear();
     }
