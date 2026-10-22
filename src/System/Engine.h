@@ -24,5 +24,8 @@ namespace R2BOY::System
         Core::Board board_{Core::Model::CGB};
         Input input_;
         Audio audio_;
+        bool vsyncEnabled_ = true;
+        bool fastForwardEnabled_ = true;
+        bool uncappedSpeed_ = false;
     };
 }
