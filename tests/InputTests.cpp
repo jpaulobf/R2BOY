@@ -103,6 +103,40 @@ namespace
         check(input.update(0) == 0 && input.update(3) == (BUTTON_A | BUTTON_B), "inverted turbo layout");
     }
 
+    void fastForward()
+    {
+        System::Input input;
+        check(!input.isFastForwardPressed(), "fast-forward starts released");
+        key(input, SDLK_TAB, true);
+        check(input.isFastForwardPressed() && input.update(0) == 0,
+              "TAB holds fast-forward without pressing joypad buttons");
+        SDL_Event event{};
+        event.type = SDL_EVENT_KEY_DOWN;
+        event.key.key = SDLK_TAB;
+        event.key.repeat = true;
+        input.handleEvent(event, true);
+        check(input.isFastForwardPressed(), "key repeat must preserve held fast-forward");
+        key(input, SDLK_TAB, false, false);
+        check(!input.isFastForwardPressed(), "TAB release must work during UI capture");
+        key(input, SDLK_TAB, true, false);
+        check(!input.isFastForwardPressed(), "captured TAB must not start fast-forward");
+        key(input, SDLK_TAB, true);
+        input.update(0, false);
+        check(!input.isFastForwardPressed(), "UI capture must cancel held fast-forward");
+        key(input, SDLK_TAB, true);
+        event.type = SDL_EVENT_WINDOW_FOCUS_LOST;
+        input.handleEvent(event, true);
+        check(!input.isFastForwardPressed(), "focus loss must cancel held fast-forward");
+        key(input, SDLK_TAB, true);
+        input.clear();
+        check(!input.isFastForwardPressed(), "runtime reset must cancel held fast-forward");
+        event.type = SDL_EVENT_KEY_DOWN;
+        event.key.repeat = false;
+        event.key.mod = SDL_KMOD_CTRL;
+        input.handleEvent(event, true);
+        check(!input.isFastForwardPressed(), "modified TAB must not start fast-forward");
+    }
+
     void gamepad()
     {
         System::Input input;
@@ -152,6 +186,7 @@ int main()
     {
         joypad();
         keyboard();
+        fastForward();
         gamepad();
         std::cout << "Input mapping, turbo, virtual gamepad and JOYP tests passed.\n";
         return 0;
