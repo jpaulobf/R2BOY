@@ -63,6 +63,21 @@ namespace R2BOY::Core
         // Clock efetivamente entregue ao hardware desde reset(); não inclui espera em STOP.
         std::uint64_t clockCycles() const { return clockCycles_; }
 
+        // Tempo base de 4.194.304 Hz, independente da velocidade da CPU e do LCD.
+        // Double speed e overclock dividem esse avanço por seus multiplicadores.
+        std::uint64_t baseClockCycles() const { return baseClockCycles_; }
+        bool doubleSpeed() const { return speedSwitch_.doubleSpeed(); }
+        bool switchingSpeed() const { return speedSwitch_.switching(); }
+
+        // Hack de 2x somente na CPU, independente de KEY1 e do modo DMG/CGB.
+        // Preferência da sessão: preservada em reset, troca de ROM e load state.
+        void setCPUOverclock(bool enabled) { cpuOverclockEnabled_ = enabled; }
+        bool isCPUOverclockEnabled() const { return cpuOverclockEnabled_; }
+        unsigned cpuSpeedMultiplier() const
+        {
+            return (doubleSpeed() ? 2u : 1u) * (cpuOverclockEnabled_ ? 2u : 1u);
+        }
+
         // Controle de diagnóstico: permite observar ciclos e acordar STOP explicitamente.
         CPU::CPU &cpu() { return cpu_; }
 
@@ -74,7 +89,7 @@ namespace R2BOY::Core
 
         // Último frame completo publicado pela PPU, sem dependência da plataforma.
         const Common::Framebuffer &framebuffer() const { return ppu_.framebuffer(); }
-        
+
         // Contador de entradas em VBlank da PPU; não representa frames apresentados pela janela.
         std::uint64_t frameNumber() const { return ppu_.frameNumber(); }
 
@@ -106,6 +121,9 @@ namespace R2BOY::Core
         // Único ponto de avanço do hardware: não repetir estes ciclos depois de CPU::step().
         void tickMachineCycle();
         std::uint64_t clockCycles_ = 0;
+        std::uint64_t baseClockCycles_ = 0;
+        bool baseClockPhase_ = false;
+        bool cpuOverclockEnabled_ = false;
         Model model_;
         ExecutionMode executionMode_ = ExecutionMode::DMG;
         APU::APU apu_;
@@ -116,6 +134,7 @@ namespace R2BOY::Core
         std::uint8_t buttons_ = 0;
         IO::Serial serial_;
         IO::Timer timer_;
+        IO::SpeedSwitch speedSwitch_;
         Memory::Memory memory_;
         PPU::PPU ppu_;
         BUS::BUS bus_;

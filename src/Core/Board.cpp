@@ -5,7 +5,7 @@
 
 namespace R2BOY::Core
 {
-    Board::Board(Model model) : model_(model), bus_(cartridge_, memory_, interrupts_, serial_, timer_, dma_, ppu_, joypad_),
+    Board::Board(Model model) : model_(model), bus_(cartridge_, memory_, interrupts_, serial_, timer_, dma_, ppu_, joypad_, speedSwitch_),
                                 cpu_(bus_, [this]()
                                      { tickMachineCycle(); })
     {
@@ -50,6 +50,9 @@ namespace R2BOY::Core
     void Board::reset()
     {
         clockCycles_ = 0;
+        baseClockCycles_ = 0;
+        baseClockPhase_ = false;
+        speedSwitch_.reset(executionMode_ == ExecutionMode::CGB);
         resetMemory();
         interrupts_.reset(true);
         buttons_ = 0;
@@ -115,16 +118,31 @@ namespace R2BOY::Core
 
     void Board::tickMachineCycle()
     {
+        // Esperas de DMA em HRAM contam ciclos da CPU: acelerá-las pode fazer RET
+        // acessar a pilha ainda bloqueada. Preserva também a pausa nativa de KEY1.
+        // Decide por M-cycle inteiro para manter a fase dos relógios consistente.
+        const bool overclockActive = cpuOverclockEnabled_ && !dma_.inProgress() && !speedSwitch_.switching();
         for (unsigned t = 0; t < 4; ++t)
         {
             ++clockCycles_;
-            timer_.tick(interrupts_);
+            // Overclock adiciona ciclos de CPU entre os ticks do hardware nativo.
+            // A fase reinicia em cada M-cycle (4 T-cycles), sem estado parcial extra.
+            if (overclockActive && (t & 1) == 0)
+                continue;
+            // DIV/TIMA ficam parados durante a estabilização após STOP.
+            if (!speedSwitch_.switching())
+                timer_.tick(interrupts_);
             serial_.tick(1, interrupts_);
             // A PPU observa no mesmo T-cycle a cópia e o estado ativo atualizados pelo DMA.
             dma_.tick(bus_);
-            // Velocidade normal: um dot por T-cycle. Em double speed, a futura
-            // divisão de clocks deve entregar um dot a cada dois T-cycles.
-            ppu_.tick(memory_, interrupts_, dma_.active());
+            if (speedSwitch_.doubleSpeed())
+                baseClockPhase_ = !baseClockPhase_;
+            if (!baseClockPhase_)
+            {
+                ++baseClockCycles_;
+                ppu_.tick(memory_, interrupts_, dma_.active());
+            }
+            speedSwitch_.tick();
         }
     }
 
@@ -141,6 +159,7 @@ namespace R2BOY::Core
     void Board::state(StateArchive &archive)
     {
         archive(clockCycles_, buttons_, cartridge_, dma_, interrupts_, joypad_, serial_, timer_, memory_, ppu_, cpu_);
+        archive(baseClockCycles_, baseClockPhase_, speedSwitch_);
     }
 
     std::vector<std::uint8_t> Board::saveState()
@@ -153,7 +172,7 @@ namespace R2BOY::Core
         std::vector<std::uint8_t> result;
         StateArchive header(result);
         std::string magic = "R2BOY-STATE";
-        std::uint32_t version = 1;
+        std::uint32_t version = 2;
         auto model = model_;
         auto mode = executionMode_;
         auto romHash = Common::RomFile::hash(cartridge_.rom());
@@ -179,7 +198,7 @@ namespace R2BOY::Core
         ExecutionMode mode{};
         header(magic, version, model, mode, romHash, checksum);
         header.finish();
-        if (magic != "R2BOY-STATE" || version != 1)
+        if (magic != "R2BOY-STATE" || version != 2)
             throw std::runtime_error("Unsupported save state format/version.");
         if (model != model_ || mode != executionMode_ || romHash != Common::RomFile::hash(cartridge_.rom()))
             throw std::runtime_error("Save state belongs to a different ROM or hardware model.");
@@ -193,6 +212,9 @@ namespace R2BOY::Core
         reader.finish();
         // Aplica os componentes validados, preservando o barramento e os callbacks da CPU.
         clockCycles_ = next.clockCycles_;
+        baseClockCycles_ = next.baseClockCycles_;
+        baseClockPhase_ = next.baseClockPhase_;
+        speedSwitch_ = next.speedSwitch_;
         buttons_ = next.buttons_;
         cartridge_ = std::move(next.cartridge_);
         dma_ = std::move(next.dma_);
