@@ -54,6 +54,30 @@ namespace R2BOY::System
         double cycleCredit = 0;
         auto lastExecution = FramePacer::Clock::now();
         FramePacer framePacer(lastExecution);
+        vsyncEnabled_ = window.isVSyncEnabled();
+        window.setVSyncCallback([&](bool enabled)
+                                {
+            vsyncEnabled_ = enabled;
+            cycleCredit = 0;
+            lastExecution = FramePacer::Clock::now();
+            framePacer.reset(lastExecution); });
+        fastForwardEnabled_ = window.isFastForwardEnabled();
+        window.setFastForwardCallback([this](bool enabled)
+                                      { fastForwardEnabled_ = enabled; });
+        const auto setUncappedSpeed = [&](bool enabled)
+        {
+            if (uncappedSpeed_ == enabled || !window.setVSyncSuppressed(enabled))
+                return;
+            uncappedSpeed_ = enabled;
+            cycleCredit = 0;
+            lastExecution = FramePacer::Clock::now();
+            framePacer.reset(lastExecution);
+        };
+        const auto syncFastForward = [&]()
+        {
+            setUncappedSpeed(fastForwardEnabled_ && input_.isFastForwardPressed() &&
+                             board_.cartridge().loaded() && !window.isMinimized());
+        };
         const auto flushSave = [&]()
         {
             if (saves.save(board_.cartridge()))
@@ -62,6 +86,7 @@ namespace R2BOY::System
         const auto resetRuntime = [&]()
         {
             input_.clear();
+            setUncappedSpeed(false);
             cpuFaultReported = false;
             cpuStopReported = false;
             speedSwitchRequested = false;
@@ -127,6 +152,7 @@ namespace R2BOY::System
             const bool inputEnabled = window.acceptsGameInput();
             auto inputFrame = board_.clockCycles() / 70224;
             board_.setButtons(input_.update(inputFrame, inputEnabled));
+            syncFastForward();
 
             if (std::chrono::steady_clock::now() >= nextSave)
             {
@@ -154,11 +180,13 @@ namespace R2BOY::System
             const double elapsed = std::chrono::duration<double>(now - lastExecution).count();
             lastExecution = now;
 
-            // Limita a recuperação de tempo após pausas e mantém a fração/estouro
-            // de ciclos entre frames. Double speed CGB ainda não está implementado.
+            // Com VSync ou fast-forward, avança um quadro por apresentação.
+            // Fast-forward suspende a espera SDL e o limitador abaixo.
+            // Sem VSync, mantém o avanço por tempo decorrido e o cap de 60 FPS.
+            // Preserva o estouro de ciclos; double speed CGB ainda não está implementado.
             if (board_.cartridge().loaded() && !board_.cpu().locked())
             {
-                cycleCredit += std::min(elapsed, 0.05) * 4194304.0;
+                cycleCredit += (uncappedSpeed_ || vsyncEnabled_) ? 70224.0 : std::min(elapsed, 0.05) * 4194304.0;
                 while (cycleCredit > 0 && !board_.cpu().locked())
                 {
                     // Turbo segue o relógio emulado, inclusive com o LCD desligado.
@@ -255,9 +283,16 @@ namespace R2BOY::System
 
             if (!running)
                 break;
-            const auto wait = framePacer.remaining(FramePacer::Clock::now());
-            if (wait > FramePacer::Duration::zero())
-                SDL_DelayPrecise(static_cast<Uint64>(wait.count()));
+            // Menus e carregamentos podem mudar a permissão durante renderFrame().
+            if (!window.acceptsGameInput())
+                input_.clear();
+            syncFastForward();
+            if (!vsyncEnabled_ && !uncappedSpeed_)
+            {
+                const auto wait = framePacer.remaining(FramePacer::Clock::now());
+                if (wait > FramePacer::Duration::zero())
+                    SDL_DelayPrecise(static_cast<Uint64>(wait.count()));
+            }
         }
 
         try
