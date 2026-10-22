@@ -84,24 +84,45 @@ namespace R2BOY::Window
         // Alterna o VSync; em falha SDL, preserva o estado anterior.
         void toggleVSync();
 
+        // Retorna se o VSync está habilitado.
         bool isVSyncEnabled() const;
 
         // Suspende a sincronização durante fast-forward, preservando a opção Display.
         // Retorna false em falha SDL, mantendo o estado anterior.
         bool setVSyncSuppressed(bool suppressed);
 
+        // Retorna se o VSync está temporariamente suprimido durante fast-forward.
         using FastForwardCallback = std::function<void(bool)>;
+
+        // Substitui o callback do menu; não aplica o fast-forward imediatamente.
         void setFastForwardCallback(FastForwardCallback callback);
+
+        // Retorna se o fast-forward está habilitado.
         bool isFastForwardEnabled() const;
 
+        // Callback para notificar mudanças no estado do overclock da CPU.
         using CPUOverclockCallback = std::function<void(bool)>;
+
+        // Substitui o callback do menu; não aplica o overclock imediatamente.
         void setCPUOverclockCallback(CPUOverclockCallback callback);
+
+        // Retorna se o overclock da CPU está habilitado.
         bool isCPUOverclockEnabled() const;
+
+        // Callback para notificar mudanças no estado do hack de sprites ilimitadas.
+        using UnlimitedSpritesCallback = std::function<void(bool)>;
+
+        // Substitui o callback do menu; não aplica o hack imediatamente.
+        void setUnlimitedSpritesCallback(UnlimitedSpritesCallback callback);
+
+        // Retorna se o hack de sprites ilimitadas está habilitado.
+        bool isUnlimitedSpritesEnabled() const;
 
         // Desenha e apresenta um frame; pode solicitar saída via running e retorna false em falha SDL.
         // gameLoaded controla a exibição do jogo e a medição de FPS, sem consultar o Core.
         // O framebuffer é usado por referência apenas durante esta chamada.
-        bool renderFrame(bool &running, bool gameLoaded, const Common::Framebuffer &framebuffer);
+        // dmgMode aplica Palette Preset apenas a jogos monocromáticos, inclusive no CGB.
+        bool renderFrame(bool &running, bool gameLoaded, const Common::Framebuffer &framebuffer, bool dmgMode = true);
 
     private:
         // Mantém tipos SDL/ImGui e sua ordem de destruição fora da interface pública.

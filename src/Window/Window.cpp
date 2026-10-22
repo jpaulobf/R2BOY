@@ -5,6 +5,7 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -16,6 +17,21 @@ namespace R2BOY::Window
     {
         constexpr int screenWidth = Common::Constants::ScreenWidth;
         constexpr int screenHeight = Common::Constants::ScreenHeight;
+
+        struct PalettePreset
+        {
+            const char *name;
+            std::array<std::uint32_t, 4> colors; // Claro para escuro, após BGP/OBP.
+        };
+
+        constexpr std::array<PalettePreset, 6> palettePresets{{
+            {"Default", {0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000}},
+            {"Classic Green", {0xFF9BBC0F, 0xFF8BAC0F, 0xFF306230, 0xFF0F380F}},
+            {"Pocket", {0xFFE0E8D8, 0xFFA8B8A0, 0xFF607058, 0xFF202820}},
+            {"Amber", {0xFFFFF1C1, 0xFFE8B45B, 0xFF99602F, 0xFF382414}},
+            {"Ocean", {0xFFE0F4FF, 0xFF8CB8D8, 0xFF406888, 0xFF142838}},
+            {"Neon", {0xFFF4D6FF, 0xFFFF45D8, 0xFF852BFF, 0xFF10004D}},
+        }};
 
         enum class DisplayMode
         {
@@ -29,6 +45,7 @@ namespace R2BOY::Window
             int scale = 4;
             bool scanlines = false;
             int scanlinesLevel = 5;
+            std::size_t palettePreset = 0;
             DisplayMode mode = DisplayMode::Windowed;
             bool pending = true;
         };
@@ -59,7 +76,8 @@ namespace R2BOY::Window
                            Window::RomAction &romAction, int &stateSlot,
                            bool vsyncEnabled, const std::function<void()> &toggleVSync,
                            bool &fastForwardEnabled, const Window::FastForwardCallback &fastForwardCallback,
-                           bool &cpuOverclockEnabled, const Window::CPUOverclockCallback &cpuOverclockCallback)
+                           bool &cpuOverclockEnabled, const Window::CPUOverclockCallback &cpuOverclockCallback,
+                           bool &unlimitedSpritesEnabled, const Window::UnlimitedSpritesCallback &unlimitedSpritesCallback)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -153,6 +171,14 @@ namespace R2BOY::Window
                         };
                         fullscreenItem("Borderless Fullscreen Stretched", DisplayMode::FullscreenStretched);
                         fullscreenItem("Borderless Fullscreen", DisplayMode::Fullscreen);
+                        ImGui::Separator();
+                        if (ImGui::BeginMenu("Palette Preset"))
+                        {
+                            for (std::size_t preset = 0; preset < palettePresets.size(); ++preset)
+                                if (ImGui::MenuItem(palettePresets[preset].name, nullptr, display.palettePreset == preset))
+                                    display.palettePreset = preset;
+                            ImGui::EndMenu();
+                        }
                         ImGui::EndMenu();
                     }
                     if (ImGui::BeginMenu("Input"))
@@ -167,6 +193,8 @@ namespace R2BOY::Window
                             fastForwardCallback(fastForwardEnabled);
                         if (ImGui::MenuItem("Enable CPU Overclock", nullptr, &cpuOverclockEnabled) && cpuOverclockCallback)
                             cpuOverclockCallback(cpuOverclockEnabled);
+                        if (ImGui::MenuItem("Enable Unlimited Sprites", nullptr, &unlimitedSpritesEnabled) && unlimitedSpritesCallback)
+                            unlimitedSpritesCallback(unlimitedSpritesEnabled);
                         ImGui::EndMenu();
                     }
                     ImGui::EndMenuBar();
@@ -228,6 +256,8 @@ namespace R2BOY::Window
         FastForwardCallback fastForwardCallback;
         bool cpuOverclockEnabled = false;
         CPUOverclockCallback cpuOverclockCallback;
+        bool unlimitedSpritesEnabled = true;
+        UnlimitedSpritesCallback unlimitedSpritesCallback;
         double currentFPS = 0;
         Uint64 fpsSampleStart = 0;
         unsigned presentedFrames = 0;
@@ -487,6 +517,16 @@ namespace R2BOY::Window
         return impl_->cpuOverclockEnabled;
     }
 
+    void Window::setUnlimitedSpritesCallback(UnlimitedSpritesCallback callback)
+    {
+        impl_->unlimitedSpritesCallback = std::move(callback);
+    }
+
+    bool Window::isUnlimitedSpritesEnabled() const
+    {
+        return impl_->unlimitedSpritesEnabled;
+    }
+
     Window::RomAction Window::takeRomAction()
     {
         return std::exchange(impl_->romAction, RomAction::None);
@@ -497,7 +537,7 @@ namespace R2BOY::Window
         return impl_->stateSlot;
     }
 
-    bool Window::renderFrame(bool &running, bool gameLoaded, const Common::Framebuffer &framebuffer)
+    bool Window::renderFrame(bool &running, bool gameLoaded, const Common::Framebuffer &framebuffer, bool dmgMode)
     {
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
@@ -516,13 +556,41 @@ namespace R2BOY::Window
         bool titleChanged = impl_->gameWasLoaded != gameLoaded;
         const bool wasOverclockEnabled = impl_->cpuOverclockEnabled;
         drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
-                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback);
+                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback);
         titleChanged |= wasOverclockEnabled != impl_->cpuOverclockEnabled;
         const Common::Framebuffer *textureFrame = &framebuffer;
+        if (gameLoaded && dmgMode && impl_->display.palettePreset != 0)
+        {
+            // Recolore o resultado de BGP/OBP sem alterar a PPU ou os save states.
+            // Também atualiza imediatamente o quadro congelado durante a pausa.
+            impl_->filteredFrame = framebuffer;
+            const auto &colors = palettePresets[impl_->display.palettePreset].colors;
+            for (auto &pixel : impl_->filteredFrame)
+            {
+                switch (pixel)
+                {
+                case 0xFFFFFFFF:
+                    pixel = colors[0];
+                    break;
+                case 0xFFAAAAAA:
+                    pixel = colors[1];
+                    break;
+                case 0xFF555555:
+                    pixel = colors[2];
+                    break;
+                case 0xFF000000:
+                    pixel = colors[3];
+                    break;
+                default:
+                    break;
+                }
+            }
+            textureFrame = &impl_->filteredFrame;
+        }
         if (impl_->display.scanlines)
         {
             // Escurece linhas alternadas na textura, preservando o framebuffer do Core.
-            impl_->filteredFrame = framebuffer;
+            impl_->filteredFrame = *textureFrame;
             const unsigned brightness = 100 - impl_->display.scanlinesLevel;
             for (int y = 1; y < screenHeight; y += 2)
             {
