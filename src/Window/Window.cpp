@@ -56,7 +56,9 @@ namespace R2BOY::Window
         void drawInterface(bool &running, bool gameLoaded, FileManager &fileManager,
                            SDL_Texture *texture, bool &bilinearFilter, bool &invertBAYB,
                            const Window::InvertBAYBCallback &invertBAYBCallback, DisplaySettings &display,
-                           Window::RomAction &romAction, int &stateSlot)
+                           Window::RomAction &romAction, int &stateSlot,
+                           bool vsyncEnabled, const std::function<void()> &toggleVSync,
+                           bool &fastForwardEnabled, const Window::FastForwardCallback &fastForwardCallback)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -111,6 +113,9 @@ namespace R2BOY::Window
                     }
                     if (ImGui::BeginMenu("Display"))
                     {
+                        if (ImGui::MenuItem("VSync", nullptr, vsyncEnabled))
+                            toggleVSync();
+                        ImGui::Separator();
                         ImGui::MenuItem("Bilinear Filter", nullptr, &bilinearFilter);
                         ImGui::MenuItem("Scanlines", nullptr, &display.scanlines);
                         if (ImGui::BeginMenu("Scanlines Level", display.scanlines))
@@ -153,6 +158,12 @@ namespace R2BOY::Window
                     {
                         if (ImGui::MenuItem("Invert BA/YB Buttons", nullptr, &invertBAYB) && invertBAYBCallback)
                             invertBAYBCallback(invertBAYB);
+                        ImGui::EndMenu();
+                    }
+                    if (ImGui::BeginMenu("Hacks"))
+                    {
+                        if (ImGui::MenuItem("Enable Fast Forward", nullptr, &fastForwardEnabled) && fastForwardCallback)
+                            fastForwardCallback(fastForwardEnabled);
                         ImGui::EndMenu();
                     }
                     ImGui::EndMenuBar();
@@ -207,6 +218,11 @@ namespace R2BOY::Window
         bool bilinearFilter = false;
         bool invertBAYB = false;
         InvertBAYBCallback invertBAYBCallback;
+        bool vsyncEnabled = false;
+        VSyncCallback vsyncCallback;
+        bool vsyncSuppressed = false;
+        bool fastForwardEnabled = true;
+        FastForwardCallback fastForwardCallback;
         Uint64 fpsSampleStart = 0;
         unsigned presentedFrames = 0;
         bool gameWasLoaded = false;
@@ -310,6 +326,9 @@ namespace R2BOY::Window
             std::cerr << "Failed to create renderer: " << SDL_GetError() << '\n';
             return false;
         }
+        state->vsyncEnabled = SDL_SetRenderVSync(state->renderer.get(), 1);
+        if (!state->vsyncEnabled)
+            std::cerr << "Unable to enable VSync: " << SDL_GetError() << '\n';
         state->texture.reset(SDL_CreateTexture(state->renderer.get(), SDL_PIXELFORMAT_ARGB8888,
                                                SDL_TEXTUREACCESS_STREAMING, screenWidth, screenHeight));
         if (!state->texture || !SDL_SetTextureScaleMode(state->texture.get(), SDL_SCALEMODE_NEAREST))
@@ -393,6 +412,52 @@ namespace R2BOY::Window
         impl_->invertBAYBCallback = std::move(callback);
     }
 
+    void Window::setVSyncCallback(VSyncCallback callback)
+    {
+        impl_->vsyncCallback = std::move(callback);
+    }
+
+    void Window::toggleVSync()
+    {
+        const bool enabled = !impl_->vsyncEnabled;
+        if (!SDL_SetRenderVSync(impl_->renderer.get(), enabled && !impl_->vsyncSuppressed ? 1 : 0))
+        {
+            std::cerr << "Unable to change VSync: " << SDL_GetError() << '\n';
+            return;
+        }
+        impl_->vsyncEnabled = enabled;
+        if (impl_->vsyncCallback)
+            impl_->vsyncCallback(enabled);
+    }
+
+    bool Window::isVSyncEnabled() const
+    {
+        return impl_->vsyncEnabled;
+    }
+
+    bool Window::setVSyncSuppressed(bool suppressed)
+    {
+        if (impl_->vsyncSuppressed == suppressed)
+            return true;
+        if (!SDL_SetRenderVSync(impl_->renderer.get(), impl_->vsyncEnabled && !suppressed ? 1 : 0))
+        {
+            std::cerr << "Unable to suppress/restore VSync: " << SDL_GetError() << '\n';
+            return false;
+        }
+        impl_->vsyncSuppressed = suppressed;
+        return true;
+    }
+
+    void Window::setFastForwardCallback(FastForwardCallback callback)
+    {
+        impl_->fastForwardCallback = std::move(callback);
+    }
+
+    bool Window::isFastForwardEnabled() const
+    {
+        return impl_->fastForwardEnabled;
+    }
+
     Window::RomAction Window::takeRomAction()
     {
         return std::exchange(impl_->romAction, RomAction::None);
@@ -419,8 +484,8 @@ namespace R2BOY::Window
             std::cerr << "Failed to update display mode: " << SDL_GetError() << '\n';
             return false;
         }
-        drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter,
-                      impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot);
+        drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
+                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback);
         const Common::Framebuffer *textureFrame = &framebuffer;
         if (impl_->display.scanlines)
         {
