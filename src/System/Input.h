@@ -40,6 +40,9 @@ namespace R2BOY::System
         
         // Esquece teclas pressionadas; os botões físicos dos controles são lidos em update().
         void clear();
+
+        // TAB permanece ativo até a soltura, perda de foco ou captura pela interface.
+        bool isFastForwardPressed() const;
         
         // Reconfigura J/K/I/U e os botões frontais do controle, incluindo os atalhos turbo.
         void configureABBAButtons(bool invert);
@@ -64,5 +67,6 @@ namespace R2BOY::System
         using Gamepad = std::unique_ptr<SDL_Gamepad, decltype(&SDL_CloseGamepad)>;
         std::map<SDL_JoystickID, Gamepad> gamepads_;
         bool initialized_ = false;
+        bool fastForwardPressed_ = false;
     };
 }
