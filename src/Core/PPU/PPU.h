@@ -24,36 +24,42 @@ namespace R2BOY::Core::PPU
         // Reinicia registradores, FIFOs e frames; separa o modelo físico do modo do jogo.
         // afterBoot seleciona LCD ligado em modo 2; caso contrário, começa desligado.
         void reset(bool colorHardware = false, bool colorMode = false, bool afterBoot = true);
-        
+
         // Avança um dot; dmaActive impede a seleção de sprites durante a varredura de OAM.
         void tick(const Memory::Memory &memory, IO::Interrupts &interrupts, bool dmaActive = false);
-        
+
         // Consulta registradores LCD/paletas; endereços e recursos indisponíveis retornam 0xFF.
         std::uint8_t read(std::uint16_t address) const;
-        
+
         // Atualiza registradores e reavalia STAT; escritas no LCD podem reiniciar o frame.
         void write(std::uint16_t address, std::uint8_t value, IO::Interrupts &interrupts);
-        
+
         // Estado do bit de habilitação do LCD em LCDC.
         bool enabled() const { return (lcdc_ & 0x80) != 0; }
-        
+
         // Modo atual: 0=HBlank, 1=VBlank, 2=OAM, 3=transferência de pixels.
         unsigned mode() const { return mode_; }
-        
+
         // Posição temporal dentro da linha, em dots, independente do pixel visível.
         unsigned dot() const { return dot_; }
-        
+
         // A CPU não acessa VRAM durante a transferência de pixels com LCD ligado.
         bool blocksVRAM() const { return enabled() && mode_ == 3; }
-        
+
         // A CPU não acessa OAM durante a seleção de sprites nem a transferência de pixels.
         bool blocksOAM() const { return enabled() && (mode_ == 2 || mode_ == 3); }
-        
+
         // O frame publicado só muda em VBlank ou ao desligar LCD.
         const Common::Framebuffer &framebuffer() const { return front_; }
-        
+
         // Conta entradas em VBlank desde reset(), inclusive o primeiro frame ocultado.
         std::uint64_t frameNumber() const { return frameNumber_; }
+
+        // Habilita ou desabilita o hack de sprites ilimitadas.
+        void setUnlimitedSprites(bool enabled) { unlimitedSprites_ = enabled; }
+
+        // Retorna se o hack de sprites ilimitadas está habilitado.
+        bool isUnlimitedSpritesEnabled() const { return unlimitedSprites_; }
 
     private:
         friend class R2BOY::Core::StateArchive;
@@ -67,9 +73,10 @@ namespace R2BOY::Core::PPU
             archive(nextSprite_, objectTicks_, bgHead_, bgSize_, fetchStep_, fetchTicks_, fetchX_);
             archive(warmup_, discard_, windowDelay_, windowLine_, lastObjectTile_, frameNumber_, colorHardware_);
             archive(colorMode_, statLine_, windowTriggered_, windowActive_, windowDrawn_, fastWindowFetch_, blankFirstFrame_);
+            archive(extraSprites_, extraSpriteCount_);
             if (archive.reading() && (line_ > 153 || dot_ > 455 || mode_ > 3 || x_ > Width ||
-                spriteCount_ > 10 || nextSprite_ > spriteCount_ || bgHead_ > 15 || bgSize_ > 16 ||
-                fetchStep_ > 3 || fetchTicks_ > 2 || objectTicks_ > 11))
+                                      spriteCount_ > 10 || nextSprite_ > spriteCount_ || bgHead_ > 15 || bgSize_ > 16 ||
+                                      fetchStep_ > 3 || fetchTicks_ > 2 || objectTicks_ > 11 || extraSpriteCount_ > extraSprites_.size()))
                 throw std::runtime_error("Invalid PPU save state.");
         }
         // Pixel de fundo/window antes da aplicação da paleta e da prioridade com OBJ.
@@ -92,6 +99,9 @@ namespace R2BOY::Core::PPU
             void state(StateArchive &archive) { archive(y, x, tile, attributes, index); }
         };
 
+        // Compõe os sprites extras sem inserir esperas no pipeline nativo de dez objetos.
+        ObjectPixel withExtraSprites(const Memory::Memory &memory, ObjectPixel object) const;
+
         // Valor visível de LY, incluindo a transição para zero no dot 4 da linha 153.
         std::uint8_t ly() const;
         // Combina as fontes de STAT e pede interrupção apenas na borda de subida.
@@ -100,7 +110,7 @@ namespace R2BOY::Core::PPU
         void beginLine();
         // Prepara FIFOs, descarte de SCX e ordem de busca dos sprites para o modo 3.
         void beginTransfer();
-        // Examina uma entrada a cada dois dots, selecionando até dez sprites da linha.
+        // Examina uma entrada a cada dois dots; separa os dez nativos dos extras do hack.
         void scanOAM(const Memory::Memory &memory, bool dmaActive);
         // Avança o pipeline de um dot e entra em HBlank após o último pixel visível.
         void transfer(const Memory::Memory &memory, IO::Interrupts &interrupts);
@@ -125,6 +135,9 @@ namespace R2BOY::Core::PPU
         std::array<Pixel, 16> bgFIFO_{};
         std::array<ObjectPixel, 8> objFIFO_{};
         std::array<Sprite, 10> sprites_{};
+        std::array<Sprite, 30> extraSprites_{};
+        unsigned extraSpriteCount_ = 0;
+        bool unlimitedSprites_ = true;
         Sprite fetchingObject_{};
         std::uint8_t lcdc_ = 0, stat_ = 0, scy_ = 0, scx_ = 0, lyc_ = 0;
         std::uint8_t bgp_ = 0xFC, obp0_ = 0xFF, obp1_ = 0xFF, wy_ = 0, wx_ = 0;
