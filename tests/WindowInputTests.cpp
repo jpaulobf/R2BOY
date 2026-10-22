@@ -258,6 +258,77 @@ namespace
                   "scanline brightness must match the selected level");
             check(framebuffer[160 * 3 + 20] == 0xFFFFFFFFu, "scanlines must preserve the Core framebuffer");
         };
+        int vsyncChanges = 0;
+        bool engineVSync = window.isVSyncEnabled();
+        window.setVSyncCallback([&](bool enabled)
+                               {
+            ++vsyncChanges;
+            engineVSync = enabled; });
+        check(window.isVSyncEnabled(), "VSync must be enabled by default");
+        check(vsyncChanges == 0, "registering the callback must not toggle VSync");
+        int renderVSync = 0;
+        check(SDL_GetRenderVSync(SDL_GetRenderer(native), &renderVSync), "renderer VSync must be readable");
+        check(renderVSync == 1, "SDL synchronization must be enabled at startup");
+        select("VSync");
+        check(SDL_GetRenderVSync(SDL_GetRenderer(native), &renderVSync), "disabled VSync must be readable");
+        check(!window.isVSyncEnabled() && !engineVSync && renderVSync == 0 && vsyncChanges == 1,
+              "Display VSync must disable SDL synchronization and notify the Engine once");
+        select("VSync");
+        check(SDL_GetRenderVSync(SDL_GetRenderer(native), &renderVSync), "renderer VSync must be readable");
+        check(window.isVSyncEnabled() && engineVSync && renderVSync == 1 && vsyncChanges == 2,
+              "Display VSync must enable SDL synchronization and notify the Engine once");
+        const auto checkRendererVSync = [&](int expected)
+        {
+            int actual = -1;
+            check(SDL_GetRenderVSync(SDL_GetRenderer(native), &actual), "VSync must be readable");
+            check(actual == expected, "renderer must respect suppression and the menu preference");
+        };
+        check(window.setVSyncSuppressed(true), "fast-forward must suspend VSync");
+        check(window.isVSyncEnabled() && vsyncChanges == 2,
+              "suppression must preserve the menu preference without notifying a preference change");
+        checkRendererVSync(0);
+        select("VSync");
+        check(!window.isVSyncEnabled(), "VSync preference can be disabled during fast-forward");
+        checkRendererVSync(0);
+        select("VSync");
+        check(window.isVSyncEnabled(), "VSync preference can be enabled during fast-forward");
+        checkRendererVSync(0);
+        check(window.setVSyncSuppressed(false), "releasing TAB must restore VSync");
+        checkRendererVSync(1);
+        select("VSync");
+        check(window.setVSyncSuppressed(true) && window.setVSyncSuppressed(false),
+              "fast-forward must also work with VSync disabled");
+        checkRendererVSync(0);
+        select("VSync");
+
+        int fastForwardChanges = 0;
+        bool fastForwardEnabled = window.isFastForwardEnabled();
+        check(fastForwardEnabled, "fast-forward must be enabled by default");
+        window.setFastForwardCallback([&](bool enabled)
+                                      {
+            fastForwardEnabled = enabled;
+            ++fastForwardChanges; });
+        const auto selectFastForward = [&]()
+        {
+            auto *main = ImGui::FindWindowByName("R2BOY");
+            ImGui::ClosePopupsOverWindow(main, false);
+            frame();
+            ImGui::ActivateItemByID(ImHashStr("Hacks", 0, main->GetID("##MenuBar")));
+            frame();
+            frame();
+            auto *menu = ImGui::FindWindowByName("Hacks###Menu_00");
+            check(menu && menu->Active, "Hacks menu must open");
+            ImGui::ActivateItemByID(menu->GetID("Enable Fast Forward"));
+            frame();
+            ImGui::ClosePopupsOverWindow(main, false);
+            frame();
+        };
+        selectFastForward();
+        check(!window.isFastForwardEnabled() && !fastForwardEnabled && fastForwardChanges == 1,
+              "Hacks must disable fast-forward and notify the Engine");
+        selectFastForward();
+        check(window.isFastForwardEnabled() && fastForwardEnabled && fastForwardChanges == 2,
+              "Hacks must reenable fast-forward and notify the Engine");
         checkScanlines(255);
         select("Scanlines");
         checkScanlines(242); // O efeito inicia com intensidade de 5%.
