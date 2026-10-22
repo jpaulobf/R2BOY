@@ -109,6 +109,48 @@ namespace
         check(board.saveState() == afterDMA, "DMA must resume at the saved byte/phase");
     }
 
+    void unlimitedSpriteStates()
+    {
+        Core::Board board;
+        board.loadCartridge(rom(), "unlimited sprite state");
+        board.write(0xFF40, 0);
+        for (unsigned row = 0; row < 8; ++row)
+        {
+            board.write(static_cast<std::uint16_t>(0x8010 + row * 2), 0xFF);
+            board.write(static_cast<std::uint16_t>(0x8011 + row * 2), 0xFF);
+        }
+        for (unsigned i = 0; i < 40; ++i)
+        {
+            const auto base = static_cast<std::uint16_t>(0xFE00 + i * 4);
+            board.write(base, 16);
+            board.write(base + 1, i < 10 ? 0 : 8 + ((i - 10) % 20) * 8);
+            board.write(base + 2, 1);
+            board.write(base + 3, 0);
+        }
+        board.write(0xFF48, 0xE4);
+        board.write(0xFF40, 0x93);
+        while (board.baseClockCycles() < 120)
+            board.step();
+        const auto snapshot = board.saveState(); // Captura em modo 3 com trinta objetos extras.
+        const auto run = [&]()
+        {
+            for (unsigned i = 0; i < 12000; ++i)
+                board.step();
+        };
+        run();
+        check(board.framebuffer()[0] == 0xFF000000, "saved scene must contain extra sprite pixels");
+        const auto future = board.saveState();
+        board.loadState(snapshot);
+        check(board.saveState() == snapshot, "extra sprite selection must round-trip in mid-scanline");
+        run();
+        check(board.saveState() == future, "extra sprite pipeline must replay deterministically");
+        board.setUnlimitedSprites(false);
+        board.loadState(snapshot);
+        check(!board.isUnlimitedSpritesEnabled(), "load state must preserve the current menu preference");
+        board.reset();
+        check(!board.isUnlimitedSpritesEnabled(), "reset must preserve the current menu preference");
+    }
+
     void files()
     {
         const auto directory = std::filesystem::temp_directory_path() /
@@ -166,6 +208,7 @@ int main()
             for (std::uint8_t type : {0x03, 0x06, 0x13, 0x1B})
                 roundTrip(model, type);
         files();
+        unlimitedSpriteStates();
         std::cout << "Save state tests passed.\n";
     }
     catch (const std::exception &error)

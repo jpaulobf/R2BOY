@@ -272,6 +272,7 @@ namespace R2BOY::Test
                   "8x16 sprite tile masking, vertical flip and horizontal flip");
 
             Fixture limit;
+            limit.ppu.setUnlimitedSprites(false);
             limit.tile(1, 0xFF, 0xFF);
             for (unsigned i = 0; i < 10; ++i)
                 limit.sprite(i, 0, 16, 1);
@@ -286,6 +287,85 @@ namespace R2BOY::Test
             check(timing.ppu.mode() == 3, "object fetch stalls pixel output even for transparent pixels");
             timing.advance(1);
             check(timing.ppu.mode() == 0, "aligned object incurs eleven-dot penalty");
+        }
+
+        void unlimitedSprites()
+        {
+            for (const bool color : {false, true})
+            {
+                Fixture limited(color), unlimited(color);
+                limited.ppu.setUnlimitedSprites(false);
+                check(unlimited.ppu.isUnlimitedSpritesEnabled(), "unlimited sprites must start enabled");
+                for (auto *f : {&limited, &unlimited})
+                {
+                    f->tile(1, 0xFF, 0xFF);
+                    if (color)
+                    {
+                        f->color(false, 0, 0, 0x7FFF);
+                        f->color(true, 0, 3, 0);
+                    }
+                    // Dez objetos invisíveis ocupam o pipeline nativo; os outros
+                    // trinta cobrem a tela sem acrescentar penalidades de fetch.
+                    for (unsigned i = 0; i < 40; ++i)
+                        f->sprite(i, i < 10 ? 0 : 8 + ((i - 10) % 20) * 8, 16, 1);
+                    f->bus.write(0xFF40, 0x93);
+                }
+                for (unsigned dot = 0; dot < 70224 + 65664; ++dot)
+                {
+                    limited.advance(1);
+                    unlimited.advance(1);
+                    check(limited.ppu.mode() == unlimited.ppu.mode() &&
+                              limited.ppu.dot() == unlimited.ppu.dot() &&
+                              limited.bus.read(0xFF41) == unlimited.bus.read(0xFF41) &&
+                              limited.bus.read(0xFF44) == unlimited.bus.read(0xFF44) &&
+                              limited.interrupts.readIF() == unlimited.interrupts.readIF(),
+                          "extra sprites must preserve mode boundaries, memory locks and interrupt timing");
+                }
+                for (unsigned x = 0; x < 160; ++x)
+                    check(limited.pixel(x) == white && unlimited.pixel(x) == black,
+                          "unlimited sprites must fill the complete scanline without truncating it");
+                unlimited.ppu.setUnlimitedSprites(false);
+                unlimited.advance(70224);
+                check(unlimited.pixel(0) == white, "disabling the hack must restore the ten-sprite limit");
+                unlimited.ppu.reset(color, color, false);
+                check(!unlimited.ppu.isUnlimitedSpritesEnabled(), "reset must preserve the selected sprite limit");
+
+                Fixture last(color);
+                last.tile(1, 0xFF, 0xFF);
+                if (color)
+                {
+                    last.color(false, 0, 0, 0x7FFF);
+                    last.color(true, 0, 3, 0);
+                }
+                for (unsigned i = 0; i < 40; ++i)
+                    last.sprite(i, i == 39 ? 8 : 0, 16, 1);
+                last.render(0x93);
+                check(last.pixel(0) == black, "the fortieth OAM sprite must remain eligible");
+
+                Fixture priority(color);
+                priority.tile(1, 0xFF, 0);
+                priority.tile(2, 0, 0xFF);
+                if (color)
+                {
+                    priority.color(true, 0, 1, 0x7FFF);
+                    priority.color(true, 0, 2, 0);
+                }
+                priority.sprite(0, 12, 16, 2);
+                for (unsigned i = 1; i < 10; ++i)
+                    priority.sprite(i, 0, 16, 0);
+                priority.sprite(10, 8, 16, 1);
+                priority.render(0x93);
+                check(priority.pixel(4) == (color ? black : light),
+                      "native and extra sprites must share DMG X priority and CGB OAM priority");
+            }
+            Fixture behind;
+            behind.tile(0, 0xFF, 0);
+            behind.tile(1, 0, 0xFF);
+            for (unsigned i = 0; i < 10; ++i)
+                behind.sprite(i, 0, 16, 0);
+            behind.sprite(10, 8, 16, 1, 0x80);
+            behind.render(0x93);
+            check(behind.pixel(0) == light, "extra sprites must respect background priority");
         }
 
         void colorPalettesAndAttributes()
@@ -406,6 +486,7 @@ namespace R2BOY::Test
             backgroundAndScroll();
             windowAndRaster();
             spritesAndPriority();
+            unlimitedSprites();
             colorPalettesAndAttributes();
             dmaAndBoard();
             std::cout << "PPU FIFO, modes, interrupts, pixel composition, CGB and integration tests passed.\n";

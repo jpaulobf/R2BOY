@@ -164,10 +164,11 @@ namespace
         R2BOY::Common::Framebuffer framebuffer{};
         framebuffer.fill(0xFFFFFFFFu);
         bool running = true;
+        bool dmgMode = true;
         const auto frame = [&]()
         {
             window.pollEvents(running);
-            check(window.renderFrame(running, true, framebuffer), "display frame must render");
+            check(window.renderFrame(running, true, framebuffer, dmgMode), "display frame must render");
         };
         frame();
         frame();
@@ -261,7 +262,7 @@ namespace
         int vsyncChanges = 0;
         bool engineVSync = window.isVSyncEnabled();
         window.setVSyncCallback([&](bool enabled)
-                               {
+                                {
             ++vsyncChanges;
             engineVSync = enabled; });
         check(window.isVSyncEnabled(), "VSync must be enabled by default");
@@ -329,11 +330,24 @@ namespace
         selectHack("Enable Fast Forward");
         check(window.isFastForwardEnabled() && fastForwardEnabled && fastForwardChanges == 2,
               "Hacks must reenable fast-forward and notify the Engine");
+        bool unlimitedSprites = window.isUnlimitedSpritesEnabled();
+        int unlimitedChanges = 0;
+        check(unlimitedSprites, "unlimited sprites must be enabled by default");
+        window.setUnlimitedSpritesCallback([&](bool enabled)
+                                           {
+            unlimitedSprites = enabled;
+            ++unlimitedChanges; });
+        selectHack("Enable Unlimited Sprites");
+        check(!window.isUnlimitedSpritesEnabled() && !unlimitedSprites && unlimitedChanges == 1,
+              "Hacks must disable unlimited sprites and notify the Engine once");
+        selectHack("Enable Unlimited Sprites");
+        check(window.isUnlimitedSpritesEnabled() && unlimitedSprites && unlimitedChanges == 2,
+              "Hacks must reenable unlimited sprites and notify the Engine once");
         int overclockChanges = 0;
         bool overclockEnabled = window.isCPUOverclockEnabled();
         check(!overclockEnabled, "CPU overclock must be disabled by default");
         window.setCPUOverclockCallback([&](bool enabled)
-                                      {
+                                       {
             overclockEnabled = enabled;
             ++overclockChanges; });
         const std::string warning = " | CPU OVERCLOCK ENABLED! GAMES CAN CRASH!";
@@ -363,6 +377,67 @@ namespace
         check(!window.isCPUOverclockEnabled() && !overclockEnabled && overclockChanges == 2,
               "Hacks must disable CPU overclock and notify the Engine once");
         checkTitle(false);
+        // Cada faixa contém um tom já resolvido por BGP/OBP; o quadro não avança.
+        const std::array<std::uint32_t, 4> grayscale{0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000};
+        for (int y = 0; y < 144; ++y)
+            for (int x = 0; x < 160; ++x)
+                framebuffer[y * 160 + x] = grayscale[x / 40];
+        const auto originalFrame = framebuffer;
+        const auto checkPalette = [&](const std::array<std::uint32_t, 4> &expected, unsigned brightness = 100)
+        {
+            auto *main = ImGui::FindWindowByName("R2BOY");
+            ImGui::ClosePopupsOverWindow(main, false);
+            frame();
+            frame();
+            std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> pixels(
+                SDL_RenderReadPixels(SDL_GetRenderer(native), nullptr), SDL_DestroySurface);
+            check(pixels != nullptr, "palette pixels must be readable");
+            const int top = static_cast<int>(main->MenuBarHeight);
+            for (int shade = 0; shade < 4; ++shade)
+                for (int row = 0; row < 2; ++row)
+                {
+                    Uint8 r, g, b, alpha;
+                    check(SDL_ReadSurfacePixel(pixels.get(), (shade * 40 + 20) * 4, top + 10 + row * 4,
+                                               &r, &g, &b, &alpha),
+                          "palette color must be readable");
+                    const unsigned intensity = row == 0 ? 100 : brightness;
+                    const auto channel = [&](unsigned shift)
+                    { return ((((expected[shade] >> shift) & 255) * intensity) + 50) / 100; };
+                    check(r == channel(16) && g == channel(8) && b == channel(0) && alpha == 255,
+                          "preset must map all four tones and compose with scanlines in the correct order");
+                }
+            check(framebuffer == originalFrame, "palette selection must preserve the paused Core framebuffer");
+        };
+        const auto selectPalette = [&](const char *label)
+        {
+            select("Palette Preset");
+            auto *submenu = ImGui::FindWindowByName("Palette Preset###Menu_01");
+            check(submenu && submenu->Active, "Palette Preset submenu must open");
+            ImGui::ActivateItemByID(submenu->GetID(label));
+            frame();
+        };
+        checkPalette(grayscale);
+        selectPalette("Classic Green");
+        checkPalette({0xFF9BBC0F, 0xFF8BAC0F, 0xFF306230, 0xFF0F380F});
+        selectPalette("Pocket");
+        checkPalette({0xFFE0E8D8, 0xFFA8B8A0, 0xFF607058, 0xFF202820});
+        selectPalette("Amber");
+        checkPalette({0xFFFFF1C1, 0xFFE8B45B, 0xFF99602F, 0xFF382414});
+        selectPalette("Neon");
+        checkPalette({0xFFF4D6FF, 0xFFFF45D8, 0xFF852BFF, 0xFF10004D});
+        selectPalette("Ocean");
+        const std::array<std::uint32_t, 4> ocean{0xFFE0F4FF, 0xFF8CB8D8, 0xFF406888, 0xFF142838};
+        checkPalette(ocean);
+        dmgMode = false;
+        checkPalette(grayscale); // Até pixels cinza de um jogo CGB devem permanecer intactos.
+        dmgMode = true;
+        checkPalette(ocean); // Preferência preservada ao voltar a um jogo DMG.
+        select("Scanlines");
+        checkPalette(ocean, 95);
+        selectPalette("Default");
+        checkPalette(grayscale, 95);
+        select("Scanlines");
+        framebuffer.fill(0xFFFFFFFFu);
         checkScanlines(255);
         select("Scanlines");
         checkScanlines(242); // O efeito inicia com intensidade de 5%.
