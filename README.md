@@ -7,7 +7,7 @@
 A Game Boy and Game Boy Color emulator written from scratch in C++, developed
 alongside R2NES.
 
-**Version 0.0.2** — see the [changelog](CHANGELOG.md) for release notes.
+**Version 0.0.5** — see the [changelog](CHANGELOG.md) for release notes.
 
 **Work in progress:** games can run with video, keyboard and gamepad controls,
 automatic battery saves, save states, pause and fast-forward. Compatibility is
