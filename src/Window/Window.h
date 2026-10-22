@@ -75,6 +75,25 @@ namespace R2BOY::Window
         // Substitui o callback do menu; não aplica o layout imediatamente.
         void setInvertBAYBCallback(InvertBAYBCallback callback);
 
+        // Callback para notificar mudanças no estado do VSync.
+        using VSyncCallback = std::function<void(bool)>;
+
+        // Notifica a Engine somente após aplicar a mudança no renderer SDL.
+        void setVSyncCallback(VSyncCallback callback);
+
+        // Alterna o VSync; em falha SDL, preserva o estado anterior.
+        void toggleVSync();
+
+        bool isVSyncEnabled() const;
+
+        // Suspende a sincronização durante fast-forward, preservando a opção Display.
+        // Retorna false em falha SDL, mantendo o estado anterior.
+        bool setVSyncSuppressed(bool suppressed);
+
+        using FastForwardCallback = std::function<void(bool)>;
+        void setFastForwardCallback(FastForwardCallback callback);
+        bool isFastForwardEnabled() const;
+
         // Desenha e apresenta um frame; pode solicitar saída via running e retorna false em falha SDL.
         // gameLoaded controla a exibição do jogo e a medição de FPS, sem consultar o Core.
         // O framebuffer é usado por referência apenas durante esta chamada.
