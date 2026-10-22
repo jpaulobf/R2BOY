@@ -94,6 +94,10 @@ namespace R2BOY::Window
         void setFastForwardCallback(FastForwardCallback callback);
         bool isFastForwardEnabled() const;
 
+        using CPUOverclockCallback = std::function<void(bool)>;
+        void setCPUOverclockCallback(CPUOverclockCallback callback);
+        bool isCPUOverclockEnabled() const;
+
         // Desenha e apresenta um frame; pode solicitar saída via running e retorna false em falha SDL.
         // gameLoaded controla a exibição do jogo e a medição de FPS, sem consultar o Core.
         // O framebuffer é usado por referência apenas durante esta chamada.

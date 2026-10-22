@@ -58,7 +58,8 @@ namespace R2BOY::Window
                            const Window::InvertBAYBCallback &invertBAYBCallback, DisplaySettings &display,
                            Window::RomAction &romAction, int &stateSlot,
                            bool vsyncEnabled, const std::function<void()> &toggleVSync,
-                           bool &fastForwardEnabled, const Window::FastForwardCallback &fastForwardCallback)
+                           bool &fastForwardEnabled, const Window::FastForwardCallback &fastForwardCallback,
+                           bool &cpuOverclockEnabled, const Window::CPUOverclockCallback &cpuOverclockCallback)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -164,6 +165,8 @@ namespace R2BOY::Window
                     {
                         if (ImGui::MenuItem("Enable Fast Forward", nullptr, &fastForwardEnabled) && fastForwardCallback)
                             fastForwardCallback(fastForwardEnabled);
+                        if (ImGui::MenuItem("Enable CPU Overclock", nullptr, &cpuOverclockEnabled) && cpuOverclockCallback)
+                            cpuOverclockCallback(cpuOverclockEnabled);
                         ImGui::EndMenu();
                     }
                     ImGui::EndMenuBar();
@@ -223,6 +226,9 @@ namespace R2BOY::Window
         bool vsyncSuppressed = false;
         bool fastForwardEnabled = true;
         FastForwardCallback fastForwardCallback;
+        bool cpuOverclockEnabled = false;
+        CPUOverclockCallback cpuOverclockCallback;
+        double currentFPS = 0;
         Uint64 fpsSampleStart = 0;
         unsigned presentedFrames = 0;
         bool gameWasLoaded = false;
@@ -231,6 +237,19 @@ namespace R2BOY::Window
         DisplaySettings display;
         Common::Framebuffer filteredFrame{};
         DisplayMode appliedMode = DisplayMode::Windowed;
+
+        void updateTitle()
+        {
+            if (!gameWasLoaded && !cpuOverclockEnabled)
+            {
+                SDL_SetWindowTitle(window.get(), "R2BOY");
+                return;
+            }
+            char title[128];
+            SDL_snprintf(title, sizeof(title), "R2BOY | FPS: %.2f%s", currentFPS,
+                         cpuOverclockEnabled ? " | CPU OVERCLOCK ENABLED! GAMES CAN CRASH!" : "");
+            SDL_SetWindowTitle(window.get(), title);
+        }
 
         bool updateDisplay(int menuHeight)
         {
@@ -458,6 +477,16 @@ namespace R2BOY::Window
         return impl_->fastForwardEnabled;
     }
 
+    void Window::setCPUOverclockCallback(CPUOverclockCallback callback)
+    {
+        impl_->cpuOverclockCallback = std::move(callback);
+    }
+
+    bool Window::isCPUOverclockEnabled() const
+    {
+        return impl_->cpuOverclockEnabled;
+    }
+
     Window::RomAction Window::takeRomAction()
     {
         return std::exchange(impl_->romAction, RomAction::None);
@@ -484,8 +513,11 @@ namespace R2BOY::Window
             std::cerr << "Failed to update display mode: " << SDL_GetError() << '\n';
             return false;
         }
+        bool titleChanged = impl_->gameWasLoaded != gameLoaded;
+        const bool wasOverclockEnabled = impl_->cpuOverclockEnabled;
         drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
-                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback);
+                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback);
+        titleChanged |= wasOverclockEnabled != impl_->cpuOverclockEnabled;
         const Common::Framebuffer *textureFrame = &framebuffer;
         if (impl_->display.scanlines)
         {
@@ -533,22 +565,26 @@ namespace R2BOY::Window
         {
             impl_->presentedFrames = 0;
             impl_->fpsSampleStart = now;
-            SDL_SetWindowTitle(impl_->window.get(), "R2BOY");
+            impl_->currentFPS = 0;
         }
         impl_->gameWasLoaded = gameLoaded;
         if (!gameLoaded)
+        {
+            if (titleChanged)
+                impl_->updateTitle();
             return true;
+        }
         ++impl_->presentedFrames;
         const auto elapsed = now - impl_->fpsSampleStart;
         if (elapsed >= 1000000000ULL)
         {
-            const double fps = impl_->presentedFrames * 1000000000.0 / elapsed;
-            char title[80];
-            SDL_snprintf(title, sizeof(title), "R2BOY | FPS: %.2f", fps);
-            SDL_SetWindowTitle(impl_->window.get(), title);
+            impl_->currentFPS = impl_->presentedFrames * 1000000000.0 / elapsed;
+            titleChanged = true;
             impl_->presentedFrames = 0;
             impl_->fpsSampleStart = now;
         }
+        if (titleChanged)
+            impl_->updateTitle();
         return true;
     }
 }
