@@ -162,7 +162,7 @@ namespace R2BOY::Core::PPU
 
     void PPU::beginLine()
     {
-        spriteCount_ = 0;
+        spriteCount_ = nextSprite_ = 0;
         windowActive_ = windowDrawn_ = false;
         if (line_ < Height && line_ == wy_)
             windowTriggered_ = true;
