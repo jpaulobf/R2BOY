@@ -6,7 +6,9 @@ namespace R2BOY::Core::PPU
 {
     void PPU::reset(bool colorHardware, bool colorMode, bool afterBoot)
     {
+        const bool unlimitedSprites = unlimitedSprites_;
         *this = PPU{};
+        unlimitedSprites_ = unlimitedSprites;
         colorHardware_ = colorHardware;
         colorMode_ = colorMode;
         lcdc_ = afterBoot ? 0x91 : 0;
@@ -163,6 +165,7 @@ namespace R2BOY::Core::PPU
     void PPU::beginLine()
     {
         spriteCount_ = nextSprite_ = 0;
+        extraSpriteCount_ = 0;
         windowActive_ = windowDrawn_ = false;
         if (line_ < Height && line_ == wy_)
             windowTriggered_ = true;
@@ -170,7 +173,7 @@ namespace R2BOY::Core::PPU
 
     void PPU::scanOAM(const Memory::Memory &memory, bool dmaActive)
     {
-        if ((dot_ & 1) != 0 || spriteCount_ == 10 || dmaActive)
+        if ((dot_ & 1) != 0 || (spriteCount_ == 10 && !unlimitedSprites_) || dmaActive)
             return;
         const auto index = (dot_ / 2) - 1;
         const auto base = static_cast<std::uint16_t>(0xFE00 + index * 4);
@@ -178,8 +181,12 @@ namespace R2BOY::Core::PPU
         const unsigned height = (lcdc_ & 4) ? 16 : 8;
         if (line_ + 16 < y || line_ + 16 >= y + height)
             return;
-        sprites_[spriteCount_++] = {y, memory.read(base + 1), memory.read(base + 2),
-                                    memory.read(base + 3), static_cast<std::uint8_t>(index)};
+        const Sprite sprite{y, memory.read(base + 1), memory.read(base + 2),
+                            memory.read(base + 3), static_cast<std::uint8_t>(index)};
+        if (spriteCount_ < sprites_.size())
+            sprites_[spriteCount_++] = sprite;
+        else if (extraSpriteCount_ < extraSprites_.size())
+            extraSprites_[extraSpriteCount_++] = sprite;
     }
 
     void PPU::beginTransfer()
@@ -323,6 +330,37 @@ namespace R2BOY::Core::PPU
         }
     }
 
+    PPU::ObjectPixel PPU::withExtraSprites(const Memory::Memory &memory, ObjectPixel object) const
+    {
+        if (!unlimitedSprites_ || !(lcdc_ & 2))
+            return object;
+        for (unsigned index = 0; index < extraSpriteCount_; ++index)
+        {
+            const auto &sprite = extraSprites_[index];
+            const int offset = static_cast<int>(x_) + 8 - sprite.x;
+            if (offset < 0 || offset >= 8)
+                continue;
+            const unsigned height = (lcdc_ & 4) ? 16 : 8;
+            unsigned row = (line_ + 16 - sprite.y) & (height - 1);
+            if (sprite.attributes & 0x40)
+                row = height - 1 - row;
+            const unsigned tile = height == 16 ? sprite.tile & 0xFE : sprite.tile;
+            const auto address = static_cast<std::uint16_t>(0x8000 + tile * 16 + row * 2);
+            const unsigned bank = colorMode_ ? (sprite.attributes >> 3) & 1 : 0;
+            const unsigned bit = sprite.attributes & 0x20 ? offset : 7 - offset;
+            const unsigned color = ((memory.readVRAM(address, bank) >> bit) & 1) |
+                                   (((memory.readVRAM(address + 1, bank) >> bit) & 1) << 1);
+            const bool coordinatePriority = !colorMode_ || opri_;
+            const bool wins = coordinatePriority ? sprite.x < object.x || (sprite.x == object.x && sprite.index < object.index)
+                                                 : sprite.index < object.index;
+            if (color != 0 && (object.color == 0 || wins))
+                object = {static_cast<std::uint8_t>(color),
+                          static_cast<std::uint8_t>(colorMode_ ? sprite.attributes & 7 : (sprite.attributes >> 4) & 1),
+                          sprite.index, sprite.x, (sprite.attributes & 0x80) != 0};
+        }
+        return object;
+    }
+
     std::uint32_t PPU::paletteColor(bool object, unsigned palette, unsigned color) const
     {
         if (!colorMode_)
@@ -401,7 +439,7 @@ namespace R2BOY::Core::PPU
             --discard_;
             return;
         }
-        back_[line_ * Width + x_] = mix(pixel, objFIFO_[0]);
+        back_[line_ * Width + x_] = mix(pixel, withExtraSprites(memory, objFIFO_[0]));
         for (unsigned i = 0; i < 7; ++i)
             objFIFO_[i] = objFIFO_[i + 1];
         objFIFO_[7] = ObjectPixel{};
