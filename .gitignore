@@ -16,3 +16,4 @@
 /roms/
 /bootroms/
 docs/*
+tests/KnownIssues.md
