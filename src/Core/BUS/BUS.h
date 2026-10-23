@@ -37,6 +37,12 @@ namespace R2BOY::Core::BUS
         // A CPU consulta os pedidos habilitados e reconhece apenas o de maior prioridade.
         std::uint8_t pendingInterrupts() const { return interrupts_.pending(); }
 
+        // IE e IF são amostrados em momentos diferentes durante a entrada da IRQ.
+        std::uint8_t enabledInterrupts() const { return interrupts_.readIE() & 0x1F; }
+
+        // IF é amostrado durante a entrada da IRQ; retorna os pedidos ativos.
+        std::uint8_t requestedInterrupts() const { return interrupts_.readIF() & 0x1F; }
+
         // Limpa em IF somente a fonte reconhecida pela CPU, identificada de 0 a 4.
         void acknowledgeInterrupt(unsigned bit) { interrupts_.acknowledge(bit); }
 
@@ -48,6 +54,7 @@ namespace R2BOY::Core::BUS
             return speedSwitch_.beginSwitch();
         }
 
+        // Consulta se a CPU está no processo de troca de velocidade.
         bool switchingSpeed() const { return speedSwitch_.switching(); }
 
     private:
