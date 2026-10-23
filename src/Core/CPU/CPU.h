@@ -120,8 +120,7 @@ namespace R2BOY::Core::CPU
         // Substitui o observador de ciclos; um callback vazio desativa o rastreamento.
         void setCycleObserver(CycleObserver observer) { observer_ = std::move(observer); }
 
-        // Ponto de integração futuro com a transição de entrada do joypad.
-        // A Board já o utiliza ao detectar um novo botão pressionado; não altera IME.
+        // A Board utiliza este sinal ao detectar entrada do joypad; não altera IME.
         void wakeFromStop() { stopped_ = false; }
 
     private:
