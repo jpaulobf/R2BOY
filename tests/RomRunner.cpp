@@ -1,18 +1,19 @@
 #include "Core/Board.h"
 #include "Common/RomFile.h"
+#include <array>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 
 namespace R2BOY::Test
 {
-    // Executor de ROMs Blargg sem SDL, sem saves e com limite determinístico de T-cycles.
+    // Executor de ROMs Blargg/Mooneye sem SDL, saves ou hacks, limitado por T-cycles.
     // Códigos de saída: 0=Passed, 1=Failed/lock/erro, 2=limite sem resultado.
     int runROM(int argc, char **argv)
     {
-        if (argc < 2 || argc > 4)
+        if (argc < 2 || argc > 5)
         {
-            std::cerr << "Usage: rom_runner <rom.gb> [max-T-cycles=1000000000] [dmg|cgb]\n";
+            std::cerr << "Usage: rom_runner <rom.gb> [max-T-cycles=1000000000] [dmg|cgb] [blargg|mooneye]\n";
             return 1;
         }
         try
@@ -29,7 +30,7 @@ namespace R2BOY::Test
                     throw std::runtime_error("Invalid cycle limit.");
             }
             Core::Model model = Core::Model::DMG;
-            if (argc == 4)
+            if (argc >= 4)
             {
                 const std::string selected = argv[3];
                 if (selected == "cgb")
@@ -37,28 +38,54 @@ namespace R2BOY::Test
                 else if (selected != "dmg")
                     throw std::runtime_error("Model must be dmg or cgb.");
             }
+            bool mooneye = false;
+            if (argc == 5)
+            {
+                const std::string protocol = argv[4];
+                if (protocol == "mooneye")
+                    mooneye = true;
+                else if (protocol != "blargg")
+                    throw std::runtime_error("Protocol must be blargg or mooneye.");
+            }
             const auto path = std::filesystem::u8path(argv[1]);
             Core::Board board(model);
+            board.setCPUOverclock(false);
+            board.setUnlimitedSprites(false);
             board.loadCartridge(Common::RomFile::read(path), path.u8string());
             std::string output;
             unsigned poll = 0;
             while (board.cpu().cycles() < limit)
             {
-                board.step();
+                const auto pc = board.cpu().registers().pc;
+                const bool breakpoint = mooneye && board.read(pc) == 0x40;
+                const auto elapsed = board.step();
                 if (board.cpu().locked())
                     throw std::runtime_error("CPU locked on an invalid opcode.");
+                if (breakpoint && elapsed == 4 && board.cpu().registers().pc == static_cast<std::uint16_t>(pc + 1))
+                {
+                    const auto &r = board.cpu().registers();
+                    const std::array<std::uint8_t, 6> actual{r.b, r.c, r.d, r.e, r.h, r.l};
+                    constexpr std::array<std::uint8_t, 6> passed{3, 5, 8, 13, 21, 34};
+                    constexpr std::array<std::uint8_t, 6> failed{0x42, 0x42, 0x42, 0x42, 0x42, 0x42};
+                    if (actual == passed || actual == failed)
+                    {
+                        std::cout << "Result: " << (actual == passed ? "PASS" : "FAIL")
+                                  << " (Mooneye, " << board.cpu().cycles() << " T-cycles)\n";
+                        return actual == passed ? 0 : 1;
+                    }
+                }
                 if (++poll < 1024)
                     continue;
                 poll = 0;
                 const auto text = board.takeSerialOutput();
                 std::cout << text << std::flush;
                 output += text;
-                if (output.find("Failed") != std::string::npos || output.find("FAILED") != std::string::npos)
+                if (!mooneye && (output.find("Failed") != std::string::npos || output.find("FAILED") != std::string::npos))
                 {
                     std::cout << "\nResult: FAIL (" << board.cpu().cycles() << " T-cycles)\n";
                     return 1;
                 }
-                if (output.find("Passed\n") != std::string::npos || output.find("Passed all tests\n") != std::string::npos)
+                if (!mooneye && (output.find("Passed\n") != std::string::npos || output.find("Passed all tests\n") != std::string::npos))
                 {
                     std::cout << "\nResult: PASS (" << board.cpu().cycles() << " T-cycles)\n";
                     return 0;
