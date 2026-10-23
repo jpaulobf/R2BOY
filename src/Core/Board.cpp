@@ -172,7 +172,7 @@ namespace R2BOY::Core
         std::vector<std::uint8_t> result;
         StateArchive header(result);
         std::string magic = "R2BOY-STATE";
-        std::uint32_t version = 3;
+        std::uint32_t version = 4;
         auto model = model_;
         auto mode = executionMode_;
         auto romHash = Common::RomFile::hash(cartridge_.rom());
@@ -198,7 +198,7 @@ namespace R2BOY::Core
         ExecutionMode mode{};
         header(magic, version, model, mode, romHash, checksum);
         header.finish();
-        if (magic != "R2BOY-STATE" || version != 3)
+        if (magic != "R2BOY-STATE" || version != 4)
             throw std::runtime_error("Unsupported save state format/version.");
         if (model != model_ || mode != executionMode_ || romHash != Common::RomFile::hash(cartridge_.rom()))
             throw std::runtime_error("Save state belongs to a different ROM or hardware model.");
