@@ -18,3 +18,4 @@
 docs/*
 tests/KnownIssues.md
 tests/CPUValidation.md
+tests/BusDMAValidation.md
