@@ -29,6 +29,8 @@ To quit, close the window or choose **File > Exit**. Escape never closes the emu
 Press **Pause/Break** to pause or resume. While paused, the last completed image
 stays visible for screenshots and the menus remain usable. Opening a ROM,
 Reset, Unload and loading a save state return emulation to the running state.
+Opening a menu or the ROM selector also pauses emulation temporarily. Closing
+the interface resumes play unless Pause/Break had already paused the game.
 
 ## Display
 
@@ -119,8 +121,9 @@ restore the current emulation state. Choose one of three slots in
 **File > Save State Slot**. State files are stored beside battery saves as
 `<ROM hash>.slot1.state`, `.slot2.state` or `.slot3.state`.
 
-Current builds use only save state format 3 to preserve extra sprites selected
-mid-scanline. States from earlier formats must be recreated.
+Current builds use only save state format 4, including the byte driven by OAM
+DMA during bus conflicts and extra sprites selected mid-scanline.
+States from earlier formats must be recreated.
 Battery `.sav` files remain compatible. Loading a state keeps the current
 CPU overclock and unlimited-sprites preferences.
 
@@ -156,8 +159,21 @@ To run the automated tests:
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
+The `rom_runner` target runs Blargg or Mooneye test ROMs without SDL or hacks:
+
+```sh
+bin/rom_runner path/to/test.gb 20000000 dmg mooneye
+```
+
+Use `.exe` on Windows. The model can be `dmg` or `cgb`; the optional protocol
+defaults to `blargg`. See [CPU validation](tests/CPUValidation.md) for results,
+reproduction commands and known timing limitations. The
+[BUS and DMA review](tests/BusDMAValidation.md) records DMA timing, bus arbitration
+and memory-map checks, including remaining hardware approximations.
+
 ## What's next
 
+- Investigate the [reported visual artifacts](tests/KnownIssues.md) during the PPU review.
 - Audio.
 - Better game compatibility and more accurate emulation.
 - Support for cartridge clocks and more cartridge types.
