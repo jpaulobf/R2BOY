@@ -17,3 +17,4 @@
 /bootroms/
 docs/*
 tests/KnownIssues.md
+tests/CPUValidation.md
