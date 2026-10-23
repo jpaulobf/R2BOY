@@ -2,13 +2,28 @@
 
 Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
-## [Unreleased]
+## [0.0.6] - 2026-10-24
+
+- Pausa automática enquanto menus, submenus ou o seletor de ROMs estão abertos.
+  Ao fechar a interface, retoma sem acumular tempo de emulação, preservando a
+  pausa manual de Pause/Break.
+- Revisão de BUS/DMA: VRAM separada do barramento principal no DMG, acesso a
+  I/O/IE durante a transferência e leituras DMG em conflito retornando o byte
+  transferido. Corrige nove timeouts de testes de CPU e o teste de leitura de FF46.
+- Regressões de execução de instruções durante DMA, troca de barramento no
+  reinício e restauração do dado de DMA nos estados. Validação em
+  `tests/BusDMAValidation.md`.
+- Revisão da CPU: seleção de IRQ e reconhecimento de IF durante o empilhamento
+  do PC, incluindo cancelamento e mudança de vetor por escritas em IE/IF.
+- Regressões para entrada de interrupções e HALT bug com prefixo CB e RST;
+  executor de ROMs com protocolo Mooneye e hacks desabilitados para validação.
+- Resultados da revisão e limites conhecidos registrados em `tests/CPUValidation.md`.
 
 - **Hacks > Enable Unlimited Sprites**, habilitado por padrão, permite até 40
   sprites por linha, mantendo as prioridades DMG/CGB e a temporização do pipeline
   original. Desligado, restaura o limite de dez sprites por linha.
-- Save states usam exclusivamente o formato 3 para preservar os sprites extras
-  selecionados na linha. Estados de formatos anteriores precisam ser recriados;
+- Save states usam exclusivamente o formato 4 para preservar o dado de DMA e
+  os sprites extras selecionados na linha. Estados anteriores precisam ser recriados;
   saves de bateria `.sav` continuam compatíveis.
 - Submenu **Display > Palette Preset** com **Default**, **Classic Green**,
   **Pocket**, **Amber**, **Ocean** e **Neon** para jogos DMG, inclusive em compatibilidade
