@@ -136,9 +136,16 @@ namespace R2BOY::Test
             f.bus.write(0xFFFF, 0x1F);
             f.bus.write(0xFF46, 0xC0);
             f.advance(8);
-            for (const auto address : {0x0000, 0x8000, 0xA000, 0xC000, 0xE000, 0xFE00, 0xFF01, 0xFF0F, 0xFF7F, 0xFFFF})
+            for (const auto address : {0x0000, 0x7FFF, 0xA000, 0xBFFF, 0xC000, 0xDFFF, 0xE000, 0xFDFF})
             {
-                check(f.bus.read(address) == 0xFF, "DMG only permits HRAM reads during DMA");
+                check(f.bus.read(address) == 0x31, "DMG main-bus conflict reads DMA data instead of addressed memory");
+                f.bus.write(address, 0x99);
+            }
+            f.bus.write(0x8000, 0x99);
+            check(f.bus.read(0x8000) == 0x99, "DMG VRAM bus remains accessible during WRAM DMA");
+            for (const auto address : {0xFE00, 0xFE9F, 0xFEA0, 0xFEFF})
+            {
+                check(f.bus.read(address) == 0xFF, "OAM conflict must not expose the DMA data byte");
                 f.bus.write(address, 0x99);
             }
             for (const auto address : {0xFF80, 0xFFFE})
@@ -146,12 +153,57 @@ namespace R2BOY::Test
                 f.bus.write(address, 0x65);
                 check(f.bus.read(address) == 0x65, "HRAM boundary access during DMA");
             }
-            f.advance(640);
+            check(f.bus.read(0xFF46) == 0xC0, "DMG FF46 remains readable during active transfer");
+            f.bus.write(0xFF01, 0x55);
+            f.bus.write(0xFFFF, 0x10);
+            f.bus.write(0xFF0F, 0x04);
+            check(f.bus.read(0xFF01) == 0x55 && f.bus.read(0xFFFF) == 0x10 && f.bus.read(0xFF0F) == 0xE4,
+                  "DMG I/O and interrupt registers remain accessible during DMA");
+            f.advance(4);
+            check(f.bus.read(0xC000) == 0x32 && f.bus.read(0x0000) == 0x32,
+                  "DMA conflict data advances with each copied byte");
+            f.advance(632);
+            check(f.bus.read(0xC000) == 0xD0, "last DMA data byte remains visible for its entire M-cycle");
+            f.advance(4);
             f.expectOAM(0x31);
-            check(f.memory.read(0xC000) == 0x31 && f.memory.read(0x8000) == 0,
-                  "blocked writes must not mutate source or VRAM");
-            check(f.bus.read(0xFF01) == 0x42 && f.bus.read(0xFFFF) == 0x1F,
-                  "blocked writes must not reach I/O or IE");
+            check(f.bus.read(0xC000) == 0x31 && f.memory.read(0x8000) == 0x99,
+                  "DMA completion restores addressed reads; conflicting writes preserve source");
+        }
+
+        void dmgBusesAndRestart()
+        {
+            Fixture f;
+            std::vector<std::uint8_t> rom(32768);
+            rom[0x4000] = 0x91;
+            f.cartridge.load(rom, "DMG DMA buses");
+            f.fill(0x8000, 0x61);
+            f.fill(0xC000, 0x31);
+            f.bus.write(0xFF46, 0x80);
+            f.advance(8);
+            check(f.bus.read(0x8000) == 0x61 && f.bus.read(0x9FFF) == 0x61,
+                  "DMA drives the entire DMG VRAM bus with its current byte");
+            f.bus.write(0x8001, 0x99);
+            check(f.memory.read(0x8001) == 0x62, "conflicting VRAM write is ignored");
+            check(f.bus.read(0x4000) == 0x91 && f.bus.read(0xC000) == 0x31 && f.bus.read(0xE000) == 0x31,
+                  "DMG cartridge, WRAM and echo stay accessible during VRAM DMA");
+            f.bus.write(0xFDFF, 0x72);
+            check(f.bus.read(0xDDFF) == 0x72, "accessible echo writes still reach WRAM during VRAM DMA");
+
+            f.bus.write(0xFF46, 0xC0);
+            check(f.bus.read(0xFF46) == 0xC0 && !f.dma.blocksCPU(0xC000),
+                  "restart latches FF46 before changing the bus in use");
+            f.advance(4);
+            check(f.bus.read(0x9FFF) == 0x62 && f.bus.read(0xC000) == 0x31,
+                  "old source and bus remain active during restart delay");
+            f.advance(4);
+            check(f.bus.read(0x4000) == 0x31 && f.bus.read(0x8001) == 0x62,
+                  "restart switches bus and data together at the new first byte");
+            f.advance(640);
+
+            f.bus.write(0xFF46, 0x40);
+            f.advance(8);
+            check(f.bus.read(0xC000) == 0x91 && f.bus.read(0xA000) == 0x91 && f.bus.read(0x8000) == 0x61,
+                  "DMG ROM DMA conflicts with WRAM and cartridge RAM, independently of VRAM");
         }
 
         void sourcesAndBanks()
@@ -242,6 +294,44 @@ namespace R2BOY::Test
             }
         }
 
+        void cpuFetchDuringDMA()
+        {
+            Core::Board board;
+            board.loadCartridge(std::vector<std::uint8_t>(32768), "DMA instruction fetch");
+            board.write(0xFF40, 0);
+            board.write(0x8000, 0xD3); // Opcode inválido se a CPU usar indevidamente este barramento.
+            board.write(0x8001, 0xD3);
+            board.write(0xC100, 0x00); // NOP; INC A; HALT em WRAM.
+            board.write(0xC101, 0x3C);
+            board.write(0xC102, 0x76);
+            auto registers = board.cpu().registers();
+            registers.pc = 0xC100;
+            registers.a = 0x20;
+            board.cpu().reset(registers);
+            board.write(0xFF46, 0x80);
+            board.step();
+            board.step();
+            board.step();
+            check(board.cpu().halted() && !board.cpu().locked() && board.cpu().registers().a == 0x21 &&
+                      board.cpu().registers().pc == 0xC103,
+                  "DMG CPU must fetch real WRAM instructions during VRAM DMA");
+
+            board.reset();
+            board.write(0xFF40, 0);
+            board.write(0xC000, 0x3C); // DMA dirige INC A, depois HALT ao barramento da ROM.
+            board.write(0xC001, 0x76);
+            registers.pc = 0x100;
+            registers.a = 0x30;
+            board.cpu().reset(registers);
+            board.write(0xFF46, 0xC0);
+            board.step(); // M1: NOP real da ROM.
+            board.step(); // M2: opcode do primeiro byte do DMA.
+            board.step(); // M3: opcode do segundo byte do DMA.
+            check(board.cpu().halted() && board.cpu().registers().a == 0x31 &&
+                      board.cpu().registers().pc == 0x103,
+                  "DMG opcode fetch on an occupied bus must observe DMA data");
+        }
+
         void boardIntegration()
         {
             for (const auto model : {Core::Model::DMG, Core::Model::CGB})
@@ -268,8 +358,9 @@ namespace R2BOY::Test
                 board.step();
                 check(board.read(0xC000) == 1, "CPU access allowed on first M-cycle after FF46");
                 board.step();
-                check(board.cpu().halted() && board.read(0xC000) == 0xFF, "HRAM execution continues during DMA");
-                check(board.read(0x0100) == (model == Core::Model::CGB ? 0 : 0xFF),
+                check(board.cpu().halted() && board.read(0xC000) == (model == Core::Model::CGB ? 0xFF : 1),
+                      "HRAM execution continues during DMA");
+                check(board.read(0x0100) == (model == Core::Model::CGB ? 0 : 1),
                       "CGB DMA arbitration follows physical model even for a DMG cartridge");
                 for (unsigned i = 0; i < 159; ++i)
                     board.step();
@@ -300,8 +391,10 @@ namespace R2BOY::Test
             transferAndTiming();
             restartAndReset();
             cpuRestrictions();
+            dmgBusesAndRestart();
             sourcesAndBanks();
             colorBuses();
+            cpuFetchDuringDMA();
             boardIntegration();
             std::cout << "OAM DMA transfer, timing, restart, bus and integration tests passed.\n";
             return 0;
