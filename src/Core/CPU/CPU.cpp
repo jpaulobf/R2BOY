@@ -647,12 +647,8 @@ namespace R2BOY::Core::CPU
             halted_ = false;
             if (ime_)
             {
-                unsigned bit = 0;
-                while ((pending & (1 << bit)) == 0)
-                    ++bit;
                 ime_ = false;
                 imeDelay_ = 0;
-                bus_.acknowledgeInterrupt(bit);
                 // EI; HALT com pedido pendente retorna ao HALT após o atendimento.
                 if (haltBug_)
                 {
@@ -661,9 +657,29 @@ namespace R2BOY::Core::CPU
                 }
                 idle();
                 idle();
-                push(r_.pc);
+                write8(--r_.sp, static_cast<std::uint8_t>(r_.pc >> 8));
+                // A escrita do byte alto pode atingir IE e cancelar/redirecionar
+                // a IRQ. IE fica fixo daqui em diante; IF ainda recebe pedidos
+                // durante o próximo M-cycle, antes da escrita do byte baixo.
+                const auto enabled = bus_.enabledInterrupts();
+                const auto lowAddress = --r_.sp;
+                machineCycle();
+                const auto selected = enabled & bus_.requestedInterrupts();
+                const auto low = static_cast<std::uint8_t>(r_.pc);
+                bus_.write(lowAddress, low);
+                if (observer_)
+                    observer_({CycleType::Write, lowAddress, low, cycles_});
+                std::uint16_t vector = 0; // Dispatch cancelado ainda consome os cinco M-cycles.
+                if (selected != 0)
+                {
+                    unsigned bit = 0;
+                    while ((selected & (1 << bit)) == 0)
+                        ++bit;
+                    bus_.acknowledgeInterrupt(bit);
+                    vector = static_cast<std::uint16_t>(0x40 + bit * 8);
+                }
                 idle();
-                r_.pc = static_cast<std::uint16_t>(0x40 + bit * 8);
+                r_.pc = vector;
                 return finish(20);
             }
         }
