@@ -109,6 +109,55 @@ namespace
         check(board.saveState() == afterDMA, "DMA must resume at the saved byte/phase");
     }
 
+    void dmaBusStates()
+    {
+        // Partida pendente, cópia ativa e troca de barramento pendente.
+        for (unsigned stage = 0; stage < 3; ++stage)
+        {
+            Core::Board board;
+            board.loadCartridge(rom(), "DMA bus state");
+            board.write(0xFF40, 0);
+            for (unsigned i = 0; i < 160; ++i)
+            {
+                board.write(static_cast<std::uint16_t>(0xC000 + i), static_cast<std::uint8_t>(0x21 + i));
+                board.write(static_cast<std::uint16_t>(0x8000 + i), static_cast<std::uint8_t>(0x61 + i));
+            }
+            auto registers = board.cpu().registers();
+            registers.pc = 0xFF80; // NOPs: um M-cycle por step().
+            board.cpu().reset(registers);
+            board.write(0xFF46, 0xC0);
+            board.step();
+            if (stage != 0)
+            {
+                board.step();
+                board.step();
+            }
+            if (stage == 2)
+            {
+                board.write(0xFF46, 0x80);
+                board.step();
+            }
+            const auto snapshot = board.saveState();
+            const auto data = board.read(0xC100);
+            const auto page = board.read(0xFF46);
+            check(data == (stage == 0 ? 0 : (stage == 1 ? 0x22 : 0x23)),
+                  "DMA state fixture must expose the active source byte before saving");
+            board.step();
+            const auto future = board.saveState();
+            board.loadState(snapshot);
+            check(board.read(0xC100) == data && board.read(0xFF46) == page && board.saveState() == snapshot,
+                  "Loading DMA must restore bus data and pending restart before any further tick");
+            board.step();
+            check(board.saveState() == future, "DMA start and bus-changing restart must replay identically");
+
+            auto previousFormat = snapshot;
+            constexpr auto versionOffset = sizeof(std::uint32_t) + sizeof("R2BOY-STATE") - 1;
+            previousFormat[versionOffset] = 3;
+            rejects([&] { board.loadState(previousFormat); });
+            check(board.saveState() == future, "Rejecting format 3 must preserve the running DMA");
+        }
+    }
+
     void unlimitedSpriteStates()
     {
         Core::Board board;
@@ -208,6 +257,7 @@ int main()
             for (std::uint8_t type : {0x03, 0x06, 0x13, 0x1B})
                 roundTrip(model, type);
         files();
+        dmaBusStates();
         unlimitedSpriteStates();
         std::cout << "Save state tests passed.\n";
     }

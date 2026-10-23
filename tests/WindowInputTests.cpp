@@ -32,6 +32,7 @@ namespace
         frame();
         check(!io.WantCaptureKeyboard,
               "main game window must not capture keyboard merely because it is focused");
+        check(!window.isMenuOpen(), "idle game window must not request menu pause");
 
         SDL_Event event{};
         event.type = SDL_EVENT_KEY_DOWN;
@@ -43,6 +44,7 @@ namespace
         frame();
         frame();
         check(io.WantCaptureKeyboard, "ROM selector must still capture keyboard");
+        check(window.isMenuOpen(), "ROM selector must request temporary emulation pause");
 
         // Fecha o modal e verifica que o foco devolvido à janela libera o teclado.
         ImGui::NewFrame();
@@ -55,6 +57,60 @@ namespace
         frame();
         frame();
         check(!io.WantCaptureKeyboard, "closing the selector returns keyboard to the game");
+        check(!window.isMenuOpen(), "closing the ROM selector must release its pause request");
+    }
+
+    void menusRequestTemporaryPause()
+    {
+        R2BOY::Window::Window window;
+        check(window.open(), "menu pause test window must open");
+        R2BOY::Common::Framebuffer framebuffer{};
+        bool running = true;
+        const auto frame = [&]()
+        {
+            window.pollEvents(running);
+            check(window.renderFrame(running, true, framebuffer), "menu pause frame must render");
+        };
+        frame();
+        frame();
+        check(!window.isMenuOpen(), "visible menu bar alone must not pause emulation");
+        const auto escape = [&]()
+        {
+            ImGui::GetIO().AddKeyEvent(ImGuiKey_Escape, true);
+            frame();
+            ImGui::GetIO().AddKeyEvent(ImGuiKey_Escape, false);
+            frame();
+        };
+        for (const auto *label : {"File", "Display", "Input", "Hacks"})
+        {
+            auto *main = ImGui::FindWindowByName("R2BOY");
+            ImGui::ActivateItemByID(ImHashStr(label, 0, main->GetID("##MenuBar")));
+            frame();
+            frame();
+            check(window.isMenuOpen(), "every open menu must request emulation pause");
+            check(!window.acceptsGameInput(), "open menu must suppress game input");
+            if (std::string(label) == "Display")
+            {
+                auto *menu = ImGui::FindWindowByName("Display###Menu_00");
+                check(menu && menu->Active, "Display must open for submenu pause test");
+                ImGui::ActivateItemByID(menu->GetID("Palette Preset"));
+                frame();
+                frame();
+                auto *submenu = ImGui::FindWindowByName("Palette Preset###Menu_01");
+                check(submenu && submenu->Active && window.isMenuOpen(), "submenu must keep emulation paused");
+                escape();
+                check(window.isMenuOpen(), "closing a submenu must retain the parent menu pause");
+                ImGui::ActivateItemByID(menu->GetID("Bilinear Filter"));
+                frame();
+                frame();
+                check(!window.isMenuOpen(), "selecting a menu item must release menu pause when it closes");
+            }
+            else
+            {
+                escape();
+                check(!window.isMenuOpen(), "Escape must release menu pause when the last menu closes");
+            }
+        }
     }
 
     void fileMenuRequestsRomActions()
@@ -496,6 +552,7 @@ int main()
     try
     {
         capturesKeyboardOnlyForInterface();
+        menusRequestTemporaryPause();
         fileMenuRequestsRomActions();
         displayMenuControlsWindow();
         std::cout << "Window input and display tests passed.\n";

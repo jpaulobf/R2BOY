@@ -52,7 +52,8 @@ namespace R2BOY::Test
                                      { trace.push_back(cycle); });
             }
 
-            void prepare(std::initializer_list<std::uint8_t> program, std::uint8_t flags = 0)
+            void prepare(std::initializer_list<std::uint8_t> program, std::uint8_t flags = 0,
+                         std::uint16_t pc = 0xC000, std::uint16_t sp = 0xD000)
             {
                 memory.reset();
                 interrupts.reset();
@@ -62,8 +63,8 @@ namespace R2BOY::Test
                 elapsed = 0;
                 onClock = {};
                 Processor::Registers r;
-                r.pc = 0xC000;
-                r.sp = 0xD000;
+                r.pc = pc;
+                r.sp = sp;
                 r.setHL(0xC100);
                 r.f = flags;
                 cpu.reset(r);
@@ -188,6 +189,81 @@ namespace R2BOY::Test
             check(f.cpu.locked() && f.elapsed == 8, "invalid CPU opcode does not stop peripheral clocks");
         }
 
+        void interruptDispatchEdges()
+        {
+            Fixture f;
+            const auto arm = [&](std::uint16_t pc, std::uint16_t sp, std::uint8_t mask)
+            {
+                f.prepare({0xFB, 0}, 0, pc, sp);
+                f.cpu.step();
+                f.cpu.step();
+                f.interrupts.writeIE(mask);
+                f.interrupts.writeIF(mask);
+                f.trace.clear();
+            };
+            // Mooneye acceptance/interrupts/ie_push: o byte alto ainda pode
+            // cancelar ou redirecionar a IRQ; o byte baixo já não altera IE a tempo.
+            arm(0xC000, 0, 4);
+            check(f.cpu.step() == 20 && f.cpu.registers().pc == 0 && !f.cpu.ime() &&
+                      f.interrupts.readIF() == 0xE4 && f.cpu.registers().sp == 0xFFFE,
+                  "high-byte stack write to IE must cancel dispatch without acknowledging IF");
+            expect(f, {{Type::Internal, 0, 0, 12}, {Type::Internal, 0, 0, 16},
+                       {Type::Write, 0xFFFF, 0xC0, 20}, {Type::Write, 0xFFFE, 2, 24},
+                       {Type::Internal, 0, 0, 28}});
+            f.interrupts.writeIE(0x10);
+            f.interrupts.writeIF(0x10);
+            // Sem cartucho, $0000 lê FF (RST $38), não um novo atendimento de IRQ.
+            check(f.cpu.step() == 16 && f.cpu.registers().pc == 0x38 && !f.cpu.ime() &&
+                      f.interrupts.readIF() == 0xF0,
+                  "cancelled dispatch must leave IME disabled");
+
+            arm(0xC000, 1, 8);
+            check(f.cpu.step() == 20 && f.cpu.registers().pc == 0x58 && f.interrupts.readIE() == 2 &&
+                      f.interrupts.readIF() == 0xE0 && f.cpu.registers().sp == 0xFFFF,
+                  "low-byte stack write to IE must be too late to cancel the interrupt");
+
+            arm(0xC200, 0, 3);
+            check(f.cpu.step() == 20 && f.cpu.registers().pc == 0x48 && f.interrupts.readIF() == 0xE1,
+                  "high-byte IE write must retarget dispatch to the remaining enabled source");
+
+            arm(0xC000, 0xD000, 4);
+            bool acknowledgedEarly = false;
+            f.onClock = [&](unsigned time)
+            {
+                if (time < 24 && !(f.interrupts.readIF() & 4))
+                    acknowledgedEarly = true;
+                if (time == 24)
+                    f.interrupts.request(0);
+            };
+            check(f.cpu.step() == 20 && !acknowledgedEarly && f.cpu.registers().pc == 0x50 &&
+                      f.interrupts.readIF() == 0xE1,
+                  "late IF requests must respect the previously sampled IE mask and remain pending");
+
+            arm(0xC000, 0xD000, 0x1F);
+            f.interrupts.writeIF(4);
+            f.onClock = [&](unsigned time)
+            { if (time == 24) f.interrupts.request(0); };
+            check(f.cpu.step() == 20 && f.cpu.registers().pc == 0x40 && f.interrupts.readIF() == 0xE4,
+                  "higher-priority IF arriving during the low-byte M-cycle must retarget the interrupt");
+            arm(0xC000, 0xD000, 4);
+            f.onClock = [&](unsigned time)
+            { if (time == 16) f.interrupts.writeIF(0); };
+            check(f.cpu.step() == 20 && f.cpu.registers().pc == 0 && f.interrupts.readIF() == 0xE0,
+                  "withdrawn IF request must cancel dispatch without an invalid vector");
+            arm(0xC000, 0xD000, 8);
+            f.onClock = [&](unsigned time)
+            { if (time == 24) f.interrupts.writeIE(0); };
+            check(f.cpu.step() == 20 && f.cpu.registers().pc == 0x58 && f.interrupts.readIF() == 0xE0,
+                  "IE changes after sampling must not cancel the selected interrupt");
+
+            arm(0xC200, 0xFF10, 3);
+            check(f.cpu.step() == 20 && f.cpu.registers().pc == 0x48 && f.interrupts.readIF() == 0xE0,
+                  "high-byte stack write to IF must affect interrupt selection");
+            arm(0xC000, 0xFF11, 1);
+            check(f.cpu.step() == 20 && f.cpu.registers().pc == 0x40 && f.interrupts.readIF() == 0xE2,
+                  "low-byte stack write to IF must preserve the pre-write source selection");
+        }
+
         void serialInterleaving()
         {
             Fixture f;
@@ -229,6 +305,7 @@ namespace R2BOY::Test
             memoryAccesses();
             stackAndBranches();
             interruptsAndIdle();
+            interruptDispatchEdges();
             serialInterleaving();
             std::cout << "M-cycle ordering and peripheral-interleaving tests passed.\n";
             return 0;
