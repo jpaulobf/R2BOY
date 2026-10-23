@@ -10,6 +10,7 @@ namespace R2BOY::Core::IO
         sourcePage_ = 0;
         index_ = startup_ = phase_ = 0;
         active_ = false;
+        data_ = 0xFF;
     }
 
     void DMA::start(std::uint8_t page)
@@ -48,6 +49,7 @@ namespace R2BOY::Core::IO
                 source &= 0xDFFF;
             value = bus.readDMA(source);
         }
+        data_ = value;
         bus.writeOAM(static_cast<std::uint16_t>(0xFE00 + index_), value);
         ++index_;
         phase_ = 4;
@@ -55,22 +57,28 @@ namespace R2BOY::Core::IO
 
     bool DMA::blocksCPU(std::uint16_t address) const
     {
-        if (!active_ || (address >= 0xFF80 && address <= 0xFFFE))
+        if (!active_ || address >= 0xFF00)
             return false;
-        if (!colorHardware_)
-            return true;
         if (address >= 0xFE00)
-            return address < 0xFF00; // OAM indisponível; I/O e IE continuam acessíveis.
+            return true; // OAM indisponível; I/O, HRAM e IE são internos à CPU.
 
-        // CGB: barramentos separados para cartucho, VRAM e WRAM.
-        const auto busFor = [](std::uint16_t a)
+        // VRAM tem barramento próprio em ambos os modelos. No DMG, WRAM e
+        // cartucho compartilham o barramento principal; no CGB são separados.
+        const auto busFor = [this](std::uint16_t a)
         {
             if (a >= 0x8000 && a < 0xA000)
                 return 1;
-            if (a >= 0xC000)
+            if (colorHardware_ && a >= 0xC000)
                 return 2;
             return 0;
         };
         return busFor(address) == busFor(static_cast<std::uint16_t>(sourcePage_ << 8));
+    }
+
+    std::uint8_t DMA::readCPUConflict(std::uint16_t address) const
+    {
+        // O barramento principal e o de VRAM do DMG expõem o dado do DMA.
+        // OAM possui seu próprio bloqueio e não deve devolver esse dado.
+        return !colorHardware_ && address < 0xFE00 ? data_ : 0xFF;
     }
 }
