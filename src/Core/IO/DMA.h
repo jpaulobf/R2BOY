@@ -13,8 +13,10 @@ namespace R2BOY::Core::IO
     /**
      * Copia 160 bytes, um por M-cycle, após o atraso de partida. Reiniciar
      * preserva a transferência anterior até a nova partida.
-     * Conflitos usam leituras 0xFF e escritas ignoradas; valores de barramento
-     * aberto/corrupção por revisão do hardware e conflitos com a PPU não são emulados.
+     * No DMG, leituras no barramento ocupado veem o byte transferido; OAM
+     * retorna FF. Escritas em conflito são ignoradas. No CGB, leituras em
+     * conflito ainda usam FF; corrupção por revisão e conflitos com a PPU
+     * não são emulados.
      * Referências: gbdev.io/pandocs/OAM_DMA_Transfer.html e os testes
      * acceptance/oam_dma_start.s e oam_dma_restart.s de Gekkio/mooneye-test-suite.
      */
@@ -42,11 +44,14 @@ namespace R2BOY::Core::IO
         // Consulta conflitos da CPU conforme o modelo físico e o barramento de origem.
         bool blocksCPU(std::uint16_t address) const;
 
+        // Valor observado em uma leitura que blocksCPU() identificou como conflito.
+        std::uint8_t readCPUConflict(std::uint16_t address) const;
+
     private:
         friend class R2BOY::Core::StateArchive;
         void state(StateArchive &archive)
         {
-            archive(register_, sourcePage_, index_, startup_, phase_, active_, colorHardware_);
+            archive(register_, sourcePage_, index_, startup_, phase_, active_, colorHardware_, data_);
         }
         std::uint8_t register_ = 0xFF;
         std::uint8_t sourcePage_ = 0;
@@ -55,5 +60,6 @@ namespace R2BOY::Core::IO
         unsigned phase_ = 0;
         bool active_ = false;
         bool colorHardware_ = false;
+        std::uint8_t data_ = 0xFF;
     };
 }
