@@ -43,6 +43,9 @@ namespace R2BOY::Window
         // Exige foco da janela e ausência de captura de teclado pelo ImGui.
         bool acceptsGameInput() const;
 
+        // Menu, submenu ou seletor modal aberto solicita pausa temporária da emulação.
+        bool isMenuOpen() const;
+
         // Indica se a janela está minimizada, permitindo suspender a renderização.
         bool isMinimized() const;
 
