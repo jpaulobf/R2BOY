@@ -43,6 +43,9 @@ namespace R2BOY::System
         StateFile states(std::filesystem::u8path(basePath) / "saves");
         bool cpuFaultReported = false;
         bool cpuStopReported = false;
+        bool menuPaused = false;
+        // A interface nunca altera a pausa manual de Pause/Break.
+        const auto emulationPaused = [&]() { return paused_ || menuPaused; };
         double cycleCredit = 0;
         auto lastExecution = FramePacer::Clock::now();
         FramePacer framePacer(lastExecution);
@@ -74,7 +77,7 @@ namespace R2BOY::System
         const auto syncFastForward = [&]()
         {
             setUncappedSpeed(fastForwardEnabled_ && input_.isFastForwardPressed() &&
-                             board_.cartridge().loaded() && !paused_ && !window.isMinimized());
+                             board_.cartridge().loaded() && !emulationPaused() && !window.isMinimized());
         };
         const auto flushSave = [&]()
         {
@@ -159,7 +162,7 @@ namespace R2BOY::System
             auto inputFrame = board_.baseClockCycles() / 70224;
             const auto buttons = input_.update(inputFrame, inputEnabled);
             // Entrada continua sendo processada, mas não altera JOYP/IF durante a pausa.
-            if (!paused_)
+            if (!emulationPaused())
                 board_.setButtons(buttons);
             syncFastForward();
 
@@ -193,7 +196,7 @@ namespace R2BOY::System
             // Fast-forward suspende a espera SDL e o limitador abaixo.
             // Sem VSync, mantém o avanço por tempo decorrido e o cap de 60 FPS.
             // O orçamento usa o clock base, independente de double speed e overclock.
-            if (!paused_ && board_.cartridge().loaded() && !board_.cpu().locked())
+            if (!emulationPaused() && board_.cartridge().loaded() && !board_.cpu().locked())
             {
                 cycleCredit += (uncappedSpeed_ || vsyncEnabled_) ? 70224.0 : std::min(elapsed, 0.05) * 4194304.0;
                 while (cycleCredit > 0 && !board_.cpu().locked())
@@ -235,6 +238,18 @@ namespace R2BOY::System
             {
                 renderFailed = true;
                 break;
+            }
+
+            // ImGui abre/fecha os menus durante renderFrame(). Descarta o tempo
+            // da interface nos dois sentidos, sem tocar na pausa manual.
+            const bool menuOpen = window.isMenuOpen();
+            if (menuPaused != menuOpen)
+            {
+                menuPaused = menuOpen;
+                input_.clear();
+                cycleCredit = 0;
+                lastExecution = FramePacer::Clock::now();
+                framePacer.reset(lastExecution);
             }
 
             const auto action = window.takeRomAction();
