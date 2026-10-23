@@ -431,6 +431,19 @@ namespace R2BOY::Test
             f.cpu.step();
             f.cpu.step();
             check(f.cpu.registers().b == 0x06 && f.cpu.registers().pc == 0xC002, "HALT bug duplicates opcode as immediate");
+            f.prepare({0x76, 0xCB, 0x11});
+            f.bus.write(0xFFFF, 1);
+            f.bus.write(0xFF0F, 1);
+            f.cpu.step();
+            check(f.cpu.step() == 8 && f.cpu.registers().e == 2 && f.cpu.registers().pc == 0xC002,
+                  "HALT bug must duplicate the CB prefix into SET 1,E, suppressing only one PC increment");
+            f.prepare({0x76, 0xFF, 0});
+            f.bus.write(0xFFFF, 1);
+            f.bus.write(0xFF0F, 1);
+            f.cpu.step();
+            check(f.cpu.step() == 16 && f.cpu.registers().pc == 0x38 &&
+                      f.bus.read(0xCFFE) == 1 && f.bus.read(0xCFFF) == 0xC0,
+                  "HALT bug followed by RST must push the RST address, not the following byte");
             f.prepare({0xFB, 0x76});
             f.bus.write(0xFFFF, 1);
             f.bus.write(0xFF0F, 1);
