@@ -10,7 +10,7 @@ namespace R2BOY::Core::BUS
     std::uint8_t BUS::read(std::uint16_t address) const
     {
         if (dma_.blocksCPU(address))
-            return 0xFF;
+            return dma_.readCPUConflict(address);
         if (address >= 0xFE00 && address < 0xFEA0 && ppu_.blocksOAM())
             return 0xFF;
         return readDMA(address);
