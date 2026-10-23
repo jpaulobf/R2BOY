@@ -19,3 +19,10 @@ docs/*
 tests/KnownIssues.md
 tests/CPUValidation.md
 tests/BusDMAValidation.md
+tests/PPUTimingValidation.md
+tests/PPUSpriteValidation.md
+tests/PPUFetchValidation.md
+tests/PPUAccessValidation.md
+tests/PPUAlignmentValidation.md
+tests/IOValidation.md
+tests/CompareFrames.py
