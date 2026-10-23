@@ -81,6 +81,13 @@ namespace R2BOY::Test
                 check(ppu.frameNumber() == 2 && ppu.mode() == 1, "render publishes second frame at VBlank");
             }
 
+            // Ensaios da cadência normal devem começar após a linha especial de LCD on.
+            void steady(std::uint8_t lcdc = 0x91)
+            {
+                bus.write(0xFF40, lcdc);
+                advance(70224);
+            }
+
             std::uint32_t pixel(unsigned x, unsigned y = 0) const { return ppu.framebuffer()[y * 160 + x]; }
         };
 
@@ -90,7 +97,7 @@ namespace R2BOY::Test
             check(f.bus.read(0xFF44) == 0 && (f.bus.read(0xFF41) & 0x87) == 0x84, "LCD off LY, STAT mask and coincidence");
             f.bus.write(0x8000, 0x12);
             f.bus.write(0xFE00, 0x34);
-            f.bus.write(0xFF40, 0x91);
+            f.steady();
             check(f.ppu.mode() == 2 && f.bus.read(0xFE00) == 0xFF && f.bus.read(0x8000) == 0x12,
                   "mode 2 blocks OAM but permits VRAM");
             f.bus.write(0xFE00, 0x99);
@@ -123,7 +130,7 @@ namespace R2BOY::Test
             Fixture f(true); // Evita a escrita espúria DMG neste teste da linha STAT.
             f.bus.write(0xFF41, 0x20);
             check((f.interrupts.readIF() & 2) == 0, "LCD off gates STAT interrupt line");
-            f.bus.write(0xFF40, 0x91);
+            f.steady();
             check((f.interrupts.readIF() & 2) != 0, "mode 2 STAT rising edge");
             f.interrupts.writeIF(0);
             f.advance(4);
@@ -137,7 +144,7 @@ namespace R2BOY::Test
             f.bus.write(0xFF41, 0);
             f.interrupts.writeIF(0);
             f.advance(65664 - 456);
-            check(f.bus.read(0xFF44) == 144 && f.ppu.mode() == 1 && f.ppu.frameNumber() == 1,
+            check(f.bus.read(0xFF44) == 144 && f.ppu.mode() == 1 && f.ppu.frameNumber() == 2,
                   "VBlank begins after 144 visible lines");
             check((f.interrupts.readIF() & 1) != 0, "VBlank requests interrupt");
             f.interrupts.writeIF(0);
@@ -155,6 +162,257 @@ namespace R2BOY::Test
             dmg.bus.write(0xFF40, 0x91);
             dmg.bus.write(0xFF41, 0);
             check((dmg.interrupts.readIF() & 2) != 0, "DMG STAT write quirk");
+        }
+
+        void completeFrameCadence()
+        {
+            for (unsigned fine = 0; fine < 8; ++fine)
+            {
+                Fixture f;
+                f.ppu.setUnlimitedSprites(false);
+                f.ppu.reset(false, false, true); // Perfil ligado, sem a linha especial de LCD on.
+                f.bus.write(0xFF43, static_cast<std::uint8_t>(fine));
+                for (unsigned frame = 0; frame < 2; ++frame)
+                {
+                    for (unsigned line = 0; line < 154; ++line)
+                    {
+                        unsigned modes[4]{};
+                        f.interrupts.writeIF(0);
+                        for (unsigned dot = 0; dot < 456; ++dot)
+                        {
+                            check(f.ppu.dot() == dot, "every scanline must retain its 456-dot phase");
+                            const auto expectedLY = line == 153 && dot >= 4 ? 0 : line;
+                            check(f.bus.read(0xFF44) == expectedLY, "LY must track visible/VBlank lines including early line-153 reset");
+                            const auto mode = f.ppu.mode();
+                            ++modes[mode];
+                            check(f.ppu.blocksVRAM() == (mode == 3) &&
+                                      f.ppu.blocksOAM() == (mode == 2 || mode == 3),
+                                  "regular mode changes must consistently gate CPU video-memory access");
+                            f.advance(1);
+                        }
+                        if (line < 144)
+                            check(modes[2] == 80 && modes[3] == 172 + fine && modes[0] == 204 - fine && modes[1] == 0,
+                                  "SCX penalty must lengthen mode 3 and shorten HBlank without changing line length");
+                        else
+                            check(modes[1] == 456, "all ten VBlank lines must stay in mode 1 even while LY reads zero");
+                        check(bool(f.interrupts.readIF() & 1) == (line == 143),
+                              "VBlank IRQ must occur only on entry to line 144");
+                    }
+                    check(f.ppu.frameNumber() == frame + 1 && f.ppu.dot() == 0 && f.ppu.mode() == 2 &&
+                              f.bus.read(0xFF44) == 0,
+                          "each 70224-dot frame must return to line zero OAM search");
+                }
+            }
+        }
+
+        void lcdStartupAndCoincidence()
+        {
+            for (const bool color : {false, true})
+            {
+                Fixture startup(color);
+                startup.ppu.setUnlimitedSprites(false);
+                startup.bus.write(0xFF41, 8);
+                startup.bus.write(0xFF40, 0x91);
+                check(startup.ppu.mode() == 0 && !startup.ppu.blocksOAM() && !startup.ppu.blocksVRAM() &&
+                          !(startup.interrupts.readIF() & 2),
+                      "LCD startup reports mode zero with accessible memory but no HBlank interrupt");
+                startup.advance(80);
+                check(startup.ppu.mode() == 3 && !(startup.interrupts.readIF() & 2),
+                      "startup must enter transfer without a normal mode-2 interrupt");
+                startup.advance(172);
+                check(startup.ppu.mode() == 0 && (startup.interrupts.readIF() & 2),
+                      "real HBlank after startup must raise the enabled mode-zero source");
+
+                for (const bool previous : {false, true})
+                {
+                    for (const bool next : {false, true})
+                    {
+                        Fixture f(color);
+                        f.ppu.reset(color, color, true);
+                        f.bus.write(0xFF45, previous ? 144 : 1);
+                        f.bus.write(0xFF41, 0x40);
+                        f.advance(65664);
+                        check(bool(f.bus.read(0xFF41) & 4) == previous, "coincidence fixture must reach the requested VBlank state");
+                        f.interrupts.writeIF(0);
+                        f.bus.write(0xFF40, 0);
+                        f.bus.write(0xFF45, next ? 0 : 1);
+                        f.advance(1000);
+                        check(f.bus.read(0xFF44) == 0 && bool(f.bus.read(0xFF41) & 4) == previous &&
+                                  !(f.interrupts.readIF() & 2),
+                              "LCD off must freeze comparison despite LY reset, LYC writes and elapsed time");
+                        f.bus.write(0xFF40, 0x91);
+                        check(bool(f.bus.read(0xFF41) & 4) == next &&
+                                  bool(f.interrupts.readIF() & 2) == (!previous && next),
+                              "LCD on must recompute coincidence and request STAT only on a new rising edge");
+                    }
+                }
+
+                for (const auto mask : {0x20, 0x28})
+                {
+                    Fixture f(color);
+                    f.ppu.reset(color, color, true);
+                    f.bus.write(0xFF41, static_cast<std::uint8_t>(mask));
+                    f.advance(65663);
+                    check(f.ppu.mode() == 0 && f.bus.read(0xFF44) == 143, "VBlank edge fixture must be in final HBlank");
+                    f.interrupts.writeIF(0);
+                    f.advance(1);
+                    check(f.ppu.mode() == 1 && (f.interrupts.readIF() & 1), "line 144 must report VBlank and request VBlank IRQ");
+                    check(bool(f.interrupts.readIF() & 2) == (!color && mask == 0x20),
+                          "DMG mode-2 source pulses at VBlank entry unless another source already holds STAT high");
+                    f.interrupts.writeIF(0);
+                    f.advance(456 * 9);
+                    check(!(f.interrupts.readIF() & 3), "VBlank entry requests must not repeat on later VBlank lines");
+                }
+            }
+        }
+
+        void statWritePulse()
+        {
+            for (unsigned profile = 0; profile < 3; ++profile)
+            {
+                const bool dmg = profile == 0;
+                Fixture f(profile == 1);
+                f.ppu.reset(!dmg, profile == 1, true);
+                f.bus.write(0xFF45, 1);
+                f.bus.write(0xFF41, 0);
+                check(bool(f.interrupts.readIF() & 2) == dmg && (f.bus.read(0xFF41) & 0x78) == 0,
+                      "STAT write pulse is internal and exists only on physical DMG");
+                f.interrupts.writeIF(0);
+                f.advance(1);
+                f.bus.write(0xFF45, 0);
+                check(!(f.interrupts.readIF() & 2), "LYC change during an already-high write pulse must not retrigger STAT");
+                f.bus.write(0xFF45, 1);
+                f.advance(2);
+                f.bus.write(0xFF41, 0);
+                check(!(f.interrupts.readIF() & 2), "overlapping STAT writes must retain the shared line level");
+                f.advance(4);
+                f.bus.write(0xFF41, 0);
+                check(bool(f.interrupts.readIF() & 2) == dmg,
+                      "a new STAT write may raise an edge after the previous pulse expires");
+
+                Fixture crossing(profile == 1);
+                crossing.ppu.reset(!dmg, profile == 1, true);
+                crossing.bus.write(0xFF45, 1);
+                crossing.advance(250);
+                crossing.bus.write(0xFF41, 0);
+                check(!(crossing.interrupts.readIF() & 2), "STAT pulse in mode 3 with unequal LY/LYC starts low");
+                crossing.advance(1);
+                check(!(crossing.interrupts.readIF() & 2), "STAT pulse must not create an IRQ before HBlank");
+                crossing.advance(1);
+                check(bool(crossing.interrupts.readIF() & 2) == dmg,
+                      "a still-pending write pulse must observe entry to HBlank");
+                crossing.interrupts.writeIF(0);
+                crossing.advance(2);
+                check(!(crossing.interrupts.readIF() & 2), "pulse expiration must not request another interrupt");
+                crossing.bus.write(0xFF41, 0x40);
+                crossing.interrupts.writeIF(0);
+                crossing.bus.write(0xFF40, 0);
+                crossing.bus.write(0xFF45, 0);
+                crossing.advance(4);
+                check(!(crossing.interrupts.readIF() & 2), "LCD off cancels a pending pulse without recomputing frozen coincidence");
+            }
+        }
+
+        void videoMemoryAccess()
+        {
+            for (unsigned profile = 0; profile < 3; ++profile)
+            {
+                Fixture f(profile == 1);
+                f.ppu.reset(profile != 0, profile == 1, true);
+                f.ppu.setUnlimitedSprites(false);
+                const auto probe = [&](bool vramBlocked, bool oamBlocked)
+                {
+                    for (const auto address : {0x8000, 0x9FFF, 0xFE00, 0xFE9F})
+                    {
+                        const bool blocked = address >= 0xFE00 ? oamBlocked : vramBlocked;
+                        const auto a = static_cast<std::uint16_t>(address);
+                        f.memory.write(a, 0x35);
+                        check(f.bus.read(a) == (blocked ? 0xFF : 0x35), "CPU video reads must respect both ends of VRAM/OAM");
+                        f.bus.write(a, 0x6A);
+                        check(f.memory.read(a) == (blocked ? 0x35 : 0x6A), "blocked CPU writes must leave video memory intact");
+                    }
+                };
+                f.advance(79);
+                probe(false, true);
+                f.advance(1);
+                probe(true, true);
+                f.advance(171);
+                probe(true, true);
+                f.advance(1);
+                probe(false, false);
+                f.advance(203);
+                probe(false, false);
+                f.advance(1);
+                probe(false, true);
+                f.advance(65664 - 456);
+                probe(false, false);
+                f.advance(9 * 456 + 4);
+                check(f.bus.read(0xFF44) == 0 && f.ppu.mode() == 1, "early LY zero must remain in VBlank");
+                probe(false, false);
+                f.advance(452);
+                probe(false, true);
+                f.advance(80);
+                probe(true, true);
+                f.bus.write(0xFF40, 0);
+                probe(false, false);
+            }
+
+            // LCD off libera a PPU, mas não desativa a posse de OAM pelo DMA.
+            Fixture dma;
+            dma.bus.write(0xC000, 0x42);
+            dma.bus.write(0xFF46, 0xC0);
+            dma.advance(8);
+            dma.bus.write(0xFF40, 0);
+            dma.bus.write(0xFE00, 0x99);
+            check(dma.bus.read(0xFE00) == 0xFF && dma.memory.read(0xFE00) == 0x42,
+                  "DMA must keep OAM blocked while LCD is off");
+            dma.advance(640);
+            check(dma.bus.read(0xFE00) == 0x42, "OAM must become accessible after DMA releases it with LCD off");
+        }
+
+        void boardVideoInterrupts()
+        {
+            for (const auto model : {Core::Model::DMG, Core::Model::CGB})
+            {
+                Core::Board board(model);
+                std::vector<std::uint8_t> rom(32768);
+                rom[0x143] = model == Core::Model::CGB ? 0x80 : 0;
+                rom[0x40] = rom[0x48] = 0xD9; // RETI em VBlank e STAT.
+                rom[0x100] = 0xFB;
+                rom[0x102] = 0x76; // EI; NOP; HALT com IE=0.
+                board.loadCartridge(rom, "video IRQ integration");
+                board.setUnlimitedSprites(false);
+                board.write(0xFF0F, 0);
+                board.step();
+                board.step();
+                board.step();
+                check(board.cpu().halted(), "video IRQ fixture must enter HALT with IME on and IE off");
+                board.write(0xFF40, 0);
+                board.write(0xFF45, 1);
+                board.write(0xFF41, 0x10);
+                board.write(0xFF40, 0x91);
+                const auto start = board.baseClockCycles();
+                while (board.baseClockCycles() - start < 65664 - 16)
+                    board.step();
+                board.write(0xFF46, 0xC0);
+                while (board.baseClockCycles() - start < 65664)
+                    board.step();
+                check(board.frameNumber() == 1 && board.read(0xFF44) == 144 && (board.read(0xFF41) & 3) == 1 &&
+                          (board.read(0xFF0F) & 3) == 3 && board.cpu().halted(),
+                      "VBlank publication and both video IRQs must occur with IE off during DMA and HALT");
+                while (board.baseClockCycles() - start < 65664 - 16 + 648)
+                    board.step();
+                check((board.read(0xFF0F) & 3) == 3, "DMA completion must preserve pending video IRQs");
+                board.write(0xFFFF, 3);
+                check(board.step() == 20 && board.cpu().registers().pc == 0x40 && (board.read(0xFF0F) & 3) == 2,
+                      "enabling IE must wake HALT and service VBlank before STAT without losing STAT");
+                board.step(); // RETI.
+                check(board.step() == 20 && board.cpu().registers().pc == 0x48 && !(board.read(0xFF0F) & 3),
+                      "RETI must allow the pending STAT interrupt to be serviced next");
+                board.step(); // RETI.
+                board.step();
+                check(!(board.read(0xFF0F) & 3), "acknowledging STAT while its source stays high must not retrigger it");
+            }
         }
 
         void backgroundAndScroll()
@@ -245,6 +503,163 @@ namespace R2BOY::Test
             check(raster.pixel(0) == white, "LCD off immediately publishes blank display");
         }
 
+        void windowDisableAndRestart()
+        {
+            for (unsigned fine = 0; fine < 8; ++fine)
+            {
+                for (const bool moveWX : {false, true})
+                {
+                    Fixture f;
+                    f.ppu.setUnlimitedSprites(false);
+                    f.tile(0, 0xFF, 0); // BG cinza claro.
+                    f.tile(1, 0, 0);    // Janela: linha 0 escura, linha 1 preta, linha 2 branca.
+                    f.memory.write(0x8011, 0xFF);
+                    f.memory.write(0x8012, 0xFF);
+                    f.memory.write(0x8013, 0xFF);
+                    for (unsigned i = 0; i < 32; ++i)
+                        f.memory.write(static_cast<std::uint16_t>(0x9C00 + i), 1);
+                    f.bus.write(0xFF43, static_cast<std::uint8_t>(fine));
+                    f.bus.write(0xFF4B, 7);
+                    f.steady(0xF1);
+                    f.advance(101 + fine); // Três pixels da janela já saíram.
+                    f.bus.write(0xFF40, 0xD1);
+                    f.advance(5); // Termina o tile corrente, em vez de cortar no pixel 3.
+                    if (moveWX)
+                        f.bus.write(0xFF4B, 31); // Novo comparador em x=24, à frente do feixe.
+                    f.bus.write(0xFF40, 0xF1);
+                    f.advance(65664 - 106 - fine);
+                    for (unsigned x = 0; x < 160; ++x)
+                    {
+                        const auto expected = x < 8 ? dark : moveWX && x >= 24 ? black : light;
+                        check(f.pixel(x) == expected,
+                              "DMG must finish the window tile, resume BG without fine-scroll discard, and restart only at future WX");
+                    }
+                    check(f.pixel(moveWX ? 24 : 0, 1) == (moveWX ? white : black),
+                          "each window restart must advance its internal row even within the same scanline");
+                }
+            }
+
+            for (const bool future : {false, true})
+            {
+                Fixture f;
+                f.ppu.setUnlimitedSprites(false);
+                f.tile(0, 0xFF, 0);
+                f.tile(1, 0, 0xFF);
+                for (unsigned i = 0; i < 32; ++i)
+                    f.memory.write(static_cast<std::uint16_t>(0x9C00 + i), 1);
+                f.bus.write(0xFF4B, 15); // x=8 já terá passado quando a janela for habilitada.
+                f.steady(0xD1);
+                f.advance(124); // x=32.
+                f.bus.write(0xFF40, 0xF1);
+                if (future)
+                    f.bus.write(0xFF4B, 87);
+                f.advance(65664 - 124);
+                for (unsigned x = 0; x < 160; ++x)
+                    check(f.pixel(x) == (future && x >= 80 ? dark : light),
+                          "enabling a window behind the beam must wait for a new horizontal match");
+            }
+        }
+
+        void fetchRegisterSampling()
+        {
+            for (unsigned change = 0; change < 3; ++change)
+            {
+                Fixture f;
+                f.ppu.setUnlimitedSprites(false);
+                f.tile(0, 0xFF, 0);
+                f.tile(1, 0, 0xFF);
+                f.tile(2, 0xFF, 0xFF);
+                f.tile(3, 0, 0);
+                for (unsigned x = 0; x < 32; ++x)
+                {
+                    f.memory.write(static_cast<std::uint16_t>(0x9800 + x), change == 0 ? x % 4 : 0);
+                    f.memory.write(static_cast<std::uint16_t>(0x9820 + x), 1);
+                    f.memory.write(static_cast<std::uint16_t>(0x9C00 + x), 1);
+                }
+                f.steady();
+                f.advance(90); // Primeiro tile buscado; o seguinte aguarda o FIFO.
+                if (change == 0)
+                    f.bus.write(0xFF43, 15); // Coarse SCX muda; fine SCX não é reaplicado nesta linha.
+                else if (change == 1)
+                    f.bus.write(0xFF42, 8);
+                else
+                    f.bus.write(0xFF40, 0x99);
+                f.advance(162);
+                check(f.ppu.mode() == 0 && f.ppu.dot() == 252,
+                      "mid-transfer coarse scroll or map changes must not add a new fine-scroll penalty");
+                f.advance(65664 - 252);
+                check(f.pixel(0) == light && f.pixel(7) == light,
+                      "register writes must preserve tile pixels already fetched into the FIFO");
+                check(f.pixel(8) == (change == 0 ? black : dark) &&
+                          f.pixel(16) == (change == 0 ? white : dark),
+                      "later tile fetches must sample coarse SCX, coarse SCY and LCDC map selection again");
+            }
+        }
+
+        void sharedFetcherAlignment()
+        {
+            Fixture f;
+            f.ppu.setUnlimitedSprites(false);
+            f.sprite(0, 8, 16, 1); // Transparente, mas disputa a busca de tiles.
+            f.memory.write(0x8002, 0xFF); // Plano baixo da linha 1.
+            f.memory.write(0x8005, 0xFF); // Plano alto da linha 2.
+            f.steady(0x93);
+            f.advance(94); // Índice do próximo BG já lido durante a espera de OBJ.
+            f.bus.write(0xFF42, 1);
+            f.advance(2);
+            f.bus.write(0xFF42, 2);
+            f.advance(65664 - 96);
+            check(f.pixel(0) == white && f.pixel(7) == white && f.pixel(8) == black && f.pixel(15) == black,
+                  "BG must advance through address/data phases during OBJ alignment, retaining queued pixels");
+            check(f.pixel(16) == dark, "later DMG planes must sample SCY again after the shared fetch resumes");
+
+            Fixture overlap;
+            overlap.ppu.setUnlimitedSprites(false);
+            overlap.sprite(0, 8, 16, 1);
+            overlap.sprite(1, 9, 16, 1);
+            overlap.steady(0x93);
+            overlap.advance(104);
+            overlap.bus.write(0xFF43, 8); // Muda geometria de tile, não o estágio real do fetcher.
+            overlap.advance(164);
+            check(overlap.ppu.mode() == 3, "two overlapping OBJ fetches must preserve the last transfer dot");
+            overlap.advance(1);
+            check(overlap.ppu.mode() == 0,
+                  "the second OBJ must use the ready fetcher instead of recomputing a wait from changed SCX");
+        }
+
+        void fetchAddressAndState()
+        {
+            Fixture f;
+            f.tile(1, 0xFF, 0);
+            f.tile(2, 0, 0xFF);
+            f.tile(3, 0xFF, 0xFF);
+            f.memory.write(0x9801, 1);
+            f.memory.write(0x9802, 3);
+            f.steady();
+            f.advance(93); // Endereço do próximo índice escolhido em T1; leitura em T2 pendente.
+            std::vector<std::uint8_t> snapshot;
+            Core::StateArchive writer(snapshot);
+            writer(f.ppu, f.memory, f.interrupts, f.dma);
+            const auto finish = [](Fixture &scene)
+            {
+                scene.memory.write(0x9801, 2); // Porta interna: altera dado, preserva endereço T1.
+                scene.bus.write(0xFF43, 8);
+                scene.advance(65664 - 93);
+                check(scene.pixel(0) == white && scene.pixel(8) == dark,
+                      "map address must latch at T1, while tile-index data is read at T2");
+                std::vector<std::uint8_t> state;
+                Core::StateArchive archive(state);
+                archive(scene.ppu, scene.memory, scene.interrupts, scene.dma);
+                return state;
+            };
+            const auto future = finish(f);
+            Fixture restored;
+            Core::StateArchive reader(static_cast<const std::vector<std::uint8_t> &>(snapshot));
+            reader(restored.ppu, restored.memory, restored.interrupts, restored.dma);
+            reader.finish();
+            check(finish(restored) == future, "loading between address and data phases must reproduce the fetch exactly");
+        }
+
         void spritesAndPriority()
         {
             Fixture f;
@@ -282,11 +697,140 @@ namespace R2BOY::Test
 
             Fixture timing;
             timing.sprite(0, 8, 16, 0);
-            timing.bus.write(0xFF40, 0x93);
+            timing.steady(0x93);
             timing.advance(262);
             check(timing.ppu.mode() == 3, "object fetch stalls pixel output even for transparent pixels");
             timing.advance(1);
             check(timing.ppu.mode() == 0, "aligned object incurs eleven-dot penalty");
+        }
+
+        void objectFetchSampling()
+        {
+            for (const bool color : {false, true})
+            {
+                Fixture f(color);
+                f.ppu.setUnlimitedSprites(false);
+                f.tile(1, 0xFF, 0);
+                f.tile(2, 0, 0xFF, color ? 1 : 0);
+                if (color)
+                    f.color(true, 1, 2, 0x001F);
+                f.sprite(0, 8, 16, 1);
+                f.steady(0x93);
+                f.advance(80);
+                // Porta interna: simula OAM alterada pelo DMA, não uma escrita
+                // CPU (bloqueada). Y/X já selecionados não devem ser relidos.
+                f.sprite(0, 80, 80, 2, color ? 0x09 : 0x10);
+                if (!color)
+                    f.bus.write(0xFF49, 0x30); // ID 2 -> preto na OBP1.
+                f.advance(19);
+                // Tile/atributos já buscados; alteração posterior não os substitui.
+                f.sprite(0, 80, 80, 1);
+                f.advance(65664 - 99);
+                check(f.pixel(0) == (color ? 0xFFFF0000 : black) && f.pixel(8) == white,
+                      "OBJ fetch must use mode-3 tile/flags with mode-2 Y/X and latch its metadata");
+            }
+
+            Fixture planes;
+            planes.tile(2, 0, 0xFF);
+            planes.tile(3, 0xFF, 0);
+            planes.sprite(0, 8, 16, 3);
+            planes.steady(0x93);
+            planes.advance(101); // Plano baixo já lido em 8x8.
+            planes.bus.write(0xFF40, 0x97); // Plano alto usa índice par em 8x16.
+            planes.advance(65664 - 101);
+            check(planes.pixel(0) == black && planes.pixel(7) == black,
+                  "LCDC object size must be sampled separately for each data plane");
+
+            // Busca cancelada no DMG, mas não no CGB físico, mesmo em modo DMG.
+            for (unsigned profile = 0; profile < 3; ++profile)
+            {
+                Fixture f(profile == 1);
+                if (profile == 2)
+                    f.ppu.reset(true, false, false);
+                f.ppu.setUnlimitedSprites(false);
+                f.sprite(0, 8, 16, 0);
+                f.steady(0x93);
+                f.advance(98);
+                f.bus.write(0xFF40, 0x91);
+                f.advance(3);
+                f.bus.write(0xFF40, 0x93);
+                f.advance(159); // Dot 260: DMG cancelado termina antes de 263.
+                check(f.ppu.mode() == (profile == 0 ? 0u : 3u),
+                      "disabling OBJ mid-fetch must cancel only on physical DMG hardware");
+                f.advance(3);
+                check(f.ppu.mode() == 0, "CGB fetch must finish its original penalty with OBJ off");
+
+                Fixture disabled(profile == 1);
+                if (profile == 2)
+                    disabled.ppu.reset(true, false, false);
+                disabled.sprite(0, 8, 16, 0);
+                disabled.steady(0x91);
+                disabled.advance(252);
+                check(disabled.ppu.mode() == (profile == 0 ? 0u : 3u),
+                      "physical CGB must fetch selected objects even when OBJ was disabled before mode 3");
+            }
+        }
+
+        void objectSelectionAndMasking()
+        {
+            for (const bool color : {false, true})
+                for (const bool transparent : {false, true})
+                {
+                    Fixture f(color);
+                    f.ppu.setUnlimitedSprites(false);
+                    f.tile(0, 0xFF, 0);
+                    f.tile(1, transparent ? 0 : 0xFF, 0);
+                    f.tile(2, 0, 0xFF);
+                    f.sprite(0, 8, 16, 1, 0x80);
+                    f.sprite(1, 8, 16, 2);
+                    if (color)
+                    {
+                        f.color(false, 0, 1, 0x03E0);
+                        f.color(true, 0, 2, 0x001F);
+                    }
+                    f.render(0x93);
+                    check(f.pixel(0) == (transparent ? (color ? 0xFFFF0000 : dark) :
+                                                                      (color ? 0xFF00FF00 : light)),
+                          "OBJ priority precedes BG masking; only raw zero exposes the lower OBJ");
+                }
+
+            Fixture offscreen;
+            offscreen.ppu.setUnlimitedSprites(false);
+            offscreen.tile(1, 0xFF, 0xFF);
+            for (unsigned i = 0; i < 10; ++i)
+                offscreen.sprite(i, 168, 16, 1);
+            offscreen.sprite(10, 8, 16, 1);
+            offscreen.steady(0x93);
+            offscreen.advance(252);
+            check(offscreen.ppu.mode() == 0, "right-hidden objects count in OAM selection but cause no fetch stalls");
+            offscreen.advance(65664 - 252);
+            check(offscreen.pixel(0) == white, "select first ten by OAM order before sorting by X");
+
+            Fixture opaqueWhite;
+            opaqueWhite.tile(1, 0xFF, 0);
+            opaqueWhite.tile(2, 0, 0xFF);
+            opaqueWhite.sprite(0, 8, 16, 1);
+            opaqueWhite.sprite(1, 8, 16, 2, 0x10);
+            opaqueWhite.bus.write(0xFF48, 0);    // ID 1 branco, mas não transparente.
+            opaqueWhite.bus.write(0xFF49, 0x30);
+            opaqueWhite.render(0x93);
+            check(opaqueWhite.pixel(0) == white, "palette white must not make a nonzero OBJ color transparent");
+
+            for (unsigned fine = 0; fine < 8; ++fine)
+                for (unsigned x = 0; x <= 168; ++x)
+                {
+                    Fixture f;
+                    f.ppu.setUnlimitedSprites(false);
+                    f.sprite(0, static_cast<std::uint8_t>(x), 16, 0);
+                    f.bus.write(0xFF43, static_cast<std::uint8_t>(fine));
+                    f.steady(0x93);
+                    const unsigned alignment = (x + fine) & 7;
+                    const unsigned penalty = x == 168 ? 0 : x == 0 ? 11 : 6 + (alignment < 5 ? 5 - alignment : 0);
+                    f.advance(251 + fine + penalty);
+                    check(f.ppu.mode() == 3, "OBJ fetch alignment must preserve the last mode-3 dot");
+                    f.advance(1);
+                    check(f.ppu.mode() == 0, "OBJ penalties must respect clipping and every fine-SCX alignment");
+                }
         }
 
         void unlimitedSprites()
@@ -483,9 +1027,20 @@ namespace R2BOY::Test
         {
             modesAndBus();
             frameAndInterrupts();
+            completeFrameCadence();
+            lcdStartupAndCoincidence();
+            statWritePulse();
+            videoMemoryAccess();
+            boardVideoInterrupts();
             backgroundAndScroll();
             windowAndRaster();
+            windowDisableAndRestart();
+            fetchRegisterSampling();
+            sharedFetcherAlignment();
+            fetchAddressAndState();
             spritesAndPriority();
+            objectFetchSampling();
+            objectSelectionAndMasking();
             unlimitedSprites();
             colorPalettesAndAttributes();
             dmaAndBoard();

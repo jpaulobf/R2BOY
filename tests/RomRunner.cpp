@@ -1,19 +1,20 @@
 #include "Core/Board.h"
 #include "Common/RomFile.h"
 #include <array>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 
 namespace R2BOY::Test
 {
-    // Executor de ROMs Blargg/Mooneye sem SDL, saves ou hacks, limitado por T-cycles.
-    // Códigos de saída: 0=Passed, 1=Failed/lock/erro, 2=limite sem resultado.
+    // Blargg/Mooneye sem SDL ou hacks; Mealybug captura o frame no breakpoint.
+    // Saídas: 0=Passed/capturado (não implica imagem correta), 1=falha, 2=timeout.
     int runROM(int argc, char **argv)
     {
-        if (argc < 2 || argc > 5)
+        if (argc < 2 || argc > 6)
         {
-            std::cerr << "Usage: rom_runner <rom.gb> [max-T-cycles=1000000000] [dmg|cgb] [blargg|mooneye]\n";
+            std::cerr << "Usage: rom_runner <rom.gb> [max-T-cycles=1000000000] [dmg|cgb] [blargg|mooneye|mealybug] [frame.ppm for mealybug]\n";
             return 1;
         }
         try
@@ -39,14 +40,19 @@ namespace R2BOY::Test
                     throw std::runtime_error("Model must be dmg or cgb.");
             }
             bool mooneye = false;
-            if (argc == 5)
+            bool mealybug = false;
+            if (argc >= 5)
             {
                 const std::string protocol = argv[4];
                 if (protocol == "mooneye")
                     mooneye = true;
+                else if (protocol == "mealybug")
+                    mealybug = true;
                 else if (protocol != "blargg")
-                    throw std::runtime_error("Protocol must be blargg or mooneye.");
+                    throw std::runtime_error("Protocol must be blargg, mooneye or mealybug.");
             }
+            if (mealybug != (argc == 6))
+                throw std::runtime_error("Mealybug requires an output PPM path; other protocols do not accept one.");
             const auto path = std::filesystem::u8path(argv[1]);
             Core::Board board(model);
             board.setCPUOverclock(false);
@@ -57,12 +63,26 @@ namespace R2BOY::Test
             while (board.cpu().cycles() < limit)
             {
                 const auto pc = board.cpu().registers().pc;
-                const bool breakpoint = mooneye && board.read(pc) == 0x40;
+                const bool breakpoint = (mooneye || mealybug) && board.read(pc) == 0x40;
                 const auto elapsed = board.step();
                 if (board.cpu().locked())
                     throw std::runtime_error("CPU locked on an invalid opcode.");
                 if (breakpoint && elapsed == 4 && board.cpu().registers().pc == static_cast<std::uint16_t>(pc + 1))
                 {
+                    if (mealybug)
+                    {
+                        std::ofstream frame(std::filesystem::u8path(argv[5]), std::ios::binary);
+                        frame << "P6\n160 144\n255\n";
+                        for (const auto pixel : board.framebuffer())
+                            for (const unsigned shift : {16u, 8u, 0u})
+                                frame.put(static_cast<char>(pixel >> shift));
+                        frame.close();
+                        if (!frame)
+                            throw std::runtime_error("Failed to write captured frame.");
+                        std::cout << "Result: FRAME CAPTURED (Mealybug, " << board.cpu().cycles()
+                                  << " T-cycles; compare image separately)\n";
+                        return 0;
+                    }
                     const auto &r = board.cpu().registers();
                     const std::array<std::uint8_t, 6> actual{r.b, r.c, r.d, r.e, r.h, r.l};
                     constexpr std::array<std::uint8_t, 6> passed{3, 5, 8, 13, 21, 34};
@@ -80,12 +100,12 @@ namespace R2BOY::Test
                 const auto text = board.takeSerialOutput();
                 std::cout << text << std::flush;
                 output += text;
-                if (!mooneye && (output.find("Failed") != std::string::npos || output.find("FAILED") != std::string::npos))
+                if (!mooneye && !mealybug && (output.find("Failed") != std::string::npos || output.find("FAILED") != std::string::npos))
                 {
                     std::cout << "\nResult: FAIL (" << board.cpu().cycles() << " T-cycles)\n";
                     return 1;
                 }
-                if (!mooneye && (output.find("Passed\n") != std::string::npos || output.find("Passed all tests\n") != std::string::npos))
+                if (!mooneye && !mealybug && (output.find("Passed\n") != std::string::npos || output.find("Passed all tests\n") != std::string::npos))
                 {
                     std::cout << "\nResult: PASS (" << board.cpu().cycles() << " T-cycles)\n";
                     return 0;

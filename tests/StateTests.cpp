@@ -152,10 +152,176 @@ namespace
 
             auto previousFormat = snapshot;
             constexpr auto versionOffset = sizeof(std::uint32_t) + sizeof("R2BOY-STATE") - 1;
-            previousFormat[versionOffset] = 3;
+            previousFormat[versionOffset] = 8;
             rejects([&] { board.loadState(previousFormat); });
-            check(board.saveState() == future, "Rejecting format 3 must preserve the running DMA");
+            check(board.saveState() == future, "Rejecting format 6 must preserve the running DMA");
         }
+    }
+
+    void ppuTransitionStates()
+    {
+        Core::Board board;
+        board.loadCartridge(rom(), "PPU transition state");
+        board.write(0xFF45, 1);
+        board.write(0xFF40, 0); // Congela coincidência falsa, apesar de LY voltar a zero.
+        board.write(0xFF45, 0);
+        board.write(0xFF41, 0x40);
+        board.write(0xFF0F, 0);
+        check(!(board.read(0xFF41) & 4), "LCD-off state fixture must retain a frozen false comparison");
+        const auto disabled = board.saveState();
+        board.write(0xFF40, 0x91);
+        check((board.read(0xFF41) & 7) == 4 && (board.read(0xFF0F) & 2),
+              "restored LCD startup must compare again and raise a new LYC edge");
+        const auto startup = board.saveState();
+        board.loadState(disabled);
+        check(board.saveState() == disabled && !(board.read(0xFF41) & 4),
+              "save state must preserve frozen coincidence independently of current LY and LYC");
+        board.write(0xFF40, 0x91);
+        check(board.saveState() == startup, "LCD off/on must replay the same STAT edge and startup phase");
+        for (unsigned i = 0; i < 100; ++i)
+            board.step();
+        const auto future = board.saveState();
+        board.loadState(startup);
+        for (unsigned i = 0; i < 100; ++i)
+            board.step();
+        check(board.saveState() == future, "loading during startup must preserve the first line's mode sequence");
+    }
+
+    void windowFetchStates()
+    {
+        Core::Board board;
+        auto image = rom();
+        image[0x100] = 0x76; // HALT fornece um M-cycle por step, com IE=0.
+        board.loadCartridge(image, "window fetch state");
+        board.write(0xFF40, 0);
+        board.write(0xFF47, 0xE4);
+        for (unsigned row = 0; row < 8; ++row)
+        {
+            board.write(static_cast<std::uint16_t>(0x8000 + row * 2), 0xFF);
+            board.write(static_cast<std::uint16_t>(0x8011 + row * 2), 0xFF);
+        }
+        board.write(0x8012, 0xFF);
+        for (unsigned x = 0; x < 32; ++x)
+            board.write(static_cast<std::uint16_t>(0x9C00 + x), 1);
+        board.write(0xFF4B, 7);
+        board.write(0xFF40, 0xF1);
+        while (board.baseClockCycles() < 70224 + 104)
+            board.step();
+        board.write(0xFF40, 0xD1); // Desliga no meio do tile: faltam dois pixels da janela.
+        const auto snapshot = board.saveState();
+        const auto finish = [&]()
+        {
+            board.step();
+            board.write(0xFF4B, 31);
+            board.write(0xFF40, 0xF1);
+            while (board.frameNumber() < 2)
+                board.step();
+            check(board.framebuffer()[7] == 0xFF555555 && board.framebuffer()[8] == 0xFFAAAAAA &&
+                      board.framebuffer()[24] == 0xFF000000,
+                  "resumed window tile must finish before BG and the next window row are emitted");
+            return board.saveState();
+        };
+        const auto future = finish();
+        board.loadState(snapshot);
+        check(board.saveState() == snapshot, "window tile position and queued pixels must round-trip");
+        check(finish() == future, "window disable/restart must replay identically after a mid-tile load");
+    }
+
+    void statWritePulseStates()
+    {
+        Core::Board board;
+        auto image = rom();
+        image[0x100] = 0x76;
+        board.loadCartridge(image, "STAT pulse state");
+        board.setUnlimitedSprites(false);
+        board.write(0xFF40, 0);
+        board.write(0xFF43, 2);
+        board.write(0xFF45, 1);
+        board.write(0xFF40, 0x91);
+        while (board.baseClockCycles() < 70224 + 252)
+            board.step();
+        check((board.read(0xFF41) & 3) == 3, "STAT state fixture must be two dots before HBlank");
+        board.write(0xFF0F, 0);
+        board.write(0xFF41, 0);
+        const auto snapshot = board.saveState();
+        board.step(); // O pulso cruza HBlank no meio deste M-cycle e então expira.
+        check((board.read(0xFF0F) & 2) && (board.read(0xFF41) & 3) == 0,
+              "pending STAT write must raise the HBlank edge before expiring");
+        const auto future = board.saveState();
+        board.loadState(snapshot);
+        check(board.saveState() == snapshot, "pending STAT pulse must round-trip");
+        board.step();
+        check(board.saveState() == future, "loading a pending STAT pulse must replay its IRQ and expiration");
+    }
+
+    void sharedFetchStates()
+    {
+        for (unsigned dot : {96u, 100u, 108u})
+        {
+            Core::Board board;
+            auto image = rom();
+            image[0x100] = 0x76;
+            board.loadCartridge(image, "shared fetch state");
+            board.setUnlimitedSprites(false);
+            board.write(0xFF40, 0);
+            board.write(0xFE00, 16);
+            board.write(0xFE01, 8);
+            board.write(0xFE04, 16);
+            board.write(0xFE05, 9);
+            board.write(0xFF40, 0x93);
+            while (board.baseClockCycles() < 70224 + dot)
+                board.step();
+            const auto snapshot = board.saveState();
+            const auto finish = [&]()
+            {
+                board.write(0xFF42, 1);
+                while (board.frameNumber() < 2)
+                    board.step();
+                return board.saveState();
+            };
+            const auto future = finish();
+            board.loadState(snapshot);
+            check(board.saveState() == snapshot, "shared BG/OBJ fetch state must round-trip");
+            check(finish() == future, "alignment wait, metadata and object data phases must replay identically");
+        }
+    }
+
+    void objectFetchStates()
+    {
+        Core::Board board;
+        auto image = rom();
+        image[0x100] = 0x76;
+        board.loadCartridge(image, "object fetch state");
+        board.setUnlimitedSprites(false);
+        board.write(0xFF40, 0);
+        board.write(0xFF48, 0xE4);
+        for (unsigned row = 0; row < 8; ++row)
+        {
+            board.write(static_cast<std::uint16_t>(0x8021 + row * 2), 0xFF);
+            board.write(static_cast<std::uint16_t>(0x8030 + row * 2), 0xFF);
+        }
+        board.write(0xFE00, 16);
+        board.write(0xFE01, 8);
+        board.write(0xFE02, 3);
+        board.write(0xFF4B, 7);
+        board.write(0xFF40, 0xB3);
+        while (board.baseClockCycles() < 70224 + 108)
+            board.step();
+        // Plano baixo 8x8 já buscado; plano alto ainda pendente.
+        const auto snapshot = board.saveState();
+        const auto finish = [&]()
+        {
+            board.write(0xFF40, 0xB7);
+            while (board.frameNumber() < 2)
+                board.step();
+            check(board.framebuffer()[0] == 0xFF000000,
+                  "mid-OBJ state must preserve the first plane while the next samples LCDC size");
+            return board.saveState();
+        };
+        const auto future = finish();
+        board.loadState(snapshot);
+        check(board.saveState() == snapshot, "partially fetched OBJ must round-trip exactly");
+        check(finish() == future, "OBJ plane fetch must replay identically after loading");
     }
 
     void unlimitedSpriteStates()
@@ -178,7 +344,7 @@ namespace
         }
         board.write(0xFF48, 0xE4);
         board.write(0xFF40, 0x93);
-        while (board.baseClockCycles() < 120)
+        while (board.baseClockCycles() < 70224 + 120)
             board.step();
         const auto snapshot = board.saveState(); // Captura em modo 3 com trinta objetos extras.
         const auto run = [&]()
@@ -258,6 +424,11 @@ int main()
                 roundTrip(model, type);
         files();
         dmaBusStates();
+        ppuTransitionStates();
+        windowFetchStates();
+        objectFetchStates();
+        sharedFetchStates();
+        statWritePulseStates();
         unlimitedSpriteStates();
         std::cout << "Save state tests passed.\n";
     }

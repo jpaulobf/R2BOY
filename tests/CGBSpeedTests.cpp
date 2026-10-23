@@ -83,6 +83,9 @@ namespace
         f.board.write(0xFF4D, 0);
         f.board.loadState(armed);
         check(f.board.read(0xFF4D) == 0x7F, "save state must restore the armed request");
+        f.board.write(0xFF04, 0);
+        f.board.write(0xFF01, 'P');
+        f.board.write(0xFF02, 0x81);
         f.beginSwitch();
         check(f.board.read(0xFF4D) == 0xFE && f.board.read(0xFF04) == 0,
               "speed switch must expose new speed, clear preparation and reset DIV");
@@ -98,6 +101,8 @@ namespace
         check(!f.board.switchingSpeed() && f.board.clockCycles() - cpuStart == 8200 &&
                   f.board.baseClockCycles() - baseStart == 4100,
               "double-speed stabilization must advance the base clock at half the CPU rate");
+        check(f.board.read(0xFF01) == 'P' && (f.board.read(0xFF02) & 0x80) && !(f.board.read(0xFF0F) & 8),
+              "serial must share the frozen system counter during speed-switch stabilization");
         check(f.board.step() == 12 && f.board.cpu().registers().pc == 0xC002,
               "execution must resume after speed stabilization");
         f.beginSwitch();
@@ -149,6 +154,7 @@ namespace
 
             for (const bool fastSerial : {false, true})
             {
+                f.board.write(0xFF04, 0); // Alinha a fase comum antes de medir oito bits completos.
                 f.board.write(0xFF01, 'A');
                 f.board.write(0xFF02, fastSerial ? 0x83 : 0x81);
                 const auto serialStart = f.board.baseClockCycles();
@@ -355,6 +361,49 @@ namespace
               "overclock must resume after the native switching pause without changing the preference");
     }
 
+    void videoMemoryAndIRQs()
+    {
+        for (const bool doubled : {false, true})
+        {
+            Fixture f;
+            if (doubled)
+                f.doubleSpeed();
+            f.halt();
+            f.board.setUnlimitedSprites(false);
+            f.board.write(0xFF40, 0);
+            f.board.write(0x8000, 0x35);
+            f.board.write(0xFE00, 0x35);
+            f.board.write(0xFF68, 0);
+            f.board.write(0xFF69, 0x12);
+            f.board.write(0xFF41, 0x10);
+            f.board.write(0xFF0F, 0);
+            f.board.write(0xFF40, 0x91);
+            const auto start = f.board.baseClockCycles();
+            const auto advanceTo = [&](unsigned dots)
+            {
+                while (f.board.baseClockCycles() - start < dots)
+                    f.board.step();
+            };
+            advanceTo(80);
+            check((f.board.read(0xFF41) & 3) == 3 && f.board.read(0x8000) == 0xFF &&
+                      f.board.read(0xFE00) == 0xFF && f.board.read(0xFF69) == 0xFF,
+                  "CGB video-memory and palette locks must enter mode 3 in the dot domain at either CPU speed");
+            f.board.write(0x8000, 0x99);
+            f.board.write(0xFE00, 0x99);
+            f.board.write(0xFF69, 0x99);
+            advanceTo(252);
+            check((f.board.read(0xFF41) & 3) == 0 && f.board.read(0x8000) == 0x35 &&
+                      f.board.read(0xFE00) == 0x35 && f.board.read(0xFF69) == 0x12,
+                  "HBlank must release all three locks without applying blocked writes at either CPU speed");
+            advanceTo(65664);
+            check((f.board.read(0xFF0F) & 3) == 3 && f.board.cpu().halted(),
+                  "VBlank and STAT must latch independently of IE at normal and double speed");
+            f.board.write(0xFF0F, 0);
+            advanceTo(65664 + 456);
+            check(!(f.board.read(0xFF0F) & 3), "VBlank line changes must not repeat a held STAT request at either speed");
+        }
+    }
+
     void videoAndStates()
     {
         for (const bool doubled : {false, true})
@@ -412,6 +461,7 @@ int main()
         peripheralClocks();
         softwareSwitchAndInterrupts();
         videoAndStates();
+        videoMemoryAndIRQs();
         cpuOverclock();
         overclockDMAWaitRoutine();
         std::cout << "CGB speed switching, CPU overclock, clocks, DMA, video and state tests passed.\n";

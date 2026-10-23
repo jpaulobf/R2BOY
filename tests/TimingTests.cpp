@@ -36,8 +36,9 @@ namespace R2BOY::Test
                               for (unsigned t = 0; t < 4; ++t)
                               {
                                   ++elapsed;
+                                  const auto previous = timer.systemCounter();
                                   timer.tick(interrupts);
-                                  serial.tick(1, interrupts);
+                                  serial.clock(previous, timer.systemCounter(), interrupts);
                               }
                               if (onClock)
                                   onClock(elapsed);
@@ -269,8 +270,13 @@ namespace R2BOY::Test
             Fixture f;
             f.prepare({0xF0, 0x02}); // LDH A,[SC], com transferência terminando entre os fetches.
             f.serial.writeSB('A');
-            f.serial.writeSC(0x81);
-            f.serial.tick(4088, f.interrupts);
+            f.serial.writeSC(0x81, f.interrupts);
+            for (unsigned t = 0; t < 4088; ++t)
+            {
+                const auto previous = f.timer.systemCounter();
+                f.timer.tick(f.interrupts);
+                f.serial.clock(previous, f.timer.systemCounter(), f.interrupts);
+            }
             check(f.cpu.step() == 12 && f.cpu.registers().a == 0x7F && f.serial.takeOutput() == "A",
                   "CPU must observe serial completion before instruction ends");
 
@@ -281,18 +287,19 @@ namespace R2BOY::Test
             image[0x102] = 0xE0;
             image[0x103] = 0x02; // LDH [SC],A
             board.loadCartridge(image, "serial cycle test");
+            board.write(0xFF04, 0);
             board.write(0xFF01, 'B');
             board.step();
             board.step();
             check(board.clockCycles() == 20, "Board clock counts each CPU M-cycle exactly once");
-            while (board.clockCycles() < 20 + 4092)
+            while (board.clockCycles() < 4092)
                 board.step();
             check((board.read(0xFF02) & 0x80) != 0 && board.takeSerialOutput().empty(),
-                  "SC write must not retroactively receive instruction cycles");
+                  "serial must remain busy before the eighth falling edge of the shared clock");
             board.step();
-            check(board.clockCycles() == 20 + 4096 && board.takeSerialOutput() == "B" &&
+            check(board.clockCycles() == 4096 && board.takeSerialOutput() == "B" &&
                       board.clockCycles() == board.cpu().cycles(),
-                  "serial starts at the write boundary, without double clocking");
+                  "SC write must preserve the shared divider phase without double clocking");
             board.reset();
             check(board.clockCycles() == 0 && board.cpu().cycles() == 0, "reset clears both clock counters");
         }
