@@ -413,7 +413,12 @@ namespace R2BOY::Window
     bool Window::acceptsGameInput() const
     {
         return (SDL_GetWindowFlags(impl_->window.get()) & SDL_WINDOW_INPUT_FOCUS) != 0 &&
-               !ImGui::GetIO().WantCaptureKeyboard;
+               !ImGui::GetIO().WantCaptureKeyboard && !isMenuOpen();
+    }
+
+    bool Window::isMenuOpen() const
+    {
+        return ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup);
     }
 
     void Window::pollEvents(bool &running, const InputHandler &inputHandler)
