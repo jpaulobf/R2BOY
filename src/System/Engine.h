@@ -27,6 +27,6 @@ namespace R2BOY::System
         bool vsyncEnabled_ = true;
         bool fastForwardEnabled_ = true;
         bool uncappedSpeed_ = false;
-        bool paused_ = false;
+        bool paused_ = false; // Pausa manual; a pausa temporária dos menus é independente.
     };
 }
