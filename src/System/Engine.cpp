@@ -45,7 +45,8 @@ namespace R2BOY::System
         bool cpuStopReported = false;
         bool menuPaused = false;
         // A interface nunca altera a pausa manual de Pause/Break.
-        const auto emulationPaused = [&]() { return paused_ || menuPaused; };
+        const auto emulationPaused = [&]()
+        { return paused_ || menuPaused; };
         double cycleCredit = 0;
         auto lastExecution = FramePacer::Clock::now();
         FramePacer framePacer(lastExecution);
@@ -98,7 +99,7 @@ namespace R2BOY::System
 
         // A interface escolhe o arquivo; a Engine faz a ponte entre leitura e cartucho.
         // Erros propagam para o seletor, que apresenta a mensagem ao usuário.
-        window.setRomOpenHandler([this, &saves, &flushSave, &resetRuntime](const std::filesystem::path &path, const std::optional<RomFile::Entry> &entry)
+        window.setRomOpenHandler([this, &window, &saves, &flushSave, &resetRuntime](const std::filesystem::path &path, const std::optional<RomFile::Entry> &entry)
                                  {
             const auto fullPath = std::filesystem::absolute(path).lexically_normal();
             auto source = fullPath.u8string();
@@ -118,6 +119,8 @@ namespace R2BOY::System
 
                 const bool restored = saves.load(next);
                 board_.loadCartridge(std::move(next));
+                window.setRomFileName(entry ? std::filesystem::u8path(entry->name).filename().u8string()
+                                            : fullPath.filename().u8string());
 
                 // Só registra sucesso depois da validação e substituição do cartucho.
                 std::cout << "Cartridge '" << source << "' loaded successfully. ROM Hash (CRC32): "
@@ -272,7 +275,10 @@ namespace R2BOY::System
                     {
                         flushSave();
                         if (action == Window::Window::RomAction::Unload)
+                        {
                             board_.unloadCartridge();
+                            window.setRomFileName({});
+                        }
                         else
                             board_.reset();
                         resetRuntime();
