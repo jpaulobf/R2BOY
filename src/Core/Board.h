@@ -12,6 +12,8 @@
 #include "IO/Timer.h"
 #include "Memory/Memory.h"
 #include "PPU/PPU.h"
+#include <functional>
+#include <utility>
 
 namespace R2BOY::Core
 {
@@ -94,6 +96,32 @@ namespace R2BOY::Core
         // Acesso constante à CPU para diagnóstico/testes.
         const CPU::CPU &cpu() const { return cpu_; }
 
+        // Observação por T-cycle, depois dos periféricos. Uma leitura de vídeo
+        // pode já ter sido amostrada antes da borda da PPU; usar ReadObserver
+        // para observar esse instante. Inclui ciclos sem dot de vídeo (double speed ou
+        // overclock); STOP não gera eventos. Não executar step/reset/loadState
+        // ou alterar hardware a partir do observador.
+        struct Timing
+        {
+            std::uint64_t cpuCycles, baseCycles;
+            PPU::PPU::Timing ppu;
+            std::uint8_t requestedInterrupts, enabledInterrupts;
+            bool dmaActive, doubleSpeed;
+        };
+        Timing timing() const
+        {
+            return {clockCycles_, baseClockCycles_, ppu_.timing(), interrupts_.readIF(),
+                    interrupts_.readIE(), dma_.active(), doubleSpeed()};
+        }
+        using TickObserver = std::function<void(const Timing &)>;
+        // Diagnóstico da sessão, não serializado; preservado em reset/loadState.
+        void setTickObserver(TickObserver observer) { tickObserver_ = std::move(observer); }
+        // Dado e estado na amostragem real da leitura da CPU; diferente do
+        // CycleObserver da CPU, chamado somente ao concluir o M-cycle.
+        // Mesmas restrições de não modificar/reentrar no hardware do TickObserver.
+        using ReadObserver = std::function<void(std::uint16_t, std::uint8_t, const Timing &)>;
+        void setReadObserver(ReadObserver observer) { readObserver_ = std::move(observer); }
+
         // Saída da porta serial para diagnóstico/testes, sem dependência de console no Core.
         std::string takeSerialOutput() { return serial_.takeOutput(); }
 
@@ -127,11 +155,13 @@ namespace R2BOY::Core
 
     private:
         void state(StateArchive &archive);
-        void tickMachineCycle();
+        std::uint8_t tickMachineCycle(CPU::CPU::CycleType type, std::uint16_t address, std::uint8_t value);
         std::uint64_t clockCycles_ = 0;
         std::uint64_t baseClockCycles_ = 0;
         bool baseClockPhase_ = false;
         bool cpuOverclockEnabled_ = false;
+        TickObserver tickObserver_;
+        ReadObserver readObserver_;
         Model model_;
         ExecutionMode executionMode_ = ExecutionMode::DMG;
         APU::APU apu_;
