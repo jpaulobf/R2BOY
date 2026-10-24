@@ -37,6 +37,7 @@ namespace R2BOY::Test
                 bus.write(0xFF47, 0xE4);
                 bus.write(0xFF48, 0xE4);
                 bus.write(0xFF49, 0xE4);
+                bus.write(0xFF4B, 167); // Comparador fora da tela, salvo nos testes de window.
             }
 
             void advance(unsigned dots)
@@ -531,7 +532,8 @@ namespace R2BOY::Test
                     f.advance(65664 - 106 - fine);
                     for (unsigned x = 0; x < 160; ++x)
                     {
-                        const auto expected = x < 8 ? dark : moveWX && x >= 24 ? black : light;
+                        const auto expected = x < 8 ? dark : moveWX && x >= 24 ? black
+                                                                               : light;
                         check(f.pixel(x) == expected,
                               "DMG must finish the window tile, resume BG without fine-scroll discard, and restart only at future WX");
                     }
@@ -556,7 +558,8 @@ namespace R2BOY::Test
                     f.bus.write(0xFF4B, 87);
                 f.advance(65664 - 124);
                 for (unsigned x = 0; x < 160; ++x)
-                    check(f.pixel(x) == (future && x >= 80 ? dark : light),
+                    check(f.pixel(x) == (future && x >= 80 ? dark : x == 8 ? white
+                                                                           : light),
                           "enabling a window behind the beam must wait for a new horizontal match");
             }
         }
@@ -591,17 +594,61 @@ namespace R2BOY::Test
                 f.advance(65664 - 252);
                 check(f.pixel(0) == light && f.pixel(7) == light,
                       "register writes must preserve tile pixels already fetched into the FIFO");
-                check(f.pixel(8) == (change == 0 ? black : dark) &&
-                          f.pixel(16) == (change == 0 ? white : dark),
-                      "later tile fetches must sample coarse SCX, coarse SCY and LCDC map selection again");
+                check(f.pixel(8) == (change == 0 ? white : dark) &&
+                          f.pixel(16) == (change == 0 ? light : dark),
+                      "later tile addresses must combine live SCX with the beam, and resample SCY and LCDC map");
             }
+        }
+
+        void scrollCarryAndDisabledWindow()
+        {
+            Fixture carry;
+            carry.ppu.setUnlimitedSprites(false);
+            carry.tile(0, 0xFF, 0);
+            carry.tile(1, 0, 0xFF);
+            carry.tile(2, 0xFF, 0xFF);
+            carry.tile(3, 0, 0);
+            for (unsigned i = 0; i < 32; ++i)
+                carry.memory.write(static_cast<std::uint16_t>(0x9800 + i), i % 4);
+            carry.bus.write(0xFF43, 7);
+            carry.steady();
+            carry.advance(120);
+            carry.bus.write(0xFF43, 8);
+            carry.advance(65664 - 120);
+            const std::uint32_t colors[] = {light, dark, black, white};
+            for (unsigned x = 0; x < 160; ++x)
+                check(carry.pixel(x) == colors[((x + 7) / 8) % 4],
+                      "SCX carry during transfer must not skip a queued background tile");
+
+            for (const bool color : {false, true})
+                for (const bool triggered : {false, true})
+                    for (unsigned fine = 0; fine < 8; ++fine)
+                    {
+                        Fixture f(color);
+                        f.tile(0, 0xFF, 0);
+                        if (color)
+                        {
+                            f.color(false, 0, 0, 0x7FFF);
+                            f.color(false, 0, 1, 0);
+                        }
+                        f.bus.write(0xFF4A, triggered ? 0 : 145);
+                        f.bus.write(0xFF4B, 7);
+                        f.bus.write(0xFF43, fine);
+                        f.render(); // Window permanece desligada em LCDC.
+                        const bool inserted = !color && triggered && fine == 0;
+                        check(f.pixel(0) == (inserted ? white : color ? black
+                                                                      : light),
+                              "disabled-window WX match inserts color zero only on triggered DMG push");
+                        check(f.pixel(1) == (color ? black : light),
+                              "disabled-window insertion must retain the fetched tile behind the extra pixel");
+                    }
         }
 
         void sharedFetcherAlignment()
         {
             Fixture f;
             f.ppu.setUnlimitedSprites(false);
-            f.sprite(0, 8, 16, 1); // Transparente, mas disputa a busca de tiles.
+            f.sprite(0, 8, 16, 1);        // Transparente, mas disputa a busca de tiles.
             f.memory.write(0x8002, 0xFF); // Plano baixo da linha 1.
             f.memory.write(0x8005, 0xFF); // Plano alto da linha 2.
             f.steady(0x93);
@@ -736,7 +783,7 @@ namespace R2BOY::Test
             planes.tile(3, 0xFF, 0);
             planes.sprite(0, 8, 16, 3);
             planes.steady(0x93);
-            planes.advance(101); // Plano baixo já lido em 8x8.
+            planes.advance(101);            // Plano baixo já lido em 8x8.
             planes.bus.write(0xFF40, 0x97); // Plano alto usa índice par em 8x16.
             planes.advance(65664 - 101);
             check(planes.pixel(0) == black && planes.pixel(7) == black,
@@ -790,8 +837,7 @@ namespace R2BOY::Test
                         f.color(true, 0, 2, 0x001F);
                     }
                     f.render(0x93);
-                    check(f.pixel(0) == (transparent ? (color ? 0xFFFF0000 : dark) :
-                                                                      (color ? 0xFF00FF00 : light)),
+                    check(f.pixel(0) == (transparent ? (color ? 0xFFFF0000 : dark) : (color ? 0xFF00FF00 : light)),
                           "OBJ priority precedes BG masking; only raw zero exposes the lower OBJ");
                 }
 
@@ -812,7 +858,7 @@ namespace R2BOY::Test
             opaqueWhite.tile(2, 0, 0xFF);
             opaqueWhite.sprite(0, 8, 16, 1);
             opaqueWhite.sprite(1, 8, 16, 2, 0x10);
-            opaqueWhite.bus.write(0xFF48, 0);    // ID 1 branco, mas não transparente.
+            opaqueWhite.bus.write(0xFF48, 0); // ID 1 branco, mas não transparente.
             opaqueWhite.bus.write(0xFF49, 0x30);
             opaqueWhite.render(0x93);
             check(opaqueWhite.pixel(0) == white, "palette white must not make a nonzero OBJ color transparent");
@@ -826,12 +872,38 @@ namespace R2BOY::Test
                     f.bus.write(0xFF43, static_cast<std::uint8_t>(fine));
                     f.steady(0x93);
                     const unsigned alignment = (x + fine) & 7;
-                    const unsigned penalty = x == 168 ? 0 : x == 0 ? 11 : 6 + (alignment < 5 ? 5 - alignment : 0);
+                    const unsigned penalty = x == 168 ? 0 : x == 0 ? 11
+                                                                   : 6 + (alignment < 5 ? 5 - alignment : 0);
                     f.advance(251 + fine + penalty);
                     check(f.ppu.mode() == 3, "OBJ fetch alignment must preserve the last mode-3 dot");
                     f.advance(1);
                     check(f.ppu.mode() == 0, "OBJ penalties must respect clipping and every fine-SCX alignment");
                 }
+        }
+
+        void overlappingObjectsAtZero()
+        {
+            // Mooneye intr_2_mode0_timing_sprites, casos 0..9: a aquisição
+            // inicial custa cinco dots; cada OBJ sobreposto usa mais seis.
+            for (const bool color : {false, true})
+                for (unsigned fine = 0; fine < 8; ++fine)
+                    for (unsigned count = 1; count <= 10; ++count)
+                    {
+                        Fixture f(color);
+                        f.ppu.setUnlimitedSprites(false);
+                        for (unsigned i = 0; i < count; ++i)
+                            f.sprite(i, 0, 16, 0);
+                        f.bus.write(0xFF43, static_cast<std::uint8_t>(fine));
+                        f.steady(0x93);
+                        const unsigned hblank = 252 + fine + 5 + 6 * count;
+                        f.advance(hblank - 1);
+                        check(f.ppu.mode() == 3, "overlapping X=0 objects must retain every six-dot fetch");
+                        f.advance(1);
+                        check(f.ppu.mode() == 0, "ready BG fetcher must not repeat the X=0 acquisition wait");
+                        f.advance(456 - hblank);
+                        check(f.ppu.dot() == 0 && f.ppu.mode() == 2 && f.ppu.read(0xFF44) == 1,
+                              "object handoff must shorten HBlank without shifting the scanline");
+                    }
         }
 
         void unlimitedSprites()
@@ -1037,11 +1109,13 @@ namespace R2BOY::Test
             windowAndRaster();
             windowDisableAndRestart();
             fetchRegisterSampling();
+            scrollCarryAndDisabledWindow();
             sharedFetcherAlignment();
             fetchAddressAndState();
             spritesAndPriority();
             objectFetchSampling();
             objectSelectionAndMasking();
+            overlappingObjectsAtZero();
             unlimitedSprites();
             colorPalettesAndAttributes();
             dmaAndBoard();

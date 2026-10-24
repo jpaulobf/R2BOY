@@ -32,7 +32,7 @@ namespace R2BOY::Test
             Core::IO::SpeedSwitch speedSwitch;
             Core::APU::APU apu;
             Core::BUS::BUS bus{cartridge, memory, interrupts, serial, timer, dma, ppu, joypad, speedSwitch, apu};
-            Processor cpu{bus, [this]()
+            Processor cpu{bus, [this](Type type, std::uint16_t address, std::uint8_t value) -> std::uint8_t
                           {
                               for (unsigned t = 0; t < 4; ++t)
                               {
@@ -43,6 +43,11 @@ namespace R2BOY::Test
                               }
                               if (onClock)
                                   onClock(elapsed);
+                              if (type == Type::Read)
+                                  return bus.read(address);
+                              if (type == Type::Write)
+                                  bus.write(address, value);
+                              return 0;
                           }};
             std::vector<Cycle> trace;
             unsigned elapsed = 0;
@@ -209,9 +214,7 @@ namespace R2BOY::Test
             check(f.cpu.step() == 20 && f.cpu.registers().pc == 0 && !f.cpu.ime() &&
                       f.interrupts.readIF() == 0xE4 && f.cpu.registers().sp == 0xFFFE,
                   "high-byte stack write to IE must cancel dispatch without acknowledging IF");
-            expect(f, {{Type::Internal, 0, 0, 12}, {Type::Internal, 0, 0, 16},
-                       {Type::Write, 0xFFFF, 0xC0, 20}, {Type::Write, 0xFFFE, 2, 24},
-                       {Type::Internal, 0, 0, 28}});
+            expect(f, {{Type::Internal, 0, 0, 12}, {Type::Internal, 0, 0, 16}, {Type::Write, 0xFFFF, 0xC0, 20}, {Type::Write, 0xFFFE, 2, 24}, {Type::Internal, 0, 0, 28}});
             f.interrupts.writeIE(0x10);
             f.interrupts.writeIF(0x10);
             // Sem cartucho, $0000 lê FF (RST $38), não um novo atendimento de IRQ.
@@ -304,6 +307,98 @@ namespace R2BOY::Test
             board.reset();
             check(board.clockCycles() == 0 && board.cpu().cycles() == 0, "reset clears both clock counters");
         }
+
+        void boardTickObservation()
+        {
+            for (unsigned profile = 0; profile < 4; ++profile)
+            {
+                Core::Board board(profile == 0 ? Core::Model::DMG : Core::Model::CGB);
+                std::vector<std::uint8_t> image(32768);
+                image[0x143] = profile >= 2 ? 0x80 : 0;
+                board.loadCartridge(image, "T-cycle observation test");
+                board.setUnlimitedSprites(false);
+                if (profile == 3)
+                {
+                    board.write(0xFF80, 0x10); // STOP com KEY1 armado.
+                    board.write(0xFF81, 0);
+                    auto r = board.cpu().registers();
+                    r.pc = 0xFF80;
+                    board.cpu().reset(r);
+                    board.write(0xFF4D, 1);
+                    board.step();
+                    while (board.switchingSpeed())
+                        board.step();
+                }
+                board.write(0xFF80, 0x76); // HALT mantém o clock, inclusive durante DMA.
+                auto r = board.cpu().registers();
+                r.pc = 0xFF80;
+                board.cpu().reset(r);
+                board.write(0xFFFF, 0);
+                board.write(0xFF0F, 0);
+                board.step();
+                for (const bool overclock : {false, true})
+                {
+                    board.setCPUOverclock(overclock);
+                    for (const bool dma : {false, true})
+                    {
+                        if (dma)
+                            board.write(0xFF46, 0xC0);
+                        const auto saved = board.saveState();
+                        std::vector<std::uint64_t> first, replay;
+                        auto *samples = &first;
+                        auto previous = board.timing();
+                        board.setTickObserver([&](const Core::Board::Timing &s)
+                                              {
+                            check(s.cpuCycles == previous.cpuCycles + 1, "observer must run once per CPU T-cycle");
+                            check(s.baseCycles >= previous.baseCycles && s.baseCycles <= previous.baseCycles + 1,
+                                  "observer must preserve the base-clock domain");
+                            check(s.ppu.ly == board.read(0xFF44) && s.ppu.mode == (board.read(0xFF41) & 3),
+                                  "PPU timing must describe the post-tick register state");
+                            check(s.ppu.vramBlocked == (s.ppu.lcdEnabled && s.ppu.mode == 3) &&
+                                      s.ppu.oamBlocked == (s.ppu.lcdEnabled && (s.ppu.mode == 2 || s.ppu.mode == 3)),
+                                  "snapshot must expose current access predicates");
+                            samples->insert(samples->end(), {s.cpuCycles, s.baseCycles, s.ppu.line, s.ppu.dot,
+                                s.ppu.mode, s.ppu.fetchStage, s.ppu.fetchPhase, s.ppu.mapAddress, s.ppu.tileAddress,
+                                s.ppu.fifoSize, s.ppu.objectTicks, s.ppu.statLine, s.requestedInterrupts, s.dmaActive});
+                            previous = s; });
+                        const auto base = board.baseClockCycles();
+                        for (unsigned i = 0; i < 200; ++i)
+                            board.step();
+                        const auto delta = board.baseClockCycles() - base;
+                        const auto future = board.saveState();
+                        check(first.size() == 800 * 14, "HALT observation must include every CPU tick");
+                        if (!dma)
+                            check(delta == 800 / (profile == 3 ? 2 : 1) / (overclock ? 2 : 1),
+                                  "double speed and overclock must retain skipped-dot ticks");
+                        board.loadState(saved);
+                        previous = board.timing();
+                        samples = &replay;
+                        for (unsigned i = 0; i < 200; ++i)
+                            board.step();
+                        check(first == replay && board.saveState() == future,
+                              "tick diagnostics must replay identically after loadState");
+                        board.setTickObserver({});
+                        board.loadState(saved);
+                        for (unsigned i = 0; i < 200; ++i)
+                            board.step();
+                        check(board.saveState() == future, "observer must not change emulation or serialized state");
+                    }
+                }
+                unsigned ticks = 0;
+                board.setTickObserver([&](const Core::Board::Timing &)
+                                      { ++ticks; });
+                board.reset();
+                board.write(0xFF80, 0x10); // STOP sem troca de velocidade.
+                board.write(0xFF81, 0);
+                r = board.cpu().registers();
+                r.pc = 0xFF80;
+                board.cpu().reset(r);
+                board.step();
+                check(ticks == 4 && board.cpu().stopped(), "reset must preserve the observer");
+                board.step();
+                check(ticks == 4, "STOP API waits must not emit oscillator ticks");
+            }
+        }
     }
 
     int runTimingTests()
@@ -315,6 +410,7 @@ namespace R2BOY::Test
             interruptsAndIdle();
             interruptDispatchEdges();
             serialInterleaving();
+            boardTickObservation();
             std::cout << "M-cycle ordering and peripheral-interleaving tests passed.\n";
             return 0;
         }

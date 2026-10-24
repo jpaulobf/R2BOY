@@ -152,8 +152,9 @@ namespace
 
             auto previousFormat = snapshot;
             constexpr auto versionOffset = sizeof(std::uint32_t) + sizeof("R2BOY-STATE") - 1;
-            previousFormat[versionOffset] = 9;
-            rejects([&] { board.loadState(previousFormat); });
+            previousFormat[versionOffset] = 10;
+            rejects([&]
+                    { board.loadState(previousFormat); });
             check(board.saveState() == future, "Rejecting format 9 must preserve the running DMA");
         }
     }
@@ -227,6 +228,58 @@ namespace
         check(finish() == future, "window disable/restart must replay identically after a mid-tile load");
     }
 
+    void disabledWindowInsertionState()
+    {
+        Core::Board board;
+        auto image = rom();
+        image[0x100] = 0x76;
+        board.loadCartridge(image, "disabled window insertion state");
+        board.setUnlimitedSprites(false);
+        board.write(0xFF40, 0);
+        board.write(0xFF47, 0xE4);
+        board.write(0xFF4B, 7);
+        for (unsigned row = 0; row < 8; ++row)
+            board.write(static_cast<std::uint16_t>(0x8000 + row * 2), 0xFF);
+        board.write(0xFF40, 0x91);
+        while (board.baseClockCycles() < 70224 + 92)
+            board.step();
+        check(board.timing().ppu.fifoSize == 1,
+              "save fixture must retain the inserted pixel ahead of the pending tile push");
+        const auto snapshot = board.saveState();
+        const auto finish = [&]()
+        {
+            while (board.frameNumber() < 2)
+                board.step();
+            check(board.framebuffer()[0] == 0xFFFFFFFF && board.framebuffer()[1] == 0xFFAAAAAA,
+                  "restored disabled-window insertion must precede the original background tile");
+            return board.saveState();
+        };
+        const auto future = finish();
+        board.loadState(snapshot);
+        check(finish() == future, "queued insertion and pending tile push must replay identically");
+
+        board.write(0xFF40, 0);
+        board.write(0xFF4B, 7);
+        board.write(0xFF40, 0xB1);
+        const auto origin = board.baseClockCycles();
+        while (board.baseClockCycles() < origin + 70224 + 96)
+            board.step();
+        board.write(0xFF40, 0x91); // Desliga durante os seis dots do primeiro fetch de window.
+        board.write(0xFF4B, 15);   // Match no próximo push de BG, em x=8.
+        const auto blocked = board.saveState();
+        const auto finishBlocked = [&]()
+        {
+            while (board.frameNumber() < 4)
+                board.step();
+            check(board.framebuffer()[8] == 0xFFAAAAAA,
+                  "disabling window during its initial fetch must suppress later insertion on the line");
+            return board.saveState();
+        };
+        const auto blockedFuture = finishBlocked();
+        board.loadState(blocked);
+        check(finishBlocked() == blockedFuture, "window insertion suppression must survive a mid-line load");
+    }
+
     void statWritePulseStates()
     {
         Core::Board board;
@@ -256,34 +309,35 @@ namespace
 
     void sharedFetchStates()
     {
-        for (unsigned dot : {96u, 100u, 108u})
-        {
-            Core::Board board;
-            auto image = rom();
-            image[0x100] = 0x76;
-            board.loadCartridge(image, "shared fetch state");
-            board.setUnlimitedSprites(false);
-            board.write(0xFF40, 0);
-            board.write(0xFE00, 16);
-            board.write(0xFE01, 8);
-            board.write(0xFE04, 16);
-            board.write(0xFE05, 9);
-            board.write(0xFF40, 0x93);
-            while (board.baseClockCycles() < 70224 + dot)
-                board.step();
-            const auto snapshot = board.saveState();
-            const auto finish = [&]()
+        for (const bool zero : {false, true})
+            for (unsigned dot : {88u, 92u, 96u, 100u, 108u})
             {
-                board.write(0xFF42, 1);
-                while (board.frameNumber() < 2)
+                Core::Board board;
+                auto image = rom();
+                image[0x100] = 0x76;
+                board.loadCartridge(image, "shared fetch state");
+                board.setUnlimitedSprites(false);
+                board.write(0xFF40, 0);
+                board.write(0xFE00, 16);
+                board.write(0xFE01, zero ? 0 : 8);
+                board.write(0xFE04, 16);
+                board.write(0xFE05, zero ? 0 : 9);
+                board.write(0xFF40, 0x93);
+                while (board.baseClockCycles() < 70224 + dot)
                     board.step();
-                return board.saveState();
-            };
-            const auto future = finish();
-            board.loadState(snapshot);
-            check(board.saveState() == snapshot, "shared BG/OBJ fetch state must round-trip");
-            check(finish() == future, "alignment wait, metadata and object data phases must replay identically");
-        }
+                const auto snapshot = board.saveState();
+                const auto finish = [&]()
+                {
+                    board.write(0xFF42, 1);
+                    while (board.frameNumber() < 2)
+                        board.step();
+                    return board.saveState();
+                };
+                const auto future = finish();
+                board.loadState(snapshot);
+                check(board.saveState() == snapshot, "shared BG/OBJ fetch state must round-trip");
+                check(finish() == future, "alignment wait, metadata and object data phases must replay identically");
+            }
     }
 
     void objectFetchStates()
@@ -426,6 +480,7 @@ int main()
         dmaBusStates();
         ppuTransitionStates();
         windowFetchStates();
+        disabledWindowInsertionState();
         objectFetchStates();
         sharedFetchStates();
         statWritePulseStates();
