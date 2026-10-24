@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <functional>
+#include <string>
 #include "FileManager.h"
 #include "Common/Framebuffer.h"
 
@@ -55,6 +56,9 @@ namespace R2BOY::Window
 
         // Substitui o callback; configure antes de oferecer a abertura de ROMs.
         void setRomOpenHandler(RomOpenHandler handler);
+
+        // Atualiza imediatamente o nome do arquivo exibido após o FPS; vazio ao descarregar.
+        void setRomFileName(std::string name);
 
         // Ação solicitada pelo menu File; deve ser consumida pela Engine.
         enum class RomAction
