@@ -27,3 +27,8 @@ tests/PPUAlignmentValidation.md
 tests/IOValidation.md
 tests/CompareFrames.py
 TODO.md
+tests/AVPVisualValidation.md
+tests/CPUPPUPhaseValidation.md
+.gitignore
+tests/PPURasterWriteValidation.md
+tests/CPUVideoReadPhaseValidation.md
