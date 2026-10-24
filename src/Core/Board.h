@@ -53,7 +53,7 @@ namespace R2BOY::Core
         void resetMemory();
 
         // Inicializa memória, CPU, IF/IE, joypad, serial, timer, DMA e PPU sem boot ROM.
-        // A PPU começa deterministicamente em LY=0/modo 2; áudio ainda não tem perfil pós-boot.
+        // A PPU começa em LY=0/modo 2; o mixer recebe NR50=77/NR51=F3, sem canais.
         void reset();
 
         // Executa uma instrução com hardware intercalado por M-cycle. Retorna

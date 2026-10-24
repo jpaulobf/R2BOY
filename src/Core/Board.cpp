@@ -5,7 +5,7 @@
 
 namespace R2BOY::Core
 {
-    Board::Board(Model model) : model_(model), bus_(cartridge_, memory_, interrupts_, serial_, timer_, dma_, ppu_, joypad_, speedSwitch_),
+    Board::Board(Model model) : model_(model), bus_(cartridge_, memory_, interrupts_, serial_, timer_, dma_, ppu_, joypad_, speedSwitch_, apu_),
                                 cpu_(bus_, [this]()
                                      { tickMachineCycle(); })
     {
@@ -57,6 +57,7 @@ namespace R2BOY::Core
         interrupts_.reset(true);
         buttons_ = 0;
         joypad_.reset();
+        apu_.reset();
         serial_.reset(executionMode_ == ExecutionMode::CGB);
         dma_.reset(model_ == Model::CGB);
         ppu_.reset(model_ == Model::CGB, executionMode_ == ExecutionMode::CGB);
@@ -131,8 +132,11 @@ namespace R2BOY::Core
                 continue;
             // DIV/TIMA ficam parados durante a estabilização após STOP.
             if (!speedSwitch_.switching())
+            {
+                const auto previousCounter = timer_.systemCounter();
                 timer_.tick(interrupts_);
-            serial_.tick(1, interrupts_);
+                serial_.clock(previousCounter, timer_.systemCounter(), interrupts_);
+            }
             // A PPU observa no mesmo T-cycle a cópia e o estado ativo atualizados pelo DMA.
             dma_.tick(bus_);
             if (speedSwitch_.doubleSpeed())
@@ -160,6 +164,7 @@ namespace R2BOY::Core
     {
         archive(clockCycles_, buttons_, cartridge_, dma_, interrupts_, joypad_, serial_, timer_, memory_, ppu_, cpu_);
         archive(baseClockCycles_, baseClockPhase_, speedSwitch_);
+        archive(apu_);
     }
 
     std::vector<std::uint8_t> Board::saveState()
@@ -172,7 +177,7 @@ namespace R2BOY::Core
         std::vector<std::uint8_t> result;
         StateArchive header(result);
         std::string magic = "R2BOY-STATE";
-        std::uint32_t version = 4;
+        std::uint32_t version = 10;
         auto model = model_;
         auto mode = executionMode_;
         auto romHash = Common::RomFile::hash(cartridge_.rom());
@@ -198,7 +203,7 @@ namespace R2BOY::Core
         ExecutionMode mode{};
         header(magic, version, model, mode, romHash, checksum);
         header.finish();
-        if (magic != "R2BOY-STATE" || version != 4)
+        if (magic != "R2BOY-STATE" || version != 10)
             throw std::runtime_error("Unsupported save state format/version.");
         if (model != model_ || mode != executionMode_ || romHash != Common::RomFile::hash(cartridge_.rom()))
             throw std::runtime_error("Save state belongs to a different ROM or hardware model.");
@@ -215,6 +220,7 @@ namespace R2BOY::Core
         baseClockCycles_ = next.baseClockCycles_;
         baseClockPhase_ = next.baseClockPhase_;
         speedSwitch_ = next.speedSwitch_;
+        apu_ = next.apu_;
         buttons_ = next.buttons_;
         cartridge_ = std::move(next.cartridge_);
         dma_ = std::move(next.dma_);
