@@ -9,28 +9,35 @@ namespace R2BOY::Core::IO
         data_ = transmitted_ = 0;
         cgbMode_ = cgbMode;
         control_ = cgbMode ? 3 : 0;
-        bits_ = elapsed_ = 0;
+        bits_ = 0;
+        masterClock_ = false;
         output_.clear();
     }
 
-    void Serial::writeSC(std::uint8_t value)
+    void Serial::writeSC(std::uint8_t value, Interrupts &interrupts)
     {
+        // SC força o sinal de clock a baixo antes de aplicar o novo controle.
+        // Se já havia transferência ativa, essa borda ainda pertence a ela.
+        bits_ = 0;
+        if (masterClock_)
+            edge(interrupts);
         control_ = value & (cgbMode_ ? 0x83 : 0x81);
-        bits_ = elapsed_ = 0;
         transmitted_ = 0;
+        bits_ = 0;
     }
 
-    void Serial::tick(unsigned tCycles, Interrupts &interrupts)
+    void Serial::clock(std::uint16_t previous, std::uint16_t current, Interrupts &interrupts)
     {
-        if ((control_ & 0x81) != 0x81)
-            return;
-            
-        elapsed_ += tCycles;
-        const unsigned period = cgbMode_ && (control_ & 2) != 0 ? 16 : 512;
+        const unsigned mask = cgbMode_ && (control_ & 2) != 0 ? 4 : 128;
+        if ((previous & ~current & mask) != 0)
+            edge(interrupts);
+    }
 
-        while (elapsed_ >= period && (control_ & 0x80) != 0)
+    void Serial::edge(Interrupts &interrupts)
+    {
+        masterClock_ = !masterClock_;
+        if (!masterClock_ && (control_ & 0x81) == 0x81)
         {
-            elapsed_ -= period;
             transmitted_ = static_cast<std::uint8_t>((transmitted_ << 1) | (data_ >> 7));
             data_ = static_cast<std::uint8_t>((data_ << 1) | 1);
             if (++bits_ == 8)
