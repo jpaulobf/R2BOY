@@ -13,7 +13,7 @@ namespace R2BOY::Core::PPU
      * PPU por dot: seleção de OAM, fetcher de tiles e FIFOs BG/OBJ independentes.
      * Mistura um pixel por dot quando o fetcher não está parado. Sem SDL no Core.
      * tick() recebe dots de vídeo, não T-cycles de CPU em double speed.
-     * Ver docs/PPU.md para o perfil de temporização e limites desta implementação.
+     * Ver tests/PPUTimingValidation.md para a revisão de modos/linhas e seus limites.
      */
     class PPU
     {
@@ -31,7 +31,7 @@ namespace R2BOY::Core::PPU
         // Consulta registradores LCD/paletas; endereços e recursos indisponíveis retornam 0xFF.
         std::uint8_t read(std::uint16_t address) const;
 
-        // Atualiza registradores e reavalia STAT; escritas no LCD podem reiniciar o frame.
+        // Atualiza registradores e reavalia STAT; LCD off congela o comparador LY/LYC.
         void write(std::uint16_t address, std::uint8_t value, IO::Interrupts &interrupts);
 
         // Estado do bit de habilitação do LCD em LCDC.
@@ -69,14 +69,20 @@ namespace R2BOY::Core::PPU
             archive(fetchingObject_, lcdc_, stat_, scy_, scx_, lyc_, bgp_);
             archive(obp0_, obp1_, wy_, wx_, bgIndex_, objIndex_, opri_);
             archive(tile_, attributes_, tileY_, low_, high_, objectLow_, objectHigh_);
-            archive(tileAddress_, objectAddress_, line_, dot_, mode_, x_, spriteCount_);
-            archive(nextSprite_, objectTicks_, bgHead_, bgSize_, fetchStep_, fetchTicks_, fetchX_);
-            archive(warmup_, discard_, windowDelay_, windowLine_, lastObjectTile_, frameNumber_, colorHardware_);
-            archive(colorMode_, statLine_, windowTriggered_, windowActive_, windowDrawn_, fastWindowFetch_, blankFirstFrame_);
+            archive(tileMapAddress_, tileAddress_, objectAddress_, line_, dot_, mode_, x_, spriteCount_);
+            archive(nextSprite_, objectWaiting_, objectWait_, objectTicks_, bgHead_, bgSize_, fetchStep_, fetchTicks_, fetchX_);
+            archive(warmup_, discard_, windowDelay_, windowLine_, frameNumber_, colorHardware_);
+            archive(colorMode_, statLine_, windowTriggered_, windowActive_, windowDrawn_, blankFirstFrame_);
             archive(extraSprites_, extraSpriteCount_);
+            archive(coincidence_, lcdStartup_, windowPixel_, statWriteTicks_);
             if (archive.reading() && (line_ > 153 || dot_ > 455 || mode_ > 3 || x_ > Width ||
-                                      spriteCount_ > 10 || nextSprite_ > spriteCount_ || bgHead_ > 15 || bgSize_ > 16 ||
-                                      fetchStep_ > 3 || fetchTicks_ > 2 || objectTicks_ > 11 || extraSpriteCount_ > extraSprites_.size()))
+                                      spriteCount_ > 10 || nextSprite_ > spriteCount_ || bgHead_ > 15 || bgSize_ > 8 ||
+                                      fetchStep_ > 3 || fetchTicks_ > 1 || objectTicks_ > 6 || objectWait_ > 5 ||
+                                      (objectWaiting_ && objectTicks_ != 6) || (objectWait_ && !objectWaiting_) ||
+                                      warmup_ > 12 || discard_ > 7 || windowDelay_ > 6 ||
+                                      extraSpriteCount_ > extraSprites_.size() ||
+                                      (lcdStartup_ && line_ != 0) || windowPixel_ > 7 || statWriteTicks_ > 4 ||
+                                      (statWriteTicks_ && (colorHardware_ || !enabled()))))
                 throw std::runtime_error("Invalid PPU save state.");
         }
         // Pixel de fundo/window antes da aplicação da paleta e da prioridade com OBJ.
@@ -116,11 +122,11 @@ namespace R2BOY::Core::PPU
         void transfer(const Memory::Memory &memory, IO::Interrupts &interrupts);
         // Avança a busca de tile/atributos/planos do fundo ou da window na VRAM.
         void fetchBackground(const Memory::Memory &memory);
-        // Enfileira oito pixels do tile; retorna false enquanto não houver espaço.
+        // Enfileira oito pixels do tile somente quando o FIFO está vazio.
         bool pushBackground();
         // Inicia a busca de um sprite que alcançou a posição atual, se houver.
         bool startObject();
-        // Consome os dots da busca do sprite e mescla seus pixels ao concluir.
+        // Avança BG até a liberação, busca o sprite em seis dots e mescla ao concluir.
         void fetchObject(const Memory::Memory &memory);
         // Insere pixels não transparentes no FIFO OBJ conforme a prioridade DMG/CGB.
         void mergeObject();
@@ -144,15 +150,20 @@ namespace R2BOY::Core::PPU
         std::uint8_t bgIndex_ = 0, objIndex_ = 0, opri_ = 0;
         std::uint8_t tile_ = 0, attributes_ = 0, tileY_ = 0, low_ = 0, high_ = 0;
         std::uint8_t objectLow_ = 0, objectHigh_ = 0;
-        std::uint16_t tileAddress_ = 0, objectAddress_ = 0;
+        std::uint16_t tileMapAddress_ = 0, tileAddress_ = 0, objectAddress_ = 0;
         unsigned line_ = 0, dot_ = 0, mode_ = 0, x_ = 0;
         unsigned spriteCount_ = 0, nextSprite_ = 0, objectTicks_ = 0;
+        bool objectWaiting_ = false;
+        unsigned objectWait_ = 0;
         unsigned bgHead_ = 0, bgSize_ = 0, fetchStep_ = 0, fetchTicks_ = 0, fetchX_ = 0;
         unsigned warmup_ = 0, discard_ = 0, windowDelay_ = 0, windowLine_ = 0;
-        int lastObjectTile_ = -1;
+        unsigned windowPixel_ = 0;
+        unsigned statWriteTicks_ = 0; // Pulso DMG: seleções de STAT ativas por um M-cycle.
         std::uint64_t frameNumber_ = 0;
         bool colorHardware_ = false, colorMode_ = false, statLine_ = false;
         bool windowTriggered_ = false, windowActive_ = false, windowDrawn_ = false;
-        bool fastWindowFetch_ = false, blankFirstFrame_ = false;
+        bool blankFirstFrame_ = false;
+        bool coincidence_ = true;
+        bool lcdStartup_ = false;
     };
 }

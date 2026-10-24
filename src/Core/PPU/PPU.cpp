@@ -27,12 +27,17 @@ namespace R2BOY::Core::PPU
 
     void PPU::updateSTAT(IO::Interrupts &interrupts)
     {
+        // O comparador para com LCD off: LY volta a zero, mas a coincidência
+        // retém o resultado anterior até o LCD ser ligado novamente (Mooneye).
+        if (enabled())
+            coincidence_ = ly() == lyc_;
         // As fontes compartilham uma única linha: trocar de fonte sem baixar o sinal
         // não produz uma segunda interrupção de STAT.
-        const bool signal = enabled() && (((stat_ & 0x40) && ly() == lyc_) ||
-                                          ((stat_ & 0x20) && mode_ == 2) ||
-                                          ((stat_ & 0x10) && mode_ == 1) ||
-                                          ((stat_ & 0x08) && mode_ == 0));
+        const auto selections = statWriteTicks_ ? 0x78 : stat_;
+        const bool signal = ((selections & 0x40) && coincidence_) || (enabled() && (
+                                          ((selections & 0x20) && mode_ == 2) ||
+                                          ((selections & 0x10) && mode_ == 1) ||
+                                          ((selections & 0x08) && mode_ == 0 && !(lcdStartup_ && dot_ < 80))));
         if (signal && !statLine_)
             interrupts.request(1);
         statLine_ = signal;
@@ -45,7 +50,7 @@ namespace R2BOY::Core::PPU
         case 0xFF40:
             return lcdc_;
         case 0xFF41:
-            return 0x80 | stat_ | (ly() == lyc_ ? 4 : 0) | mode_;
+            return 0x80 | stat_ | (coincidence_ ? 4 : 0) | mode_;
         case 0xFF42:
             return scy_;
         case 0xFF43:
@@ -91,20 +96,26 @@ namespace R2BOY::Core::PPU
             {
                 line_ = dot_ = windowLine_ = 0;
                 windowTriggered_ = false;
-                mode_ = enabled() ? 2 : 0;
+                // A primeira linha após LCD on apresenta modo 0 antes do 3;
+                // não é uma linha normal de busca de OAM (Mooneye lcdon_timing).
+                mode_ = 0;
                 bgSize_ = objectTicks_ = 0;
+                objectWaiting_ = false;
+                objectWait_ = 0;
+                statWriteTicks_ = 0;
                 front_.fill(0xFFFFFFFF);
                 back_.fill(0xFFFFFFFF);
                 blankFirstFrame_ = enabled();
+                lcdStartup_ = enabled();
                 beginLine();
             }
             break;
         }
         case 0xFF41:
-            // Aproximação da escrita espúria DMG: pulso imediato nas condições
-            // conhecidas, sem simular as fases elétricas do M-cycle seguinte.
-            if (!colorHardware_ && enabled() && (mode_ != 3 || ly() == lyc_) && !statLine_)
-                interrupts.request(1);
+            // No DMG físico as seleções se comportam como FF por um M-cycle.
+            // O valor lido já é o escrito; somente a linha interna recebe o pulso.
+            if (!colorHardware_ && enabled())
+                statWriteTicks_ = 4;
             stat_ = value & 0x78;
             break;
         case 0xFF42:
@@ -166,6 +177,7 @@ namespace R2BOY::Core::PPU
     {
         spriteCount_ = nextSprite_ = 0;
         extraSpriteCount_ = 0;
+        windowPixel_ = 0;
         windowActive_ = windowDrawn_ = false;
         if (line_ < Height && line_ == wy_)
             windowTriggered_ = true;
@@ -192,12 +204,14 @@ namespace R2BOY::Core::PPU
     void PPU::beginTransfer()
     {
         x_ = nextSprite_ = objectTicks_ = bgHead_ = bgSize_ = 0;
+        objectWaiting_ = false;
+        objectWait_ = 0;
+        bgSize_ = 8; // Pixels de partida descartados antes do primeiro pixel visível.
+        bgFIFO_.fill(Pixel{});
         fetchStep_ = fetchTicks_ = fetchX_ = 0;
         warmup_ = 12;
         discard_ = scx_ & 7;
         windowDelay_ = 0;
-        fastWindowFetch_ = false;
-        lastObjectTile_ = -1;
         objFIFO_.fill(ObjectPixel{});
         std::sort(sprites_.begin(), sprites_.begin() + spriteCount_, [](const Sprite &a, const Sprite &b)
                   { return a.x < b.x || (a.x == b.x && a.index < b.index); });
@@ -205,7 +219,7 @@ namespace R2BOY::Core::PPU
 
     bool PPU::pushBackground()
     {
-        if (bgSize_ > 8)
+        if (bgSize_ != 0)
             return false;
         for (unsigned i = 0; i < 8; ++i)
         {
@@ -216,52 +230,51 @@ namespace R2BOY::Core::PPU
         }
         ++fetchX_;
         fetchStep_ = fetchTicks_ = 0;
-        fastWindowFetch_ = false;
         return true;
     }
 
     void PPU::fetchBackground(const Memory::Memory &memory)
     {
-        // Quatro fases de dois dots: tile, low, high, sleep/push. O primeiro
-        // tile da window usa o push antecipado ao final de high (seis dots).
-        if (fetchStep_ == 3 && fetchTicks_ >= 2)
+        // Três leituras de dois dots. Após high, o push aguarda o FIFO vazio.
+        if (fetchStep_ == 3)
         {
             pushBackground();
             return;
         }
-        if (++fetchTicks_ < 2)
-            return;
-        fetchTicks_ = 0;
-        if (fetchStep_ == 0)
+        ++fetchTicks_;
+        if (fetchStep_ == 0 && fetchTicks_ == 1)
         {
             tileY_ = static_cast<std::uint8_t>(windowActive_ ? windowLine_ : line_ + scy_);
             const auto tileX = windowActive_ ? fetchX_ : fetchX_ + (scx_ >> 3);
             const unsigned map = (lcdc_ & (windowActive_ ? 0x40 : 0x08)) ? 0x9C00 : 0x9800;
-            const auto address = static_cast<std::uint16_t>(map + (tileY_ / 8) * 32 + (tileX & 31));
-            tile_ = memory.readVRAM(address, 0);
-            attributes_ = colorMode_ ? memory.readVRAM(address, 1) : 0;
+            tileMapAddress_ = static_cast<std::uint16_t>(map + (tileY_ / 8) * 32 + (tileX & 31));
         }
-        else if (fetchStep_ == 1)
+        else if ((fetchStep_ == 1 || fetchStep_ == 2) && fetchTicks_ == 1)
         {
-            unsigned row = tileY_ & 7;
+            // Perfil CGB-D ou posterior: Y comum aos planos. DMG relê SCY.
+            const unsigned y = colorHardware_ ? tileY_ : windowActive_ ? windowLine_ : line_ + scy_;
+            unsigned row = y & 7;
             if (attributes_ & 0x40)
                 row = 7 - row;
             const int tileBase = (lcdc_ & 0x10) ? 0x8000 + tile_ * 16
                                                 : 0x9000 + static_cast<std::int8_t>(tile_) * 16;
             tileAddress_ = static_cast<std::uint16_t>(tileBase + row * 2);
-            low_ = memory.readVRAM(tileAddress_, (attributes_ >> 3) & 1);
         }
+        if (fetchTicks_ < 2)
+            return;
+        fetchTicks_ = 0;
+        if (fetchStep_ == 0)
+        {
+            tile_ = memory.readVRAM(tileMapAddress_, 0);
+            attributes_ = colorMode_ ? memory.readVRAM(tileMapAddress_, 1) : 0;
+        }
+        else if (fetchStep_ == 1)
+            low_ = memory.readVRAM(tileAddress_, (attributes_ >> 3) & 1);
         else if (fetchStep_ == 2)
         {
             high_ = memory.readVRAM(tileAddress_ + 1, (attributes_ >> 3) & 1);
-            if (fastWindowFetch_ && pushBackground())
+            if (pushBackground())
                 return;
-        }
-        else
-        {
-            if (!pushBackground())
-                fetchTicks_ = 2; // Retry por dot, sem refazer leituras já concluídas.
-            return;
         }
         ++fetchStep_;
     }
@@ -271,29 +284,16 @@ namespace R2BOY::Core::PPU
         while (nextSprite_ < spriteCount_)
         {
             const auto &sprite = sprites_[nextSprite_];
-            if (sprite.x > x_ + 8)
+            const int position = warmup_ ? -static_cast<int>(warmup_) : static_cast<int>(x_);
+            if (sprite.x > position + 8)
                 return false;
             ++nextSprite_;
-            if (!(lcdc_ & 2) && !colorMode_)
+            if (!(lcdc_ & 2) && !colorHardware_)
                 continue;
             fetchingObject_ = sprite;
-            const int position = windowActive_ ? static_cast<int>(sprite.x) + 7 - wx_
-                                               : static_cast<int>(sprite.x) + scx_;
-            const int tile = position / 8;
-            const unsigned alignment = static_cast<unsigned>(position) & 7;
             objectTicks_ = 6;
-            if (sprite.x == 0)
-                objectTicks_ = 11;
-            else if (tile != lastObjectTile_)
-                objectTicks_ += alignment < 5 ? 5 - alignment : 0;
-            lastObjectTile_ = tile;
-            unsigned row = line_ + 16 - sprite.y;
-            const unsigned height = (lcdc_ & 4) ? 16 : 8;
-            row &= height - 1;
-            if (sprite.attributes & 0x40)
-                row = height - 1 - row;
-            const unsigned tileIndex = height == 16 ? sprite.tile & 0xFE : sprite.tile;
-            objectAddress_ = static_cast<std::uint16_t>(0x8000 + tileIndex * 16 + row * 2);
+            objectWaiting_ = true;
+            objectWait_ = sprite.x == 0 ? 5 : 0;
             return true;
         }
         return false;
@@ -301,10 +301,43 @@ namespace R2BOY::Core::PPU
 
     void PPU::fetchObject(const Memory::Memory &memory)
     {
+        if (objectWaiting_)
+        {
+            // BG continua até high T2 com pixels disponíveis. Objetos seguintes
+            // encontram o estágio de push pronto, sem novo cálculo por SCX/WX.
+            const bool ready = bgSize_ != 0 && (fetchStep_ == 3 || (fetchStep_ == 2 && fetchTicks_ == 1));
+            if (!ready || objectWait_ != 0)
+            {
+                fetchBackground(memory);
+                if (objectWait_)
+                    --objectWait_;
+                return;
+            }
+            objectWaiting_ = false;
+        }
+        if (objectTicks_ == 6)
+            fetchBackground(memory); // Termina o plano alto antes da posse de OBJ.
+        // Modo 2 seleciona Y/X; tile e atributos pertencem à busca de OBJ
+        // no modo 3. DMA pode alterar OAM entre essas duas etapas.
+        if (objectTicks_ == 5)
+        {
+            const auto base = static_cast<std::uint16_t>(0xFE00 + fetchingObject_.index * 4);
+            fetchingObject_.tile = memory.read(base + 2);
+            fetchingObject_.attributes = memory.read(base + 3);
+        }
         const unsigned bank = colorMode_ ? (fetchingObject_.attributes >> 3) & 1 : 0;
-        if (objectTicks_ == 4)
+        if (objectTicks_ == 3 || objectTicks_ == 1)
+        {
+            const unsigned height = (lcdc_ & 4) ? 16 : 8;
+            unsigned row = (line_ + 16 - fetchingObject_.y) & (height - 1);
+            if (fetchingObject_.attributes & 0x40)
+                row = height - 1 - row;
+            const unsigned tile = height == 16 ? fetchingObject_.tile & 0xFE : fetchingObject_.tile;
+            objectAddress_ = static_cast<std::uint16_t>(0x8000 + tile * 16 + row * 2);
+        }
+        if (objectTicks_ == 3)
             objectLow_ = memory.readVRAM(objectAddress_, bank);
-        if (objectTicks_ == 2)
+        if (objectTicks_ == 1)
             objectHigh_ = memory.readVRAM(objectAddress_ + 1, bank);
         if (--objectTicks_ == 0)
             mergeObject();
@@ -315,7 +348,8 @@ namespace R2BOY::Core::PPU
         const auto &sprite = fetchingObject_;
         for (unsigned i = 0; i < 8; ++i)
         {
-            const int destination = static_cast<int>(sprite.x) - 8 + static_cast<int>(i) - static_cast<int>(x_);
+            const int position = warmup_ ? -static_cast<int>(warmup_) : static_cast<int>(x_);
+            const int destination = static_cast<int>(sprite.x) - 8 + static_cast<int>(i) - position;
             if (destination < 0 || destination >= 8)
                 continue;
             const unsigned bit = (sprite.attributes & 0x20) ? i : 7 - i;
@@ -397,20 +431,32 @@ namespace R2BOY::Core::PPU
     {
         if (objectTicks_ != 0)
         {
-            fetchObject(memory);
-            return;
+            // No CGB físico a busca continua com OBJ off, inclusive em modo DMG.
+            // O último dot já pertence à mesclagem e não pode ser cancelado.
+            if (!colorHardware_ && !(lcdc_ & 2) && objectTicks_ > 1)
+            {
+                objectTicks_ = 0;
+                objectWaiting_ = false;
+                objectWait_ = 0;
+            }
+            else
+            {
+                fetchObject(memory);
+                return;
+            }
         }
-        if (warmup_ == 0 && discard_ == 0)
+        if (warmup_ <= 8 && discard_ == 0)
         {
-            if (!windowActive_ && windowTriggered_ && (lcdc_ & 0x20) && (colorMode_ || (lcdc_ & 1)) &&
-                wx_ <= 166 && static_cast<int>(x_) >= static_cast<int>(wx_) - 7)
+            if (warmup_ == 0 && !windowActive_ && windowTriggered_ && (lcdc_ & 0x20) && (colorMode_ || (lcdc_ & 1)) &&
+                wx_ <= 166 && (wx_ < 7 ? x_ == 0 : x_ + 7 == wx_))
             {
                 windowActive_ = true;
+                if (windowDrawn_)
+                    ++windowLine_;
+                windowPixel_ = wx_ < 7 ? 7 - wx_ : 0;
                 bgHead_ = bgSize_ = fetchStep_ = fetchTicks_ = fetchX_ = 0;
                 discard_ = wx_ < 7 ? 7 - wx_ : 0;
                 windowDelay_ = 6;
-                fastWindowFetch_ = true;
-                lastObjectTile_ = -1;
             }
             if (windowDelay_ == 0 && startObject())
             {
@@ -418,25 +464,43 @@ namespace R2BOY::Core::PPU
                 return;
             }
         }
-        fetchBackground(memory);
         if (warmup_ != 0)
         {
+            if (warmup_ <= 8)
+            {
+                bgHead_ = (bgHead_ + 1) & 15;
+                --bgSize_;
+                fetchBackground(memory);
+                if (discard_)
+                {
+                    --discard_;
+                    return;
+                }
+                for (unsigned i = 0; i < 7; ++i)
+                    objFIFO_[i] = objFIFO_[i + 1];
+                objFIFO_[7] = ObjectPixel{};
+            }
             --warmup_;
             return;
         }
         if (windowDelay_ != 0)
         {
+            fetchBackground(memory);
             --windowDelay_;
             return;
         }
         if (bgSize_ == 0)
+        {
+            fetchBackground(memory);
             return;
+        }
         const auto pixel = bgFIFO_[bgHead_];
         bgHead_ = (bgHead_ + 1) & 15;
         --bgSize_;
         if (discard_ != 0)
         {
             --discard_;
+            fetchBackground(memory);
             return;
         }
         back_[line_ * Width + x_] = mix(pixel, withExtraSprites(memory, objFIFO_[0]));
@@ -444,20 +508,41 @@ namespace R2BOY::Core::PPU
             objFIFO_[i] = objFIFO_[i + 1];
         objFIFO_[7] = ObjectPixel{};
         if (windowActive_)
+        {
             windowDrawn_ = true;
+            windowPixel_ = (windowPixel_ + 1) & 7;
+        }
         if (++x_ == Width)
         {
             mode_ = 0;
             updateSTAT(interrupts);
         }
+        else if (!colorHardware_ && windowActive_ && !(lcdc_ & 0x20) && windowPixel_ == 0)
+        {
+            // DMG encerra o tile corrente da janela antes de retomar o BG.
+            // O retorno é alinhado a tile, sem reaplicar o descarte fino de SCX.
+            windowActive_ = false;
+            bgHead_ = bgSize_ = fetchStep_ = fetchTicks_ = 0;
+            fetchX_ = x_ / 8;
+        }
+        fetchBackground(memory);
     }
 
     void PPU::tick(const Memory::Memory &memory, IO::Interrupts &interrupts, bool dmaActive)
     {
         if (!enabled())
             return;
+        const bool statWritePending = statWriteTicks_ != 0;
+        if (statWritePending)
+            --statWriteTicks_;
         ++dot_;
-        if (mode_ == 2)
+        if (lcdStartup_ && dot_ == 80)
+        {
+            mode_ = 3;
+            beginTransfer();
+            updateSTAT(interrupts);
+        }
+        else if (mode_ == 2)
         {
             scanOAM(memory, dmaActive);
             if (dot_ == 80)
@@ -475,6 +560,7 @@ namespace R2BOY::Core::PPU
             if (windowDrawn_)
                 ++windowLine_;
             dot_ = 0;
+            lcdStartup_ = false;
             if (++line_ == 154)
             {
                 line_ = windowLine_ = 0;
@@ -482,6 +568,10 @@ namespace R2BOY::Core::PPU
             }
             if (line_ == Height)
             {
+                // No DMG, a seleção de modo 2 também sinaliza a entrada em
+                // VBlank. Não há nova borda se outra fonte mantém STAT alto.
+                if (!colorHardware_ && (stat_ & 0x20) && !statLine_)
+                    interrupts.request(1);
                 mode_ = 1;
                 interrupts.request(0);
                 // A publicação ocorre de uma vez em VBlank; o primeiro frame após
@@ -497,6 +587,8 @@ namespace R2BOY::Core::PPU
             updateSTAT(interrupts);
         }
         else if (line_ == 153 && dot_ == 4)
+            updateSTAT(interrupts);
+        if (statWritePending)
             updateSTAT(interrupts);
     }
 }
