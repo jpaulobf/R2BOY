@@ -34,10 +34,9 @@ namespace R2BOY::Core::PPU
         // As fontes compartilham uma única linha: trocar de fonte sem baixar o sinal
         // não produz uma segunda interrupção de STAT.
         const auto selections = statWriteTicks_ ? 0x78 : stat_;
-        const bool signal = ((selections & 0x40) && coincidence_) || (enabled() && (
-                                          ((selections & 0x20) && mode_ == 2) ||
-                                          ((selections & 0x10) && mode_ == 1) ||
-                                          ((selections & 0x08) && mode_ == 0 && !(lcdStartup_ && dot_ < 80))));
+        const bool signal = ((selections & 0x40) && coincidence_) || (enabled() && (((selections & 0x20) && mode_ == 2) ||
+                                                                                    ((selections & 0x10) && mode_ == 1) ||
+                                                                                    ((selections & 0x08) && mode_ == 0 && !(lcdStartup_ && dot_ < 80))));
         if (signal && !statLine_)
             interrupts.request(1);
         statLine_ = signal;
@@ -91,6 +90,8 @@ namespace R2BOY::Core::PPU
         case 0xFF40:
         {
             const bool wasEnabled = enabled();
+            if (mode_ == 3 && windowActive_ && windowDelay_ != 0 && (lcdc_ & 0x20) && !(value & 0x20))
+                windowInsertionBlocked_ = true;
             lcdc_ = value;
             if (wasEnabled != enabled())
             {
@@ -212,6 +213,7 @@ namespace R2BOY::Core::PPU
         warmup_ = 12;
         discard_ = scx_ & 7;
         windowDelay_ = 0;
+        windowInsertionBlocked_ = false;
         objFIFO_.fill(ObjectPixel{});
         std::sort(sprites_.begin(), sprites_.begin() + spriteCount_, [](const Sprite &a, const Sprite &b)
                   { return a.x < b.x || (a.x == b.x && a.index < b.index); });
@@ -221,6 +223,17 @@ namespace R2BOY::Core::PPU
     {
         if (bgSize_ != 0)
             return false;
+        // No DMG, o comparador de WX continua ativo com a janela desligada.
+        // Um match no push insere cor zero antes do tile (SameBoy #278).
+        const unsigned logicalPosition = warmup_ ? (warmup_ <= 8 ? 8 - warmup_ : 0) : x_ + 7;
+        if (!colorHardware_ && windowTriggered_ && !windowInsertionBlocked_ &&
+            !(lcdc_ & 0x20) && wx_ == logicalPosition)
+        {
+            bgFIFO_[bgHead_] = Pixel{};
+            bgSize_ = 1;
+            fetchStep_ = 3;
+            return false;
+        }
         for (unsigned i = 0; i < 8; ++i)
         {
             const unsigned bit = (attributes_ & 0x20) ? i : 7 - i;
@@ -245,14 +258,19 @@ namespace R2BOY::Core::PPU
         if (fetchStep_ == 0 && fetchTicks_ == 1)
         {
             tileY_ = static_cast<std::uint8_t>(windowActive_ ? windowLine_ : line_ + scy_);
-            const auto tileX = windowActive_ ? fetchX_ : fetchX_ + (scx_ >> 3);
+            // SCX entra inteiro na soma com a posição do feixe; truncar antes
+            // dela perde o carry fino durante uma escrita no meio da linha.
+            // O FIFO ocupado representa o tile anterior à busca adiantada.
+            const int position = warmup_ ? -static_cast<int>(warmup_) : static_cast<int>(x_);
+            const auto tileX = windowActive_ ? fetchX_ : static_cast<unsigned>((scx_ + position + (bgSize_ ? 8 : 0)) / 8);
             const unsigned map = (lcdc_ & (windowActive_ ? 0x40 : 0x08)) ? 0x9C00 : 0x9800;
             tileMapAddress_ = static_cast<std::uint16_t>(map + (tileY_ / 8) * 32 + (tileX & 31));
         }
         else if ((fetchStep_ == 1 || fetchStep_ == 2) && fetchTicks_ == 1)
         {
             // Perfil CGB-D ou posterior: Y comum aos planos. DMG relê SCY.
-            const unsigned y = colorHardware_ ? tileY_ : windowActive_ ? windowLine_ : line_ + scy_;
+            const unsigned y = colorHardware_ ? tileY_ : windowActive_ ? windowLine_
+                                                                       : line_ + scy_;
             unsigned row = y & 7;
             if (attributes_ & 0x40)
                 row = 7 - row;
@@ -293,7 +311,13 @@ namespace R2BOY::Core::PPU
             fetchingObject_ = sprite;
             objectTicks_ = 6;
             objectWaiting_ = true;
-            objectWait_ = sprite.x == 0 ? 5 : 0;
+            // O mínimo de X=0 vale para a aquisição inicial do fetcher.
+            // Outro OBJ sobreposto pode encontrar BG já pronto para entregar
+            // a posse; nesse caso só paga os seis dots da própria busca.
+            // A primeira entrada ainda precisa da aquisição de partida, mesmo
+            // se SCX fino já levou o BG ao push durante o descarte inicial.
+            const bool ready = nextSprite_ > 1 && bgSize_ != 0 && fetchStep_ == 3;
+            objectWait_ = sprite.x == 0 && !ready ? 5 : 0;
             return true;
         }
         return false;

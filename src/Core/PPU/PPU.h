@@ -34,6 +34,21 @@ namespace R2BOY::Core::PPU
         // Atualiza registradores e reavalia STAT; LCD off congela o comparador LY/LYC.
         void write(std::uint16_t address, std::uint8_t value, IO::Interrupts &interrupts);
 
+        // Perfil DMG: campos de endereçamento visíveis durante a fase de dados
+        // da escrita da CPU (T2), antes de seu término. Alimentação e demais
+        // controles de LCDC são aplicados no fim do M-cycle. O CGB usa a fase
+        // posterior; revisões anteriores ao CGB-D continuam fora do perfil.
+        std::uint8_t earlyWriteMask(std::uint16_t address, std::uint8_t value) const
+        {
+            if (colorHardware_)
+                return 0;
+            if (address == 0xFF42 || address == 0xFF43)
+                return 0xFF;
+            if (address == 0xFF40 && ((lcdc_ ^ value) & 0x80) == 0)
+                return 0x58; // BG map, tile data select e window map.
+            return 0;
+        }
+
         // Estado do bit de habilitação do LCD em LCDC.
         bool enabled() const { return (lcdc_ & 0x80) != 0; }
 
@@ -42,6 +57,26 @@ namespace R2BOY::Core::PPU
 
         // Posição temporal dentro da linha, em dots, independente do pixel visível.
         unsigned dot() const { return dot_; }
+
+        // Instantâneo de diagnóstico, após o último dot executado. Os campos do
+        // fetcher só descrevem uma busca ativa em modo 3; phase=0 aguarda T1 e
+        // phase=1 já selecionou o endereço e aguarda T2 (stage=3 aguarda push).
+        struct Timing
+        {
+            unsigned line, ly, dot, mode, x;
+            unsigned fetchStage, fetchPhase, fifoSize;
+            unsigned objectTicks, objectWait, windowDelay;
+            std::uint16_t mapAddress, tileAddress;
+            bool lcdEnabled, statLine, vramBlocked, oamBlocked;
+            bool objectWaiting, windowActive;
+            std::uint8_t lcdc, scy;
+        };
+        Timing timing() const
+        {
+            return {line_, ly(), dot_, mode_, x_, fetchStep_, fetchTicks_, bgSize_,
+                    objectTicks_, objectWait_, windowDelay_, tileMapAddress_, tileAddress_,
+                    enabled(), statLine_, blocksVRAM(), blocksOAM(), objectWaiting_, windowActive_, lcdc_, scy_};
+        }
 
         // A CPU não acessa VRAM durante a transferência de pixels com LCD ligado.
         bool blocksVRAM() const { return enabled() && mode_ == 3; }
@@ -75,6 +110,7 @@ namespace R2BOY::Core::PPU
             archive(colorMode_, statLine_, windowTriggered_, windowActive_, windowDrawn_, blankFirstFrame_);
             archive(extraSprites_, extraSpriteCount_);
             archive(coincidence_, lcdStartup_, windowPixel_, statWriteTicks_);
+            archive(windowInsertionBlocked_);
             if (archive.reading() && (line_ > 153 || dot_ > 455 || mode_ > 3 || x_ > Width ||
                                       spriteCount_ > 10 || nextSprite_ > spriteCount_ || bgHead_ > 15 || bgSize_ > 8 ||
                                       fetchStep_ > 3 || fetchTicks_ > 1 || objectTicks_ > 6 || objectWait_ > 5 ||
@@ -162,6 +198,7 @@ namespace R2BOY::Core::PPU
         std::uint64_t frameNumber_ = 0;
         bool colorHardware_ = false, colorMode_ = false, statLine_ = false;
         bool windowTriggered_ = false, windowActive_ = false, windowDrawn_ = false;
+        bool windowInsertionBlocked_ = false;
         bool blankFirstFrame_ = false;
         bool coincidence_ = true;
         bool lcdStartup_ = false;
