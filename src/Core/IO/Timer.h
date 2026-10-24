@@ -25,6 +25,9 @@ namespace R2BOY::Core::IO
         // Registradores FF04–FF07. Endereços externos retornam 0xFF/ignoram escritas.
         std::uint8_t read(std::uint16_t address) const;
 
+        // Contador comum aos divisores de TIMA e do clock serial, inclusive escritas em DIV.
+        std::uint16_t systemCounter() const { return divider_; }
+
         // DIV/TAC podem gerar bordas; TIMA durante atraso cancela o reload.
         // Durante o M-cycle de reload, TIMA ignora escritas e TMA atualiza os dois.
         void write(std::uint16_t address, std::uint8_t value);
