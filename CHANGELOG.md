@@ -2,6 +2,14 @@
 
 Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
+## [Não lançado]
+
+- APU completa: canais de pulso 1 (com sweep) e 2, onda e ruído, com length,
+  envelope, frame sequencer ligado ao bit de DIV, NR50/NR51/NR52, Wave RAM e
+  filtro passa-altas; saída estéreo via SDL3 em `System/Audio`, descartada em
+  pausa e avanço rápido. Savestates passam à versão 12. Comportamento verificado
+  contra a Pan Docs (gbdev.io) em `tests/APUTests.cpp`.
+
 ## [0.1.0] - 2026-10-25
 
 - Corrigida a ruptura reproduzida em Alien vs Predator durante scroll: busca de
