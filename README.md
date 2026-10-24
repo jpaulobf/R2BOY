@@ -121,8 +121,10 @@ restore the current emulation state. Choose one of three slots in
 **File > Save State Slot**. State files are stored beside battery saves as
 `<ROM hash>.slot1.state`, `.slot2.state` or `.slot3.state`.
 
-Current builds use only save state format 4, including the byte driven by OAM
-DMA during bus conflicts and extra sprites selected mid-scanline.
+Current builds use only save state format 10, including global audio controls, shared fetch alignment,
+latched tile-map addresses, the pending DMG STAT-write
+pulse, position within a window tile, frozen PPU coincidence, LCD startup,
+serial clock phase, DMA data and extra sprites.
 States from earlier formats must be recreated.
 Battery `.sav` files remain compatible. Loading a state keeps the current
 CPU overclock and unlimited-sprites preferences.
@@ -137,6 +139,11 @@ Video accuracy is still in development on both DMG and CGB. Some games may show
 flicker, missing graphics or other artifacts even with overclock disabled.
 CGB VRAM DMA (GDMA/HDMA) is not implemented yet. Audio and cartridge RTC support
 are also pending.
+Global audio volume and panning registers are readable and writable, allowing
+Animaniacs to complete its volume fade and enter gameplay. Audio channels and
+sound output are still pending.
+See [TODO](TODO.md) for the refinement order and the confirmed missing-GDMA
+sprite case in Batman: Chaos in Gotham.
 
 ## Building
 
@@ -170,6 +177,30 @@ defaults to `blargg`. See [CPU validation](tests/CPUValidation.md) for results,
 reproduction commands and known timing limitations. The
 [BUS and DMA review](tests/BusDMAValidation.md) records DMA timing, bus arbitration
 and memory-map checks, including remaining hardware approximations.
+See the [Timer, Interrupts and Serial review](tests/IOValidation.md) for shared
+clock validation and the outstanding rapid-toggle timer test.
+The [first PPU timing review](tests/PPUTimingValidation.md) records mode/scanline
+checks, LCD transitions and remaining hardware-test failures.
+The [tile, scroll and window review](tests/PPUFetchValidation.md) adds image-based
+Mealybug comparisons. The [sprite review](tests/PPUSpriteValidation.md) covers
+OBJ selection, priority, mode-3 metadata and separate data-plane size sampling,
+with partial improvements and remaining fetch-arbitration limits.
+The [video-memory and interrupt review](tests/PPUAccessValidation.md) checks CPU
+VRAM/OAM/palette locks and Board IRQ delivery, and models the DMG STAT-write pulse.
+The [fetcher alignment review](tests/PPUAlignmentValidation.md) replaces calculated
+OBJ waits with BG-stage arbitration and separates address/data phases. Its current
+Mealybug results are mixed: four images improve and three regress, including SCY;
+the remaining raster timing is still under development.
+To capture a frame at the Mealybug breakpoint:
+
+```sh
+bin/rom_runner path/to/test.gb 20000000 dmg mealybug frame.ppm
+python tests/CompareFrames.py frame.ppm path/to/expected.png
+```
+
+The comparison script requires Pillow. Capture success only confirms that a frame
+was written; the comparison returns zero only for an exact pixel match. Choose a
+reference image for the same hardware model.
 
 ## What's next
 
