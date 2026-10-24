@@ -16,8 +16,8 @@ namespace R2BOY::Core::CPU
     /**
      * Executa as instruções SM83, incluindo o prefixo CB, usando somente o BUS.
      * step() continua por instrução, mas cada acesso e ciclo interno avança um
-     * M-cycle (4 T-cycles) pelo callback de clock da Board. O acesso ao BUS ocorre
-     * no final desse M-cycle. Não modela as fases elétricas dentro de cada T-cycle.
+     * M-cycle (4 T-cycles) pelo callback da Board, que também executa o acesso
+     * ao BUS na fase do periférico. Sem callback, acessa o BUS diretamente.
      * STOP solicita ao BUS a troca de velocidade CGB ou entra em standby.
      */
     class CPU
@@ -70,9 +70,16 @@ namespace R2BOY::Core::CPU
             Zero = 0x80
         };
 
-        // O BUS e os alvos do callback devem viver mais que a CPU. Clock é chamado
-        // uma vez por M-cycle, antes do acesso ao BUS; pode ser omitido em testes isolados.
-        using Clock = std::function<void()>;
+        enum class CycleType
+        {
+            Read,
+            Write,
+            Internal
+        };
+        // O callback avança um M-cycle e executa exatamente um acesso indicado
+        // (nenhum em Internal), retornando o dado lido. Deve viver mais que a CPU.
+        // A Board decide a fase do BUS sem alterar a duração da instrução.
+        using Clock = std::function<std::uint8_t(CycleType, std::uint16_t, std::uint8_t)>;
         // Conecta barramento e clock; o perfil dos registradores é aplicado por reset().
         explicit CPU(BUS::BUS &bus, Clock clock = {}) : bus_(bus), clock_(std::move(clock)) {}
         // Impede cópias que compartilhem o barramento e os callbacks da instância original.
@@ -103,12 +110,6 @@ namespace R2BOY::Core::CPU
 
         // Rastreamento opcional de acessos e ciclos internos, após cada M-cycle.
         // O observador não deve executar step()/reset() de forma reentrante.
-        enum class CycleType
-        {
-            Read,
-            Write,
-            Internal
-        };
         struct Cycle
         {
             CycleType type;
@@ -133,10 +134,11 @@ namespace R2BOY::Core::CPU
             archive(haltBug_, locked_, cycles_, stepCycles_);
         }
         // Um acesso ou idle consome exatamente um M-cycle, sem completar ciclos no fim da instrução.
-        void machineCycle();
+        std::uint8_t machineCycle(CycleType type = CycleType::Internal,
+                                  std::uint16_t address = 0, std::uint8_t value = 0);
         // Avança um M-cycle interno e o informa ao observador, sem acessar memória.
         void idle();
-        // Lê um byte no final de um M-cycle e registra o acesso no observador.
+        // Obtém o byte amostrado pelo callback e notifica ao concluir o M-cycle.
         std::uint8_t read8(std::uint16_t address);
         // Grava um byte no final de um M-cycle e registra o acesso no observador.
         void write8(std::uint16_t address, std::uint8_t value);

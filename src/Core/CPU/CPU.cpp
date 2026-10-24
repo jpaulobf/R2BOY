@@ -13,12 +13,17 @@ namespace R2BOY::Core::CPU
         stepCycles_ = 0;
     }
 
-    void CPU::machineCycle()
+    std::uint8_t CPU::machineCycle(CycleType type, std::uint16_t address, std::uint8_t value)
     {
         cycles_ += 4;
         stepCycles_ += 4;
         if (clock_)
-            clock_();
+            return clock_(type, address, value);
+        if (type == CycleType::Read)
+            return bus_.read(address);
+        if (type == CycleType::Write)
+            bus_.write(address, value);
+        return 0;
     }
 
     void CPU::idle()
@@ -30,8 +35,7 @@ namespace R2BOY::Core::CPU
 
     std::uint8_t CPU::read8(std::uint16_t address)
     {
-        machineCycle();
-        const auto value = bus_.read(address);
+        const auto value = machineCycle(CycleType::Read, address);
         if (observer_)
             observer_({CycleType::Read, address, value, cycles_});
         return value;
@@ -39,8 +43,7 @@ namespace R2BOY::Core::CPU
 
     void CPU::write8(std::uint16_t address, std::uint8_t value)
     {
-        machineCycle();
-        bus_.write(address, value);
+        machineCycle(CycleType::Write, address, value);
         if (observer_)
             observer_({CycleType::Write, address, value, cycles_});
     }
