@@ -18,7 +18,7 @@ namespace R2BOY::Core::BUS
 
     std::uint8_t BUS::readDMA(std::uint16_t address) const
     {
-        if (address >= 0xFF24 && address <= 0xFF26)
+        if ((address >= 0xFF10 && address <= 0xFF26) || (address >= 0xFF30 && address <= 0xFF3F))
             return apu_.read(address);
         if (address == 0xFF4D)
             return speedSwitch_.read();
@@ -55,7 +55,7 @@ namespace R2BOY::Core::BUS
         }
         if (dma_.blocksCPU(address))
             return;
-        if (address >= 0xFF24 && address <= 0xFF26)
+        if ((address >= 0xFF10 && address <= 0xFF26) || (address >= 0xFF30 && address <= 0xFF3F))
         {
             apu_.write(address, value);
             return;

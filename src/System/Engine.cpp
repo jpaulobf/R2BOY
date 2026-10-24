@@ -29,6 +29,13 @@ namespace R2BOY::System
         if (!input_.initialize())
             std::cerr << "Input: Gamepads unavailable: " << SDL_GetError() << '\n';
 
+        // Fecha o áudio antes de a Window encerrar SDL; sem dispositivo o emulador fica mudo.
+        const auto stopAudio = [this](Audio *)
+        { audio_.close(); };
+        std::unique_ptr<Audio, decltype(stopAudio)> audioSession(&audio_, stopAudio);
+        if (audio_.open())
+            board_.setAudioSampleRate(audio_.sampleRate());
+
         window.setInvertBAYBCallback([this](bool invert)
                                      { input_.configureABBAButtons(invert); });
 
@@ -224,6 +231,14 @@ namespace R2BOY::System
                           << board_.cpu().registers().pc << std::dec << std::endl;
                 cpuFaultReported = true;
             }
+            // Fast-forward e pausa não devem acumular áudio fora do tempo real.
+            if (uncappedSpeed_ || emulationPaused())
+            {
+                board_.takeAudioSamples();
+                audio_.clear();
+            }
+            else
+                audio_.queue(board_.takeAudioSamples());
             const auto serialOutput = board_.takeSerialOutput();
             if (!serialOutput.empty())
                 std::cout << serialOutput << std::flush;
