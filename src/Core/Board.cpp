@@ -6,8 +6,8 @@
 namespace R2BOY::Core
 {
     Board::Board(Model model) : model_(model), bus_(cartridge_, memory_, interrupts_, serial_, timer_, dma_, ppu_, joypad_, speedSwitch_, apu_),
-                                cpu_(bus_, [this]()
-                                     { tickMachineCycle(); })
+                                cpu_(bus_, [this](CPU::CPU::CycleType type, std::uint16_t address, std::uint8_t value)
+                                     { return tickMachineCycle(type, address, value); })
     {
     }
 
@@ -117,8 +117,20 @@ namespace R2BOY::Core
         return cpu_.step();
     }
 
-    void Board::tickMachineCycle()
+    std::uint8_t Board::tickMachineCycle(CPU::CPU::CycleType type, std::uint16_t address, std::uint8_t value)
     {
+        using Type = CPU::CPU::CycleType;
+        // O latch de leitura de vídeo observa a fase anterior à borda da PPU.
+        // LY e IF pertencem às atualizações de contador/IRQ, após essa borda.
+        const bool videoRead = type == Type::Read && BUS::BUS::samplesBeforeVideoEdge(address);
+        const auto earlyMask = type == Type::Write ? bus_.earlyVideoWriteMask(address, value) : 0;
+        std::uint8_t result = 0;
+        const auto sampleRead = [&]()
+        {
+            result = bus_.read(address);
+            if (readObserver_)
+                readObserver_(address, result, timing());
+        };
         // Esperas de DMA em HRAM contam ciclos da CPU: acelerá-las pode fazer RET
         // acessar a pilha ainda bloqueada. Preserva também a pausa nativa de KEY1.
         // Decide por M-cycle inteiro para manter a fase dos relógios consistente.
@@ -129,7 +141,11 @@ namespace R2BOY::Core
             // Overclock adiciona ciclos de CPU entre os ticks do hardware nativo.
             // A fase reinicia em cada M-cycle (4 T-cycles), sem estado parcial extra.
             if (overclockActive && (t & 1) == 0)
+            {
+                if (tickObserver_)
+                    tickObserver_(timing());
                 continue;
+            }
             // DIV/TIMA ficam parados durante a estabilização após STOP.
             if (!speedSwitch_.switching())
             {
@@ -139,6 +155,15 @@ namespace R2BOY::Core
             }
             // A PPU observa no mesmo T-cycle a cópia e o estado ativo atualizados pelo DMA.
             dma_.tick(bus_);
+            if (t == 3 && videoRead)
+                sampleRead();
+            if (t == 1 && earlyMask)
+            {
+                // Endereços de tile já observam o dado dirigido em T2. Campos
+                // de controle que não pertencem à máscara mantêm o valor antigo.
+                const auto visible = earlyMask == 0xFF ? value : static_cast<std::uint8_t>((bus_.read(address) & ~earlyMask) | (value & earlyMask));
+                bus_.write(address, visible);
+            }
             if (speedSwitch_.doubleSpeed())
                 baseClockPhase_ = !baseClockPhase_;
             if (!baseClockPhase_)
@@ -147,7 +172,14 @@ namespace R2BOY::Core
                 ppu_.tick(memory_, interrupts_, dma_.active());
             }
             speedSwitch_.tick();
+            if (tickObserver_)
+                tickObserver_(timing());
         }
+        if (type == Type::Read && !videoRead)
+            sampleRead();
+        else if (type == Type::Write && earlyMask != 0xFF)
+            bus_.write(address, value);
+        return result;
     }
 
     Model Board::model() const
@@ -177,7 +209,7 @@ namespace R2BOY::Core
         std::vector<std::uint8_t> result;
         StateArchive header(result);
         std::string magic = "R2BOY-STATE";
-        std::uint32_t version = 10;
+        std::uint32_t version = 11;
         auto model = model_;
         auto mode = executionMode_;
         auto romHash = Common::RomFile::hash(cartridge_.rom());
@@ -203,7 +235,7 @@ namespace R2BOY::Core
         ExecutionMode mode{};
         header(magic, version, model, mode, romHash, checksum);
         header.finish();
-        if (magic != "R2BOY-STATE" || version != 10)
+        if (magic != "R2BOY-STATE" || version != 11)
             throw std::runtime_error("Unsupported save state format/version.");
         if (model != model_ || mode != executionMode_ || romHash != Common::RomFile::hash(cartridge_.rom()))
             throw std::runtime_error("Save state belongs to a different ROM or hardware model.");
