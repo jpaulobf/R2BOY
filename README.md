@@ -7,58 +7,24 @@
 A Game Boy and Game Boy Color emulator written from scratch in C++, developed
 alongside R2NES.
 
-**Version 0.0.5** — see the [changelog](CHANGELOG.md) for release notes.
+R2BOY is a work in progress. Game compatibility and graphics accuracy are still
+improving, and audio is not available yet.
 
-**Work in progress:** games can run with video, keyboard and gamepad controls,
-automatic battery saves, save states, pause and fast-forward. Compatibility is
-still improving, and audio is not available yet.
+## Features
 
-## Playing
+- Open Game Boy and Game Boy Color games from `.gb`, `.gbc`, or `.zip` files.
+- Play with a keyboard or gamepad, with turbo buttons and fast-forward.
+- Automatic battery saves and three save state slots.
+- Windowed and fullscreen display, color palettes, scanlines and bilinear filtering.
+- Optional CPU overclock and unlimited sprites.
 
-1. Launch R2BOY.
-2. Open **File > Open ROM...** or press **Ctrl+O**.
-3. Choose a `.gb`, `.gbc`, or `.zip` file. If a ZIP contains multiple games,
-   select the one you want to play.
+## Getting started
 
-Use **File > Reset** or **F12** to restart the current game, keeping its battery
-save. **File > Unload** removes the ROM and returns to the black idle screen.
-Both options are disabled when no game is loaded.
+Launch R2BOY, choose **File > Open ROM...** (or press **Ctrl+O**) and select a
+game. If a ZIP contains multiple games, choose one from the list.
 
-To quit, close the window or choose **File > Exit**. Escape never closes the emulator.
-
-Press **Pause/Break** to pause or resume. While paused, the last completed image
-stays visible for screenshots and the menus remain usable. Opening a ROM,
-Reset, Unload and loading a save state return emulation to the running state.
-Opening a menu or the ROM selector also pauses emulation temporarily. Closing
-the interface resumes play unless Pause/Break had already paused the game.
-
-## Display
-
-The emulator starts at **4X**. Choose **1X to 5X** in the **Display** menu to resize
-and center the window. Resizing it manually also keeps the Game Boy's proportions.
-
-- **Borderless Fullscreen Stretched** fills the screen.
-- **Borderless Fullscreen** preserves the original proportions, adding black bars
-  where needed.
-
-The menu is hidden in both fullscreen modes. Press **Esc** to return to the last
-selected window scale and show the menu again.
-
-Enable **Display > Bilinear Filter** for smoother scaling. **Scanlines** adds
-alternating dark lines, with **Scanlines Level** adjustable from 5% to 25%.
-Both effects start disabled.
-
-**Display > Palette Preset** offers **Default** (grayscale), **Classic Green**,
-**Pocket**, **Amber**, **Ocean** and **Neon** (saturated pink, violet and deep blue).
-Presets recolor the four DMG tones, including
-DMG games running on CGB hardware, and work with scanlines. Color games keep
-their own palettes. Selection applies immediately, even while paused, and lasts
-for the current application session.
-
-**Display > VSync** starts enabled and follows the monitor refresh rate. This
-also controls emulation speed: a high-refresh monitor can make games run faster.
-Disable VSync to use the 60-FPS presentation limit and elapsed-time emulation.
-The title shows presentation FPS while a game is loaded.
+The **Display** menu provides window scales, fullscreen modes and visual options.
+Press **Esc** to leave fullscreen.
 
 ## Controls
 
@@ -72,83 +38,39 @@ The title shows presentation FPS while a game is loaded.
 | Start | Enter |
 | Select | Backspace |
 
-Gamepads are supported too, using the D-pad or left stick to move. With Xbox
-button labels, A / B map to Game Boy B / A, and X / Y provide Turbo B / Turbo A.
-
-Use **Input > Invert BA/YB Buttons** to switch the action-button layout for both
-keyboard and gamepad.
+Gamepads can use the D-pad or left stick to move. With Xbox button labels,
+A / B map to Game Boy B / A, and X / Y provide Turbo B / Turbo A.
+Use **Input > Invert BA/YB Buttons** to switch the action-button layout.
 
 | Shortcut | Action |
 | --- | --- |
 | Ctrl+O | Open a ROM |
-| F5 | Save to the selected state slot |
-| F6 | Load the selected state slot |
-| F12 | Reset the current game |
-| Esc | Leave fullscreen |
-| Pause/Break | Pause or resume emulation |
+| F5 | Save state |
+| F6 | Load state |
+| F12 | Reset the game |
+| Pause/Break | Pause or resume |
 | Tab (hold) | Fast-forward, when enabled in Hacks |
-
-## Hacks
-
-**Hacks > Enable Fast Forward** starts enabled. Hold **Tab** to run without the
-FPS limit or VSync; release it to restore the selected display timing.
-
-**Hacks > Enable CPU Overclock** starts disabled. It gives the CPU twice as many
-cycles relative to the normal hardware timing, including on top of CGB double
-speed, while preserving video cadence. It can reduce game slowdowns but may
-cause visual glitches or crashes. Extra CPU cycles are suspended during OAM
-DMA and CGB speed-switch stabilization to protect cycle-counted waits.
-
-These options last for the current application session.
-
-**Hacks > Enable Unlimited Sprites** starts enabled. It allows all 40 OAM
-sprites to appear on the same scanline while preserving the timing of the
-original ten-sprite pipeline and the DMG/CGB priority rules. Disable it to
-restore the hardware limit of ten sprites per scanline. Games that hide or
-alternate sprites themselves may still flicker.
+| Esc | Leave fullscreen |
 
 ## Saves
 
-Games with battery saves are saved automatically every five seconds, when
-switching games, before Reset or Unload, and when exiting normally. Save files
-are stored in the `saves/` folder beside the executable.
+Battery saves are stored automatically in the `saves/` folder beside the
+executable. Save states use the same folder; choose one of three slots in
+**File > Save State Slot**, then press **F5** to save or **F6** to load.
 
-Opening the same ROM directly or from a ZIP uses the same battery save and
-state slots, identified by the ROM contents.
+Save states may become incompatible after an update. Battery saves remain
+compatible.
 
-Use **File > Save State** (**F5**) and **File > Load State** (**F6**) to save or
-restore the current emulation state. Choose one of three slots in
-**File > Save State Slot**. State files are stored beside battery saves as
-`<ROM hash>.slot1.state`, `.slot2.state` or `.slot3.state`.
+## Known limitations
 
-Current builds use only save state format 10, including global audio controls, shared fetch alignment,
-latched tile-map addresses, the pending DMG STAT-write
-pulse, position within a window tile, frozen PPU coincidence, LCD startup,
-serial clock phase, DMA data and extra sprites.
-States from earlier formats must be recreated.
-Battery `.sav` files remain compatible. Loading a state keeps the current
-CPU overclock and unlimited-sprites preferences.
-
-## Compatibility
-
-CGB games can request native double speed through KEY1/STOP. CPU, timers, serial
-and OAM DMA follow that speed, while the video clock stays at its normal rate.
-This happens automatically and does not require the overclock hack.
-
-Video accuracy is still in development on both DMG and CGB. Some games may show
-flicker, missing graphics or other artifacts even with overclock disabled.
-CGB VRAM DMA (GDMA/HDMA) is not implemented yet. Audio and cartridge RTC support
-are also pending.
-Global audio volume and panning registers are readable and writable, allowing
-Animaniacs to complete its volume fade and enter gameplay. Audio channels and
-sound output are still pending.
-See [TODO](TODO.md) for the refinement order and the confirmed missing-GDMA
-sprite case in Batman: Chaos in Gotham.
+Some games may show graphical glitches or fail to run correctly. Audio,
+cartridge clocks (RTC) and parts of Game Boy Color support are still pending.
+Optional hacks can affect compatibility and can be toggled in the **Hacks** menu.
 
 ## Building
 
-You need **CMake 3.16+**, a **C++17 compiler**, and **Git**. CMake downloads the
-required libraries during the first setup, so that step needs internet access.
+You need **CMake 3.16+**, a **C++17 compiler** and **Git**. The first setup
+downloads the required libraries and needs internet access.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
@@ -156,59 +78,9 @@ cmake --build build --config Debug
 ```
 
 The executable is generated in `bin/` or `bin/Debug/`, depending on your build
-setup. On Windows with MinGW and Ninja, add `-G Ninja` to the first command.
-On Linux, SDL3 also needs X11 or Wayland development packages; Linux builds
-have not been validated yet.
-
-To run the automated tests:
-
-```sh
-ctest --test-dir build -C Debug --output-on-failure
-```
-
-The `rom_runner` target runs Blargg or Mooneye test ROMs without SDL or hacks:
-
-```sh
-bin/rom_runner path/to/test.gb 20000000 dmg mooneye
-```
-
-Use `.exe` on Windows. The model can be `dmg` or `cgb`; the optional protocol
-defaults to `blargg`. See [CPU validation](tests/CPUValidation.md) for results,
-reproduction commands and known timing limitations. The
-[BUS and DMA review](tests/BusDMAValidation.md) records DMA timing, bus arbitration
-and memory-map checks, including remaining hardware approximations.
-See the [Timer, Interrupts and Serial review](tests/IOValidation.md) for shared
-clock validation and the outstanding rapid-toggle timer test.
-The [first PPU timing review](tests/PPUTimingValidation.md) records mode/scanline
-checks, LCD transitions and remaining hardware-test failures.
-The [tile, scroll and window review](tests/PPUFetchValidation.md) adds image-based
-Mealybug comparisons. The [sprite review](tests/PPUSpriteValidation.md) covers
-OBJ selection, priority, mode-3 metadata and separate data-plane size sampling,
-with partial improvements and remaining fetch-arbitration limits.
-The [video-memory and interrupt review](tests/PPUAccessValidation.md) checks CPU
-VRAM/OAM/palette locks and Board IRQ delivery, and models the DMG STAT-write pulse.
-The [fetcher alignment review](tests/PPUAlignmentValidation.md) replaces calculated
-OBJ waits with BG-stage arbitration and separates address/data phases. Its current
-Mealybug results are mixed: four images improve and three regress, including SCY;
-the remaining raster timing is still under development.
-To capture a frame at the Mealybug breakpoint:
-
-```sh
-bin/rom_runner path/to/test.gb 20000000 dmg mealybug frame.ppm
-python tests/CompareFrames.py frame.ppm path/to/expected.png
-```
-
-The comparison script requires Pillow. Capture success only confirms that a frame
-was written; the comparison returns zero only for an exact pixel match. Choose a
-reference image for the same hardware model.
-
-## What's next
-
-- Investigate the [reported visual artifacts](tests/KnownIssues.md) during the PPU review.
-- Audio.
-- Better game compatibility and more accurate emulation.
-- Support for cartridge clocks and more cartridge types.
-- More complete Game Boy Color support.
+setup. For MinGW with Ninja on Windows, add `-G Ninja` to the first command.
+Linux also requires X11 or Wayland development packages; Linux builds have not
+been validated yet.
 
 ## License
 
