@@ -2,7 +2,7 @@
 
 Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
-## [Unreleased]
+## [0.1.0] - 2026-10-25
 
 - Corrigida a ruptura reproduzida em Alien vs Predator durante scroll: busca de
   tiles usa SCX inteiro somado ao feixe, escrita DMG de SCX visível em T2 e pixel
