@@ -2,6 +2,67 @@
 
 Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
+## [Unreleased]
+
+- Corrigida a tela branca após iniciar Animaniacs (USA), CRC32 673C815D:
+  NR50/NR51 agora preservam volume e roteamento, com alimentação por NR52.
+  A ROM dependia da leitura de NR50 para concluir o fade de áudio. Canais e
+  geração de som continuam pendentes. Savestates passam ao formato 10 para
+  guardar esses controles; estados anteriores precisam ser recriados.
+- Regressões de leitura/escrita do mixer, alimentação, reset, savestates,
+  acesso durante DMA e conclusão de um fade pela CPU em DMG/CGB.
+- Fetcher compartilhado: BG avança até o estágio de liberação de OBJ; os seis
+  dots de busca de sprite ficam separados da espera, sem recalcular a fase
+  por SCX/WX nem manter um identificador artificial do último tile.
+- Push do BG aguarda o FIFO vazio; endereço em T1 e dado em T2, com LCDC.4 por
+  plano e SCY por plano no DMG. Sprites à esquerda são buscados antes do primeiro
+  pixel visível. CGB mantém o perfil de Y compartilhado de revisões D ou posteriores.
+- Testes de avanço do BG durante espera de OBJ, SCX alterado entre sprites
+  sobrepostos e restauração nas fases de endereço, espera e leitura de planos.
+  Comparações Mealybug têm resultados mistos: quatro imagens melhoram e três
+  pioram, incluindo SCY e dois casos de janela. Dados em `tests/PPUAlignmentValidation.md`.
+- Revisão de bloqueios e interrupções de vídeo: o pulso espúrio de escrita em
+  STAT no DMG mantém as seleções internas ativas por um M-cycle, sem pedidos
+  repetidos enquanto a linha permanece alta. O pulso também observa mudanças
+  de modo e é cancelado ao desligar o LCD; não é aplicado ao CGB físico.
+- Regressões de acesso aos limites de VRAM/OAM, paletas CGB em normal/double
+  speed, bloqueio por DMA com LCD off e entrega de VBlank/STAT após HALT/DMA.
+  Resultados e falhas de fase ainda abertas em `tests/PPUAccessValidation.md`.
+- Revisão de sprites: tile/atributos buscados em modo 3 e tamanho LCDC.2
+  amostrado separadamente para cada plano de cor. No DMG, desabilitar OBJ
+  durante a busca cancela a transferência pendente; no CGB físico a busca
+  continua, inclusive no modo de compatibilidade DMG.
+- Regressões de seleção OAM, prioridade antes da máscara do BG, transparência,
+  alinhamento de SCX e restauração entre planos do sprite. Dois testes Mealybug
+  de tamanho melhoram parcialmente, sem piorar as 19 imagens selecionadas.
+  Resultados e limites em `tests/PPUSpriteValidation.md`.
+- Revisão de tiles, scroll e janela: no DMG, desligar a janela durante modo 3
+  termina o tile corrente e retoma o BG sem novo descarte fino de SCX. Um novo
+  disparo de WX na mesma linha avança a linha interna da janela.
+- Comparador horizontal da janela exige encontro com WX; habilitar a janela
+  depois de passar dessa posição não a faz aparecer imediatamente.
+- Executor de ROMs com captura Mealybug em PPM e comparação de imagens por pixel.
+  O teste `m3_lcdc_win_en_change_multiple` passou de 8.316 diferenças para zero;
+  resultados completos em `tests/PPUFetchValidation.md`.
+- Primeira revisão de temporização da PPU: coincidência LY/LYC congelada com
+  LCD desligado, partida sem modo 2 normal na primeira linha e pedido de STAT
+  por modo 2 na entrada em VBlank do DMG, respeitando o bloqueio pela linha STAT.
+- Regressões por dot para dois frames completos e todos os valores de SCX fino,
+  transições LCD off/on e restauração dos estados de coincidência e partida.
+  Resultados e limites em `tests/PPUTimingValidation.md`.
+- Clock serial derivado do contador de sistema compartilhado com DIV/TIMA,
+  preservando a fase entre transferências e observando escritas em DIV e STOP.
+  Corrige o teste Mooneye de alinhamento serial pós-boot do DMG.
+- Serial suspensa junto ao contador durante a estabilização de KEY1/STOP.
+- Regressões para Timer/Serial/IF/IE durante DMA, prioridade das IRQs, fase do
+  clock normal/rápido e restauração durante um bit parcialmente transmitido.
+- Save states usam exclusivamente o formato 9 para preservar a fase serial,
+  a coincidência LY/LYC congelada, a partida do LCD, a posição dentro do tile
+  da janela, o pulso pendente de escrita em STAT e a arbitragem/endereço do fetcher.
+  Estados anteriores precisam ser recriados; saves de bateria continuam compatíveis.
+- Revisão de Timer, Interrupts e Serial registrada em `tests/IOValidation.md`,
+  incluindo a falha ainda presente em `timer/rapid_toggle`.
+
 ## [0.0.6] - 2026-10-24
 
 - Pausa automática enquanto menus, submenus ou o seletor de ROMs estão abertos.
