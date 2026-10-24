@@ -45,7 +45,7 @@ namespace R2BOY::Window
             int scale = 4;
             bool scanlines = false;
             int scanlinesLevel = 5;
-            std::size_t palettePreset = 0;
+            std::size_t palettePreset = 2;
             DisplayMode mode = DisplayMode::Windowed;
             bool pending = true;
         };
@@ -262,6 +262,7 @@ namespace R2BOY::Window
         Uint64 fpsSampleStart = 0;
         unsigned presentedFrames = 0;
         bool gameWasLoaded = false;
+        std::string romFileName;
         int displayWidth = 0;
         int displayHeight = 0;
         DisplaySettings display;
@@ -270,15 +271,19 @@ namespace R2BOY::Window
 
         void updateTitle()
         {
-            if (!gameWasLoaded && !cpuOverclockEnabled)
+            if (!gameWasLoaded && romFileName.empty() && !cpuOverclockEnabled)
             {
                 SDL_SetWindowTitle(window.get(), "R2BOY");
                 return;
             }
             char title[128];
-            SDL_snprintf(title, sizeof(title), "R2BOY | FPS: %.2f%s", currentFPS,
-                         cpuOverclockEnabled ? " | CPU OVERCLOCK ENABLED! GAMES CAN CRASH!" : "");
-            SDL_SetWindowTitle(window.get(), title);
+            SDL_snprintf(title, sizeof(title), "R2BOY | FPS: %.2f", currentFPS);
+            std::string caption = title;
+            if (!romFileName.empty())
+                caption += " | " + romFileName;
+            if (cpuOverclockEnabled)
+                caption += " | CPU OVERCLOCK ENABLED! GAMES CAN CRASH!";
+            SDL_SetWindowTitle(window.get(), caption.c_str());
         }
 
         bool updateDisplay(int menuHeight)
@@ -459,6 +464,12 @@ namespace R2BOY::Window
     void Window::setRomOpenHandler(RomOpenHandler handler)
     {
         impl_->fileManager.setRomOpenHandler(std::move(handler));
+    }
+
+    void Window::setRomFileName(std::string name)
+    {
+        impl_->romFileName = std::move(name);
+        impl_->updateTitle();
     }
 
     void Window::setInvertBAYBCallback(InvertBAYBCallback callback)
