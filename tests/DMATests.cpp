@@ -24,7 +24,8 @@ namespace R2BOY::Test
             Core::PPU::PPU ppu;
             Core::IO::Joypad joypad;
             Core::IO::SpeedSwitch speedSwitch;
-            Core::BUS::BUS bus{cartridge, memory, interrupts, serial, timer, dma, ppu, joypad, speedSwitch};
+            Core::APU::APU apu;
+            Core::BUS::BUS bus{cartridge, memory, interrupts, serial, timer, dma, ppu, joypad, speedSwitch, apu};
 
             explicit Fixture(bool color = false)
             {
