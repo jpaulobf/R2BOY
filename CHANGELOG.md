@@ -4,6 +4,44 @@ Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
 ## [Unreleased]
 
+- Corrigida a ruptura reproduzida em Alien vs Predator durante scroll: busca de
+  tiles usa SCX inteiro somado ao feixe, escrita DMG de SCX visível em T2 e pixel
+  de cor zero inserido pelo comparador WX com janela desligada. 599/601 quadros
+  de caminhada idênticos ao SameBoy; nos outros dois resta um pixel na borda
+  esquerda. Saltos com SCX fixo preservam 601/601. Regressões de carry, janela,
+  fases da CPU e replay; savestates passam à versão 11. Validação e limites em
+  `tests/AVPVisualValidation.md`.
+
+- Escritas DMG de SCY e dos seletores de mapa/dados de LCDC agora afetam o
+  fetcher durante T2; alimentação, janela e controles de OBJ preservam a fase
+  posterior. As três capturas que regrediram no alinhamento do fetcher ficam
+  melhores que antes dele: SCY 11.414 → 8.390, tile select da janela 2.430 →
+  1.662 e mapa da janela 1.924 → 1.204 pixels diferentes. Cinco das 19 imagens
+  melhoram e nenhuma piora; 120/124 passes Mooneye preservados. Ainda restam
+  diferenças de imagem e casos de WX/janela. `tests/PPURasterWriteValidation.md`.
+- Regressões de escrita real da CPU nos limites dos planos BG, preservação de
+  pixels enfileirados, LCD on/off e replay em DMG/CGB normal/double speed.
+  Traces CSV incluem os valores de LCDC/SCY durante as fases da escrita.
+
+- Separada a amostragem de leituras de vídeo da borda final da PPU e das
+  escritas da CPU; LY, IF, timer e DMA preservam suas fases. Os quatro testes
+  Mooneye de STAT/OAM, incluindo a matriz de sprites, passam em DMG/CGB:
+  120/124 execuções passam, sem perdas de casos anteriores. Validação e limites em
+  `tests/CPUVideoReadPhaseValidation.md`.
+- Traces CSV incluem `sample` no instante da leitura e `read` na conclusão do
+  M-cycle. Regressões cobrem acessos na mesma borda, LY/IF, VRAM/OAM e paletas
+  CGB em ambas as velocidades, com replay de savestates.
+
+- Diagnóstico CPU/BUS/PPU por T-cycle com snapshots de STAT, bloqueios, fetcher
+  e FIFO, além do executor `timing_probe` para traces CSV sem SDL. Testes de
+  observação/replay em DMG/CGB, double speed, overclock, DMA, HALT e STOP.
+- OBJ sobrepostos em X=0 reutilizam o estágio de push pronto do BG, sem repetir
+  os cinco dots da aquisição inicial. Cobertura de um a dez objetos e todo SCX
+  fino; junto à separação da leitura de vídeo, o Mooneye com sprites passa.
+  O diagnóstico inicial das falhas de fase está em
+  `tests/CPUPPUPhaseValidation.md`; a redução das regressões SCY/window está
+  registrada na rodada de escritas acima.
+
 - Corrigida a tela branca após iniciar Animaniacs (USA), CRC32 673C815D:
   NR50/NR51 agora preservam volume e roteamento, com alimentação por NR52.
   A ROM dependia da leitura de NR50 para concluir o fade de áudio. Canais e
