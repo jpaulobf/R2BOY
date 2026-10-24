@@ -4,8 +4,8 @@ namespace R2BOY::Core::BUS
 {
     BUS::BUS(Cartridge::Cartridge &cartridge, Memory::Memory &memory, IO::Interrupts &interrupts,
              IO::Serial &serial, IO::Timer &timer, IO::DMA &dma, PPU::PPU &ppu, IO::Joypad &joypad,
-             IO::SpeedSwitch &speedSwitch)
-        : cartridge_(cartridge), memory_(memory), interrupts_(interrupts), serial_(serial), timer_(timer), dma_(dma), ppu_(ppu), joypad_(joypad), speedSwitch_(speedSwitch) {}
+             IO::SpeedSwitch &speedSwitch, APU::APU &apu)
+        : cartridge_(cartridge), memory_(memory), interrupts_(interrupts), serial_(serial), timer_(timer), dma_(dma), ppu_(ppu), joypad_(joypad), speedSwitch_(speedSwitch), apu_(apu) {}
 
     std::uint8_t BUS::read(std::uint16_t address) const
     {
@@ -18,6 +18,8 @@ namespace R2BOY::Core::BUS
 
     std::uint8_t BUS::readDMA(std::uint16_t address) const
     {
+        if (address >= 0xFF24 && address <= 0xFF26)
+            return apu_.read(address);
         if (address == 0xFF4D)
             return speedSwitch_.read();
         if (address == 0xFF00)
@@ -53,6 +55,11 @@ namespace R2BOY::Core::BUS
         }
         if (dma_.blocksCPU(address))
             return;
+        if (address >= 0xFF24 && address <= 0xFF26)
+        {
+            apu_.write(address, value);
+            return;
+        }
         if (address == 0xFF4D)
         {
             speedSwitch_.write(value);
@@ -73,7 +80,9 @@ namespace R2BOY::Core::BUS
         }
         if (address >= 0xFF04 && address <= 0xFF07)
         {
+            const auto previousCounter = timer_.systemCounter();
             timer_.write(address, value);
+            serial_.clock(previousCounter, timer_.systemCounter(), interrupts_);
             return;
         }
         if (address == 0xFF01)
@@ -83,7 +92,7 @@ namespace R2BOY::Core::BUS
         }
         if (address == 0xFF02)
         {
-            serial_.writeSC(value);
+            serial_.writeSC(value, interrupts_);
             return;
         }
         if (address == 0xFF0F)
