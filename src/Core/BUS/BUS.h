@@ -33,6 +33,22 @@ namespace R2BOY::Core::BUS
         // Acessos da CPU, sujeitos aos bloqueios de DMA e PPU.
         std::uint8_t read(std::uint16_t address) const;
 
+        // Portas cujo latch de leitura antecede a borda final de vídeo do
+        // M-cycle. LY e IF são atualizados na fase de contador/IRQ posterior.
+        static bool samplesBeforeVideoEdge(std::uint16_t address)
+        {
+            return (address >= 0x8000 && address < 0xA000) ||
+                   (address >= 0xFE00 && address < 0xFEA0) ||
+                   address == 0xFF41 || address == 0xFF69 || address == 0xFF6B;
+        }
+
+        // A PPU define quais campos de uma escrita de vídeo já afetam o fetcher
+        // durante a fase de dados; a Board agenda essa visibilidade por T-cycle.
+        std::uint8_t earlyVideoWriteMask(std::uint16_t address, std::uint8_t value) const
+        {
+            return ppu_.earlyWriteMask(address, value);
+        }
+
         // Acesso de escrita ao barramento.
         void write(std::uint16_t address, std::uint8_t value);
 
