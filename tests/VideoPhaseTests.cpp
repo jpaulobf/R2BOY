@@ -223,6 +223,119 @@ namespace
         f.board.setTickObserver({});
     }
 
+    void fineScrollStartupWrite()
+    {
+        Fixture f(0);
+        f.board.write(0xFF47, 0xE4);
+        f.board.write(0xFF4B, 7);
+        for (unsigned row = 0; row < 8; ++row)
+        {
+            f.board.write(0x8000 + row * 2, 0xFF);
+            f.board.write(0x8001 + row * 2, 0);
+        }
+        f.baseline = f.board.saveState();
+        f.prepare(92, 0xFF43, true, 7); // Mesmo término de escrita do rastro AVP.
+        auto r = f.board.cpu().registers();
+        r.a = 0;
+        f.board.cpu().reset(r);
+        f.board.write(0xFF83, 0x76);
+        const auto snapshot = f.board.saveState();
+        const auto run = [&]()
+        {
+            check(f.board.step() == 16 && f.board.timing().ppu.dot == 92,
+                  "startup SCX write must retain the CPU M-cycle and video phase");
+            while (f.board.frameNumber() < 2)
+                f.board.step();
+            check(f.board.framebuffer()[0] == 0xFFFFFFFF && f.board.framebuffer()[1] == 0xFFAAAAAA,
+                  "CPU SCX 7-to-0 at startup must insert color zero before the fetched BG tile");
+            return f.board.saveState();
+        };
+        const auto future = run();
+        f.board.loadState(snapshot);
+        check(run() == future, "CPU startup SCX write must replay with identical pixels and future state");
+    }
+
+    void paletteWritePhases(unsigned profile)
+    {
+        for (const auto address : {0xFF47, 0xFF48, 0xFF49})
+            for (const bool overclock : {false, true})
+            {
+                Fixture f(profile);
+                f.board.write(0xFF40, 0);
+                f.board.write(0xFF4B, 167);
+                f.board.write(address, 0xE4);
+                // Color 1 distinguishes old=1, mixed=3 and new=2.
+                for (unsigned row = 0; row < 8; ++row)
+                {
+                    f.board.write(0x8000 + row * 2, 0xFF);
+                    f.board.write(0x8001 + row * 2, 0);
+                }
+                if (address != 0xFF47)
+                {
+                    f.board.write(0xFE00, 16);
+                    f.board.write(0xFE01, 24); // OBJ covering x=16..23.
+                    f.board.write(0xFE02, 0);
+                    f.board.write(0xFE03, address == 0xFF49 ? 0x10 : 0);
+                }
+                f.board.write(0xFF40, address == 0xFF47 ? 0x91 : 0x93);
+                const auto startup = f.board.baseClockCycles();
+                while (f.board.baseClockCycles() < startup + 70224)
+                    f.board.step();
+                f.origin = f.board.baseClockCycles();
+                f.baseline = f.board.saveState();
+                // Place the transition inside the BG/OBJ pixels being emitted.
+                f.prepare(address == 0xFF47 ? 120 : 124, address, true);
+                auto r = f.board.cpu().registers();
+                r.a = 0x1B;
+                f.board.cpu().reset(r);
+                f.board.setCPUOverclock(overclock);
+                const auto initial = f.board.saveState();
+                const auto targetFrame = f.board.frameNumber() + 1;
+                const auto finalCPU = f.board.clockCycles() + 16;
+                unsigned writes = 0, reads = 0;
+                std::vector<std::uint8_t> values;
+                f.board.setReadObserver([&](std::uint16_t a, std::uint8_t, const Core::Board::Timing &)
+                                        { if (a == address) ++reads; });
+                f.board.cpu().setCycleObserver([&](const auto &c)
+                                              {
+                    if (c.type == Core::CPU::CPU::CycleType::Write && c.address == address)
+                        ++writes; });
+                f.board.setTickObserver([&](const Core::Board::Timing &s)
+                                       {
+                    if (s.cpuCycles > finalCPU - 4)
+                        values.push_back(f.board.read(address)); });
+                const auto run = [&]()
+                {
+                    check(f.board.step() == 16 && writes == 1 && reads == 0,
+                          "palette latch phases must preserve one CPU write and its instruction length");
+                    check(values == (profile == 0 ? std::vector<std::uint8_t>{0xE4, 0xFF, 0x1B, 0x1B}
+                                                  : std::vector<std::uint8_t>{0xE4, 0xE4, 0xE4, 0xE4}) &&
+                              f.board.read(address) == 0x1B,
+                          "DMG palette latches must expose old|new then new, including skipped overclock ticks");
+                    return f.board.saveState();
+                };
+                const auto future = run();
+                f.board.loadState(initial);
+                values.clear();
+                writes = reads = 0;
+                check(run() == future, "palette intermediate latches must replay with identical future state");
+                f.board.setTickObserver({});
+                f.board.setReadObserver({});
+                f.board.cpu().setCycleObserver({});
+                if (profile == 0 && !overclock)
+                {
+                    f.board.write(0xFF83, 0x76);
+                    while (f.board.frameNumber() < targetFrame)
+                        f.board.step();
+                    const unsigned mixedX = address == 0xFF47 ? 26 : 19;
+                    check(f.board.framebuffer()[mixedX - 1] == 0xFFAAAAAA &&
+                              f.board.framebuffer()[mixedX] == 0xFF000000 &&
+                              f.board.framebuffer()[mixedX + 1] == 0xFF555555,
+                          "palette output must retain the old pixel, emit the OR color for one dot, then the new color");
+                }
+            }
+    }
+
     void rasterWritePhases(unsigned profile)
     {
         Fixture f(profile);
@@ -325,7 +438,9 @@ int main()
             writePhases(profile);
             rasterWritePhases(profile);
             horizontalScrollWritePhase(profile);
+            paletteWritePhases(profile);
         }
+        fineScrollStartupWrite();
         std::cout << "CPU video read/write phase and replay tests passed.\n";
         return 0;
     }

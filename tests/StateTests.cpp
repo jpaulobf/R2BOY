@@ -152,10 +152,10 @@ namespace
 
             auto previousFormat = snapshot;
             constexpr auto versionOffset = sizeof(std::uint32_t) + sizeof("R2BOY-STATE") - 1;
-            previousFormat[versionOffset] = 10;
+            previousFormat[versionOffset] = 13;
             rejects([&]
                     { board.loadState(previousFormat); });
-            check(board.saveState() == future, "Rejecting format 9 must preserve the running DMA");
+            check(board.saveState() == future, "Rejecting format 13 must preserve the running DMA");
         }
     }
 
@@ -278,6 +278,43 @@ namespace
         const auto blockedFuture = finishBlocked();
         board.loadState(blocked);
         check(finishBlocked() == blockedFuture, "window insertion suppression must survive a mid-line load");
+    }
+
+    void liveFineScrollState()
+    {
+        Core::Board board;
+        auto image = rom();
+        image[0x100] = 0x76;
+        board.loadCartridge(image, "live fine-scroll startup state");
+        board.setUnlimitedSprites(false);
+        board.write(0xFF40, 0);
+        board.write(0xFF47, 0xE4);
+        board.write(0xFF4B, 7);
+        board.write(0xFF43, 7);
+        for (unsigned row = 0; row < 8; ++row)
+            board.write(static_cast<std::uint16_t>(0x8000 + row * 2), 0xFF);
+        board.write(0xFF40, 0x91);
+        while (board.baseClockCycles() < 70224 + 88)
+            board.step();
+        const auto before = board.saveState();
+        board.write(0xFF43, 0); // O match de zero já passou; deve dar outra volta.
+        while (board.baseClockCycles() < 70224 + 92)
+            board.step();
+        const auto wrapped = board.saveState();
+        const auto finish = [&]()
+        {
+            while (board.frameNumber() < 2)
+                board.step();
+            check(board.framebuffer()[0] == 0xFFFFFFFF && board.framebuffer()[1] == 0xFFAAAAAA,
+                  "live fine-scroll replay must preserve the inserted pixel and the fetched tile");
+            return board.saveState();
+        };
+        const auto future = finish();
+        board.loadState(wrapped);
+        check(finish() == future, "fine-scroll comparator wrap must survive a mid-startup load");
+        board.loadState(before);
+        board.write(0xFF43, 0);
+        check(finish() == future, "fine-scroll writes during startup must replay from before the wrap");
     }
 
     void statWritePulseStates()
@@ -481,6 +518,7 @@ int main()
         ppuTransitionStates();
         windowFetchStates();
         disabledWindowInsertionState();
+        liveFineScrollState();
         objectFetchStates();
         sharedFetchStates();
         statWritePulseStates();

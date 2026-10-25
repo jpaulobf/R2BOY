@@ -644,6 +644,37 @@ namespace R2BOY::Test
                     }
         }
 
+        void liveFineScrollStartup()
+        {
+            // Matriz sintética também executada no SameBoy: escrita após dot 90.
+            // SCX 0..5 já encontrou o comparador; 6/7 ainda pode perder o match.
+            for (const unsigned wx : {7u, 167u})
+                for (unsigned initial = 0; initial < 8; ++initial)
+                    for (unsigned next = 0; next < 8; ++next)
+                    {
+                        Fixture f;
+                        f.tile(0, 0xFF, 0);
+                        f.bus.write(0xFF4B, wx);
+                        f.bus.write(0xFF43, initial);
+                        f.steady();
+                        f.advance(90);
+                        f.bus.write(0xFF43, next);
+                        const unsigned discarded = initial < 6 ? initial : next < 6 ? next + 8
+                                                                                    : next;
+                        const bool inserted = wx == 7 && (initial == 0 || (initial >= 6 && next == 0));
+                        const unsigned end = 252 + discarded;
+                        f.advance(end - 91);
+                        check(f.ppu.mode() == 3, "live fine-scroll match must retain the final transfer dot");
+                        f.advance(1);
+                        check(f.ppu.mode() == 0, "live fine-scroll wrap must determine HBlank without a global offset");
+                        f.advance(65664 - end);
+                        check(f.pixel(0) == (inserted ? white : light),
+                              "SCX wrap during startup must expose the disabled-window insertion at WX=7");
+                        for (unsigned x = 1; x < 16; ++x)
+                            check(f.pixel(x) == light, "startup insertion must preserve the following tile pixels");
+                    }
+        }
+
         void sharedFetcherAlignment()
         {
             Fixture f;
@@ -1110,6 +1141,7 @@ namespace R2BOY::Test
             windowDisableAndRestart();
             fetchRegisterSampling();
             scrollCarryAndDisabledWindow();
+            liveFineScrollStartup();
             sharedFetcherAlignment();
             fetchAddressAndState();
             spritesAndPriority();
