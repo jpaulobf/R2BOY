@@ -81,7 +81,7 @@ namespace
             ImGui::GetIO().AddKeyEvent(ImGuiKey_Escape, false);
             frame();
         };
-        for (const auto *label : {"File", "Display", "Input", "Hacks"})
+        for (const auto *label : {"File", "Display", "Sound", "Input", "Hacks"})
         {
             auto *main = ImGui::FindWindowByName("R2BOY");
             ImGui::ActivateItemByID(ImHashStr(label, 0, main->GetID("##MenuBar")));
@@ -111,6 +111,55 @@ namespace
                 check(!window.isMenuOpen(), "Escape must release menu pause when the last menu closes");
             }
         }
+    }
+
+    void soundMenuControlsOutput()
+    {
+        R2BOY::Window::Window window;
+        check(window.open(), "sound menu test window must open");
+        R2BOY::Common::Framebuffer framebuffer{};
+        bool running = true;
+        bool master = true;
+        std::uint8_t channels = 15;
+        unsigned changes = 0;
+        window.setSoundCallback([&](bool enabled, std::uint8_t mask)
+                                { master = enabled; channels = mask; ++changes; });
+        const auto frame = [&]()
+        {
+            window.pollEvents(running);
+            check(window.renderFrame(running, false, framebuffer), "sound menu works without a ROM");
+        };
+        frame();
+        frame();
+        check(window.isMasterSoundEnabled() && window.soundChannels() == 15, "sound starts fully enabled");
+        const auto select = [&](const char *label)
+        {
+            auto *main = ImGui::FindWindowByName("R2BOY");
+            ImGui::ActivateItemByID(ImHashStr("Sound", 0, main->GetID("##MenuBar")));
+            frame();
+            frame();
+            auto *menu = ImGui::FindWindowByName("Sound###Menu_00");
+            check(menu && menu->Active, "Sound menu must open");
+            ImGui::ActivateItemByID(menu->GetID(label));
+            frame();
+            ImGui::ClosePopupsOverWindow(main, false);
+            frame();
+            check(window.isMasterSoundEnabled() == master && window.soundChannels() == channels,
+                  "sound checkmarks match the notified settings");
+        };
+        select("Master Sound");
+        check(!master && channels == 15, "master mute preserves individual selections");
+        unsigned index = 0;
+        for (const auto *label : {"Pulse 1", "Pulse 2", "Wave", "Noise"})
+        {
+            select(label);
+            check(!master && channels == (15u & ~((1u << ++index) - 1)), "channels can be toggled independently while master is off");
+        }
+        select("Master Sound");
+        check(master && channels == 0, "enabling master preserves muted channels");
+        for (const auto *label : {"Pulse 1", "Pulse 2", "Wave", "Noise"})
+            select(label);
+        check(master && channels == 15 && changes == 10, "all sound options toggle back on");
     }
 
     void fileMenuRequestsRomActions()
@@ -631,8 +680,6 @@ namespace
         escape();
         select("1X");
         checkScale(1);
-
-
     }
 }
 
@@ -642,6 +689,7 @@ int main()
     {
         capturesKeyboardOnlyForInterface();
         menusRequestTemporaryPause();
+        soundMenuControlsOutput();
         fileMenuRequestsRomActions();
         windowSizeShortcuts();
         displayMenuControlsWindow();

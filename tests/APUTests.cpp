@@ -105,11 +105,7 @@ namespace
         board.write(0xFF26, 0x00);
         board.write(0xFF26, 0x80);
         const std::pair<std::uint16_t, std::uint8_t> expected[] = {
-            {0xFF10, 0x80}, {0xFF11, 0x3F}, {0xFF12, 0x00}, {0xFF13, 0xFF}, {0xFF14, 0xBF},
-            {0xFF15, 0xFF}, {0xFF16, 0x3F}, {0xFF17, 0x00}, {0xFF18, 0xFF}, {0xFF19, 0xBF},
-            {0xFF1A, 0x7F}, {0xFF1B, 0xFF}, {0xFF1C, 0x9F}, {0xFF1D, 0xFF}, {0xFF1E, 0xBF},
-            {0xFF1F, 0xFF}, {0xFF20, 0xFF}, {0xFF21, 0x00}, {0xFF22, 0x00}, {0xFF23, 0xBF},
-            {0xFF24, 0x00}, {0xFF25, 0x00}, {0xFF26, 0xF0 & 0xF0}, {0xFF27, 0xFF}, {0xFF2F, 0xFF}};
+            {0xFF10, 0x80}, {0xFF11, 0x3F}, {0xFF12, 0x00}, {0xFF13, 0xFF}, {0xFF14, 0xBF}, {0xFF15, 0xFF}, {0xFF16, 0x3F}, {0xFF17, 0x00}, {0xFF18, 0xFF}, {0xFF19, 0xBF}, {0xFF1A, 0x7F}, {0xFF1B, 0xFF}, {0xFF1C, 0x9F}, {0xFF1D, 0xFF}, {0xFF1E, 0xBF}, {0xFF1F, 0xFF}, {0xFF20, 0xFF}, {0xFF21, 0x00}, {0xFF22, 0x00}, {0xFF23, 0xBF}, {0xFF24, 0x00}, {0xFF25, 0x00}, {0xFF26, 0xF0 & 0xF0}, {0xFF27, 0xFF}, {0xFF2F, 0xFF}};
         for (const auto &[address, value] : expected)
             check(board.read(address) == (address == 0xFF26 ? 0xF0 : value), "register read mask");
         // Registradores escrevíveis devolvem o valor escrito, com os bits write-only em 1.
@@ -357,6 +353,206 @@ namespace
         }
     }
 
+    void triggerEdges()
+    {
+        using Core::APU::APU;
+        // Observa cada T-cycle, sem a média de várias posições do duty.
+        for (unsigned channel = 0; channel < 2; ++channel)
+        {
+            APU apu;
+            apu.reset();
+            apu.setSampleRate(APU::ClockRate);
+            apu.write(0xFF25, channel == 0 ? 0x11 : 0x22);
+            for (unsigned i = 0; i < 10000; ++i)
+                apu.tick(); // O duty deve continuar parado antes do primeiro trigger.
+            apu.takeSamples();
+            const auto base = static_cast<std::uint16_t>(0xFF11 + channel * 5);
+            apu.write(base, 0); // duty 12,5%: posição 0 alta, demais baixas
+            apu.write(base + 1, 0xF0);
+            apu.write(base + 2, 0xFE);
+            apu.write(base + 3, 0x87); // período de oito T-cycles
+            for (unsigned i = 0; i < 8; ++i)
+                apu.tick();
+            const auto first = apu.takeSamples();
+            check(std::all_of(first.begin(), first.end(), [](float s)
+                              { return s > 0; }),
+                  "first pulse duty step is digital zero after waiting before trigger");
+            for (unsigned i = 0; i < 56; ++i)
+                apu.tick();
+            check(apu.takeSamples().back() < 0, "pulse duty reaches position zero after exactly eight periods");
+            apu.write(base + 3, 0x87);
+            apu.tick();
+            check(apu.takeSamples().back() < 0, "retrigger preserves pulse phase and does not mute the first step again");
+            std::vector<std::uint8_t> bytes;
+            Core::StateArchive writer(bytes);
+            writer(apu);
+            APU restored;
+            restored.setSampleRate(APU::ClockRate);
+            Core::StateArchive reader(static_cast<const std::vector<std::uint8_t> &>(bytes));
+            reader(restored);
+            reader.finish();
+            for (unsigned i = 0; i < 64; ++i)
+            {
+                apu.tick();
+                restored.tick();
+                check((apu.takeSamples().back() < 0) == (restored.takeSamples().back() < 0),
+                      "save state restores pulse phase and its running clock");
+            }
+        }
+
+        for (unsigned channel : {0u, 1u, 3u})
+            for (unsigned phase : {6u, 7u})
+            {
+                APU apu;
+                for (unsigned i = 0; i < phase; ++i)
+                    apu.clockFrameSequencer();
+                const std::uint16_t envelope = channel == 0 ? 0xFF12 : channel == 1 ? 0xFF17
+                                                                                    : 0xFF21;
+                const std::uint16_t trigger = channel == 0 ? 0xFF14 : channel == 1 ? 0xFF19
+                                                                                   : 0xFF23;
+                apu.write(envelope, 0xF1);
+                apu.write(trigger, 0x80);
+                for (unsigned i = phase; i < 8; ++i)
+                    apu.clockFrameSequencer();
+                check(apu.channelVolume(channel) == (phase == 7 ? 15 : 14), "envelope trigger delay depends on next sequencer step");
+                for (unsigned i = 0; i < 8; ++i)
+                    apu.clockFrameSequencer();
+                check(apu.channelVolume(channel) == (phase == 7 ? 14 : 13), "envelope resumes at its normal pace");
+            }
+
+        // O período zero no passo 7 recarrega 9, um estado válido para snapshots.
+        APU apu;
+        for (unsigned i = 0; i < 7; ++i)
+            apu.clockFrameSequencer();
+        apu.write(0xFF12, 0xF0);
+        apu.write(0xFF14, 0x80);
+        std::vector<std::uint8_t> bytes;
+        Core::StateArchive writer(bytes);
+        writer(apu);
+        APU restored;
+        Core::StateArchive reader(static_cast<const std::vector<std::uint8_t> &>(bytes));
+        reader(restored);
+        reader.finish();
+        check(restored.channelVolume(0) == 15, "save state accepts the extended envelope timer");
+    }
+
+    void disconnectedDacs()
+    {
+        Core::APU::APU apu;
+        apu.setSampleRate(Core::APU::APU::ClockRate);
+        apu.write(0xFF25, 0x11);
+        apu.write(0xFF12, 0x08); // DAC ligado, gerador inativo: carrega o capacitor com DC.
+        for (unsigned i = 0; i < 100000; ++i)
+            apu.tick();
+        apu.takeSamples();
+        apu.write(0xFF12, 0);
+        for (unsigned i = 0; i < 100000; ++i)
+            apu.tick();
+        const auto silence = apu.takeSamples();
+        check(std::all_of(silence.begin(), silence.end(), [](float s)
+                          { return s == 0; }),
+              "all DACs off disconnects both outputs immediately");
+        apu.write(0xFF12, 0x08);
+        apu.tick();
+        const auto reconnected = apu.takeSamples();
+        check(reconnected[0] > 0 && reconnected[0] < 0.01f, "disconnected capacitor retains its charge");
+        apu.write(0xFF26, 0);
+        apu.tick();
+        check(apu.takeSamples()[0] == 0, "power off also disconnects the charged capacitor");
+    }
+
+    void poweredOffLengths()
+    {
+        // A ROM é DMG em ambos: a escolha depende do console físico.
+        for (auto model : {Core::Model::DMG, Core::Model::CGB})
+            for (bool writeWhileOff : {false, true})
+            {
+                Core::Board board(model);
+                idle(board);
+                for (auto address : {0xFF11, 0xFF16, 0xFF20})
+                    board.write(address, 0x3F); // length 1
+                board.write(0xFF1B, 0xFF);
+                board.write(0xFF26, 0);
+                if (writeWhileOff)
+                {
+                    for (auto address : {0xFF11, 0xFF16, 0xFF20})
+                        board.write(address, 0xFE); // length 2; duty não deve mudar
+                    board.write(0xFF1B, 0xFE);
+                }
+                const auto state = board.saveState();
+                board.reset();
+                board.loadState(state);
+                board.write(0xFF04, 0);
+                run(board, 4); // observa DIV zerado ainda com APU desligada
+                board.write(0xFF26, 0x80);
+                check(board.read(0xFF11) == 0x3F && board.read(0xFF16) == 0x3F, "off writes never restore duty bits");
+                for (auto address : {0xFF12, 0xFF17, 0xFF21})
+                    board.write(address, 0xF0);
+                board.write(0xFF1A, 0x80);
+                for (auto address : {0xFF14, 0xFF19, 0xFF1E, 0xFF23})
+                    board.write(address, 0xC0);
+                run(board, stepCycles);
+                check((board.read(0xFF26) & 15) == (model == Core::Model::DMG && !writeWhileOff ? 0 : 15),
+                      "DMG retains length while CGB clears it across power off and save state");
+                run(board, 2 * stepCycles);
+                check((board.read(0xFF26) & 15) == (model == Core::Model::DMG ? 0 : 15),
+                      "only DMG accepts length writes while powered off");
+            }
+    }
+
+    void outputChannelPreferences()
+    {
+        for (unsigned channel = 0; channel < 4; ++channel)
+        {
+            Core::Board board(Core::Model::CGB);
+            idle(board);
+            board.write(0xFF11, 0x80);
+            board.write(0xFF16, 0x80);
+            for (unsigned i = 0; i < 16; ++i)
+                board.write(0xFF30 + i, 0xF0);
+            if (channel < 2)
+            {
+                const auto offset = channel * 5;
+                board.write(0xFF12 + offset, 0xF0);
+                board.write(0xFF14 + offset, 0x87);
+            }
+            else if (channel == 2)
+            {
+                board.write(0xFF1A, 0x80);
+                board.write(0xFF1C, 0x20);
+                board.write(0xFF1E, 0x87);
+            }
+            else
+            {
+                board.write(0xFF21, 0xF0);
+                board.write(0xFF23, 0x80);
+            }
+            const auto audible = capture(board, 50000);
+            check(audible.hi - audible.lo > 0.1f, "each enabled channel reaches the output");
+            const auto hardware = board.saveState();
+            const auto mask = static_cast<std::uint8_t>(15 & ~(1 << channel));
+            board.setAudioOutputChannels(mask);
+            check(board.saveState() == hardware, "muting changes no emulated hardware or snapshot data");
+            const auto muted = capture(board, 50000);
+            check(muted.lo == 0 && muted.hi == 0 && muted.loR == 0 && muted.hiR == 0,
+                  "each muted channel is removed from both outputs");
+            check(board.apu().channelActive(channel), "muted channels keep running");
+            board.loadState(hardware);
+            check(board.apu().outputChannels() == mask, "load state preserves channel preferences");
+            board.write(0xFF26, 0);
+            check(board.apu().outputChannels() == mask, "APU power off preserves channel preferences");
+            board.reset();
+            check(board.apu().outputChannels() == mask, "reset preserves channel preferences");
+            board.unloadCartridge();
+            idle(board);
+            check(board.apu().outputChannels() == mask, "ROM changes preserve channel preferences");
+            board.loadState(hardware);
+            board.setAudioOutputChannels(15);
+            const auto resumed = capture(board, 50000);
+            check(resumed.hi - resumed.lo > 0.1f, "unmuting restores channel output");
+        }
+    }
+
     void powerAndState()
     {
         Core::Board board(Core::Model::CGB);
@@ -387,9 +583,12 @@ namespace
         // Desligar a APU zera todos os registradores e canais, e bloqueia escritas.
         board.write(0xFF26, 0x00);
         for (std::uint16_t a = 0xFF10; a <= 0xFF25; ++a)
-            check(board.read(a) == (a == 0xFF10 ? 0x80 : (a == 0xFF11 || a == 0xFF16) ? 0x3F : (a == 0xFF1A) ? 0x7F : (a == 0xFF1C) ? 0x9F
-                                  : (a == 0xFF14 || a == 0xFF19 || a == 0xFF1E || a == 0xFF23) ? 0xBF
-                                  : (a == 0xFF13 || a == 0xFF18 || a == 0xFF1D || a == 0xFF1B || a == 0xFF20 || a == 0xFF15 || a == 0xFF1F) ? 0xFF : 0x00),
+            check(board.read(a) == (a == 0xFF10 ? 0x80 : (a == 0xFF11 || a == 0xFF16)                                                                          ? 0x3F
+                                                     : (a == 0xFF1A)                                                                                           ? 0x7F
+                                                     : (a == 0xFF1C)                                                                                           ? 0x9F
+                                                     : (a == 0xFF14 || a == 0xFF19 || a == 0xFF1E || a == 0xFF23)                                              ? 0xBF
+                                                     : (a == 0xFF13 || a == 0xFF18 || a == 0xFF1D || a == 0xFF1B || a == 0xFF20 || a == 0xFF15 || a == 0xFF1F) ? 0xFF
+                                                                                                                                                               : 0x00),
                   "power off clears registers");
         check(board.read(0xFF26) == 0x70, "power off clears channel status");
         board.write(0xFF12, 0xF0);
@@ -426,6 +625,10 @@ int main()
         sweep();
         waveRam();
         synthesis();
+        triggerEdges();
+        disconnectedDacs();
+        poweredOffLengths();
+        outputChannelPreferences();
         powerAndState();
         std::cout << "APU control tests passed\n";
         return 0;
