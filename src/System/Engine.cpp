@@ -32,7 +32,7 @@ namespace R2BOY::System
         // Fecha o áudio antes de a Window encerrar SDL; sem dispositivo o emulador fica mudo.
         const auto stopAudio = [this](Audio *)
         { audio.close(); };
-        std::unique_ptr<Audio, decltype(stopAudio)> audioSession(&audio_, stopAudio);
+        std::unique_ptr<Audio, decltype(stopAudio)> audioSession(&audio, stopAudio);
         if (audio.open())
             board.setAudioSampleRate(audio.sampleRate());
 
@@ -248,9 +248,8 @@ namespace R2BOY::System
                 audio.clear();
             }
             else
-                audio.queue(board_.takeAudioSamples());
+                audio.queue(board.takeAudioSamples());
           
-            const auto serialOutput = board_.takeSerialOutput();
             const auto serialOutput = board.takeSerialOutput();
             if (!serialOutput.empty())
                 std::cout << serialOutput << std::flush;
