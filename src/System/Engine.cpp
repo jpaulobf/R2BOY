@@ -8,6 +8,7 @@
 #include "SaveFile.h"
 #include "StateFile.h"
 #include "FramePacer.h"
+#include "RewindBuffer.h"
 #include <chrono>
 #include <algorithm>
 #include <memory>
@@ -71,6 +72,11 @@ namespace R2BOY::System
         bool cpuFaultReported = false;
         bool cpuStopReported = false;
         bool menuPaused = false;
+        RewindBuffer rewind;
+        bool rewindEnabled = window.isRewindEnabled();
+        bool rewindFailed = false;
+        bool rewinding = false;
+        auto nextRewind = FramePacer::Clock::now();
         // A interface nunca altera a pausa manual de Pause/Break.
         const auto emulationPaused = [&]()
         { return paused || menuPaused; };
@@ -107,7 +113,7 @@ namespace R2BOY::System
         const auto syncFastForward = [&]()
         {
             setUncappedSpeed(fastForwardEnabled && input.isFastForwardPressed() &&
-                             board.cartridge().loaded() && !emulationPaused() && !window.isMinimized());
+                             board.cartridge().loaded() && !emulationPaused() && !rewinding && !window.isMinimized());
         };
         const auto flushSave = [&]()
         {
@@ -117,6 +123,9 @@ namespace R2BOY::System
         // ROM nova, reset e restauração de estado começam sem entrada ou tempo pendente.
         const auto resetRuntime = [&]()
         {
+            rewind.clear();
+            rewindFailed = false;
+            rewinding = false;
             audio.clear();
             board.takeAudioSamples();
             input.clear();
@@ -127,6 +136,23 @@ namespace R2BOY::System
             cycleCredit = 0;
             lastExecution = FramePacer::Clock::now();
             framePacer.reset(lastExecution);
+        };
+
+        // Captura na cadência do clock base, inclusive com LCD desligado ou fast-forward.
+        const auto captureRewind = [&]()
+        {
+            if (!rewindEnabled || rewindFailed || !rewind.captureDue(board.baseClockCycles()))
+                return;
+            try
+            {
+                rewind.push(board.baseClockCycles(), board.saveState());
+            }
+            catch (const std::exception &e)
+            {
+                rewind.clear();
+                rewindFailed = true;
+                std::cerr << "Rewind: " << e.what() << std::endl;
+            }
         };
 
         // A interface escolhe o arquivo; a Engine faz a ponte entre leitura e cartucho.
@@ -188,6 +214,12 @@ namespace R2BOY::System
                               { input.handleEvent(event, enabled); });
             if (!running)
                 break;
+            if (rewindEnabled != window.isRewindEnabled() || rewind.interval() != window.rewindFrameInterval())
+            {
+                rewindEnabled = window.isRewindEnabled();
+                rewind.configure(window.rewindFrameInterval());
+                rewindFailed = false;
+            }
             if (input.takePauseToggleRequest() && board.cartridge().loaded())
             {
                 paused = !paused;
@@ -200,8 +232,21 @@ namespace R2BOY::System
             const bool inputEnabled = window.acceptsGameInput();
             auto inputFrame = board.baseClockCycles() / 70224;
             const auto buttons = input.update(inputFrame, inputEnabled);
+            const bool wantsRewind = rewindEnabled && !rewindFailed && input.isRewindPressed() &&
+                                     inputEnabled && board.cartridge().loaded() && !emulationPaused() && !window.isMinimized();
+            if (rewinding != wantsRewind)
+            {
+                rewinding = wantsRewind;
+                audio.clear();
+                board.takeAudioSamples();
+                cycleCredit = 0;
+                lastExecution = FramePacer::Clock::now();
+                nextRewind = lastExecution;
+                framePacer.reset(lastExecution);
+                cpuFaultReported = cpuStopReported = false;
+            }
             // Entrada continua sendo processada, mas não altera JOYP/IF durante a pausa.
-            if (!emulationPaused())
+            if (!emulationPaused() && !rewinding)
                 board.setButtons(buttons);
             syncFastForward();
 
@@ -232,12 +277,38 @@ namespace R2BOY::System
             const double elapsed = std::chrono::duration<double>(now - lastExecution).count();
             lastExecution = now;
 
+            if (rewinding && now >= nextRewind)
+            {
+                try
+                {
+                    if (auto snapshot = rewind.popBefore(board.baseClockCycles()))
+                    {
+                        board.loadState(snapshot->state);
+                        board.takeAudioSamples();
+                        board.takeSerialOutput();
+                        audio.clear();
+                    }
+                }
+                catch (const std::exception &e)
+                {
+                    rewind.clear();
+                    rewindFailed = true;
+                    std::cerr << "Rewind: " << e.what() << std::endl;
+                }
+                const auto interval = std::chrono::nanoseconds(
+                    RewindBuffer::FrameCycles * rewind.interval() * 1000000000ull / 4194304);
+                nextRewind += interval;
+                if (nextRewind < now)
+                    nextRewind = now + interval;
+            }
+
             // Com VSync ou fast-forward, avança um quadro por apresentação.
             // Fast-forward suspende a espera SDL e o limitador abaixo.
             // Sem VSync, mantém o avanço por tempo decorrido e o cap de 60 FPS.
             // O orçamento usa o clock base, independente de double speed e overclock.
-            if (!emulationPaused() && board.cartridge().loaded() && !board.cpu().locked())
+            if (!emulationPaused() && !rewinding && board.cartridge().loaded() && !board.cpu().locked())
             {
+                captureRewind();
                 // Limita a recuperação a 50 ms para uma demora do host não gerar uma rajada longa.
                 cycleCredit += (uncappedSpeed || vsyncEnabled) ? 70224.0 : std::min(elapsed, 0.05) * 4194304.0;
                 while (cycleCredit > 0 && !board.cpu().locked())
@@ -254,6 +325,8 @@ namespace R2BOY::System
                     const auto baseCycles = board.baseClockCycles() - before;
                     // STOP comum congela o hardware, mas deve consumir a espera do loop.
                     cycleCredit -= baseCycles != 0 ? baseCycles : cpuCycles / board.cpuSpeedMultiplier();
+                    if (rewindEnabled && board.baseClockCycles() / RewindBuffer::FrameCycles != before / RewindBuffer::FrameCycles)
+                        captureRewind();
                 }
             }
             if (board.cpu().locked() && !cpuFaultReported)
@@ -263,7 +336,7 @@ namespace R2BOY::System
                 cpuFaultReported = true;
             }
             // Fast-forward e pausa não devem acumular áudio fora do tempo real.
-            if (uncappedSpeed || emulationPaused())
+            if (uncappedSpeed || emulationPaused() || rewinding)
             {
                 board.takeAudioSamples();
                 audio.clear();
