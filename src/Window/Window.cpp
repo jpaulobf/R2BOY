@@ -17,6 +17,7 @@ namespace R2BOY::Window
     {
         constexpr int screenWidth = Common::Constants::ScreenWidth;
         constexpr int screenHeight = Common::Constants::ScreenHeight;
+        const char *emuTitle = "R2BOY v0.2.0";
 
         struct PalettePreset
         {
@@ -81,7 +82,10 @@ namespace R2BOY::Window
                            bool &fastForwardEnabled, const Window::FastForwardCallback &fastForwardCallback,
                            bool &cpuOverclockEnabled, const Window::CPUOverclockCallback &cpuOverclockCallback,
                            bool &unlimitedSpritesEnabled, const Window::UnlimitedSpritesCallback &unlimitedSpritesCallback,
-                           bool &masterSound, std::uint8_t &soundChannels, const Window::SoundCallback &soundCallback)
+                           bool &masterSound, std::uint8_t &soundChannels, const Window::SoundCallback &soundCallback,
+                           int &soundVolume, const Window::VolumeCallback &volumeCallback,
+                           std::array<int, 4> &channelVolumes, const Window::ChannelVolumeCallback &channelVolumeCallback,
+                           bool &serialOutputEnabled)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -97,7 +101,7 @@ namespace R2BOY::Window
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
             ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(0, 0, 0, 255));
-            const bool visible = ImGui::Begin("R2BOY v.0.2.0", nullptr, flags);
+            const bool visible = ImGui::Begin(emuTitle, nullptr, flags);
             ImGui::PopStyleColor();
             ImGui::PopStyleVar(2);
             if (visible)
@@ -191,16 +195,26 @@ namespace R2BOY::Window
                     {
                         if (ImGui::MenuItem("Master Sound", nullptr, &masterSound) && soundCallback)
                             soundCallback(masterSound, soundChannels);
+                        ImGui::SetNextItemWidth(160.0f);
+                        if (ImGui::SliderInt("Volume", &soundVolume, 0, 100, "%d%%", ImGuiSliderFlags_AlwaysClamp) && volumeCallback)
+                            volumeCallback(soundVolume);
                         ImGui::Separator();
                         constexpr const char *labels[] = {"Pulse 1", "Pulse 2", "Wave", "Noise"};
                         for (unsigned i = 0; i < 4; ++i)
                         {
+                            if (i > 0)
+                                ImGui::Separator();
                             if (ImGui::MenuItem(labels[i], nullptr, (soundChannels & (1 << i)) != 0))
                             {
                                 soundChannels ^= 1 << i;
                                 if (soundCallback)
                                     soundCallback(masterSound, soundChannels);
                             }
+                            ImGui::PushID(static_cast<int>(i));
+                            ImGui::SetNextItemWidth(160.0f);
+                            if (ImGui::SliderInt("Volume", &channelVolumes[i], 0, 100, "%d%%", ImGuiSliderFlags_AlwaysClamp) && channelVolumeCallback)
+                                channelVolumeCallback(i, channelVolumes[i]);
+                            ImGui::PopID();
                         }
                         ImGui::EndMenu();
                     }
@@ -218,6 +232,8 @@ namespace R2BOY::Window
                             cpuOverclockCallback(cpuOverclockEnabled);
                         if (ImGui::MenuItem("Enable Unlimited Sprites", nullptr, &unlimitedSpritesEnabled) && unlimitedSpritesCallback)
                             unlimitedSpritesCallback(unlimitedSpritesEnabled);
+                        ImGui::Separator();
+                        ImGui::MenuItem("Enable Serial Output", nullptr, &serialOutputEnabled);
                         ImGui::EndMenu();
                     }
                     ImGui::EndMenuBar();
@@ -277,6 +293,10 @@ namespace R2BOY::Window
         bool masterSound = true;
         std::uint8_t soundChannels = 0x0F;
         SoundCallback soundCallback;
+        int soundVolume = 100;
+        VolumeCallback volumeCallback;
+        std::array<int, 4> channelVolumes{100, 100, 100, 100};
+        ChannelVolumeCallback channelVolumeCallback;
         bool vsyncSuppressed = false;
         bool fastForwardEnabled = true;
         FastForwardCallback fastForwardCallback;
@@ -284,6 +304,7 @@ namespace R2BOY::Window
         CPUOverclockCallback cpuOverclockCallback;
         bool unlimitedSpritesEnabled = true;
         UnlimitedSpritesCallback unlimitedSpritesCallback;
+        bool serialOutputEnabled = false;
         double currentFPS = 0;
         Uint64 fpsSampleStart = 0;
         unsigned presentedFrames = 0;
@@ -299,11 +320,11 @@ namespace R2BOY::Window
         {
             if (!gameWasLoaded && romFileName.empty() && !cpuOverclockEnabled)
             {
-                SDL_SetWindowTitle(window.get(), "R2BOY");
+                SDL_SetWindowTitle(window.get(), emuTitle);
                 return;
             }
             char title[128];
-            SDL_snprintf(title, sizeof(title), "R2BOY | FPS: %.2f", currentFPS);
+            SDL_snprintf(title, sizeof(title), "%s | FPS: %.2f", emuTitle, currentFPS);
             std::string caption = title;
             if (!romFileName.empty())
                 caption += " | " + romFileName;
@@ -388,7 +409,7 @@ namespace R2BOY::Window
         ImGui::CreateContext();
         auto state = std::make_unique<Impl>();
         state->window.reset(SDL_CreateWindow(
-            "R2BOY", screenWidth * state->display.scale, screenHeight * state->display.scale,
+            emuTitle, screenWidth * state->display.scale, screenHeight * state->display.scale,
             SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY));
         if (!state->window)
         {
@@ -520,6 +541,23 @@ namespace R2BOY::Window
     bool Window::isMasterSoundEnabled() const { return impl_->masterSound; }
     std::uint8_t Window::soundChannels() const { return impl_->soundChannels; }
 
+    void Window::setVolumeCallback(VolumeCallback callback)
+    {
+        impl_->volumeCallback = std::move(callback);
+    }
+
+    int Window::soundVolume() const { return impl_->soundVolume; }
+
+    void Window::setChannelVolumeCallback(ChannelVolumeCallback callback)
+    {
+        impl_->channelVolumeCallback = std::move(callback);
+    }
+
+    int Window::soundChannelVolume(unsigned channel) const
+    {
+        return channel < impl_->channelVolumes.size() ? impl_->channelVolumes[channel] : 0;
+    }
+
     void Window::setVSyncCallback(VSyncCallback callback)
     {
         impl_->vsyncCallback = std::move(callback);
@@ -586,6 +624,11 @@ namespace R2BOY::Window
         return impl_->unlimitedSpritesEnabled;
     }
 
+    bool Window::isSerialOutputEnabled() const
+    {
+        return impl_->serialOutputEnabled;
+    }
+
     Window::RomAction Window::takeRomAction()
     {
         return std::exchange(impl_->romAction, RomAction::None);
@@ -615,7 +658,7 @@ namespace R2BOY::Window
         bool titleChanged = impl_->gameWasLoaded != gameLoaded;
         const bool wasOverclockEnabled = impl_->cpuOverclockEnabled;
         drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
-                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback);
+                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled);
         titleChanged |= wasOverclockEnabled != impl_->cpuOverclockEnabled;
         const Common::Framebuffer *textureFrame = &framebuffer;
         if (gameLoaded && dmgMode && impl_->display.palettePreset != 0)

@@ -107,6 +107,15 @@ namespace R2BOY::Window
         // Retorna os canais de som habilitados.
         std::uint8_t soundChannels() const;
 
+        // Volume da saída de áudio da sessão (0 a 100), independente de Master Sound.
+        using VolumeCallback = std::function<void(int)>;
+        void setVolumeCallback(VolumeCallback callback);
+        int soundVolume() const;
+
+        using ChannelVolumeCallback = std::function<void(unsigned channel, int percent)>;
+        void setChannelVolumeCallback(ChannelVolumeCallback callback);
+        int soundChannelVolume(unsigned channel) const;
+
         // Suspende a sincronização durante fast-forward, preservando a opção Display.
         // Retorna false em falha SDL, mantendo o estado anterior.
         bool setVSyncSuppressed(bool suppressed);
@@ -137,6 +146,9 @@ namespace R2BOY::Window
 
         // Retorna se o hack de sprites ilimitadas está habilitado.
         bool isUnlimitedSpritesEnabled() const;
+
+        // Permite imprimir os bytes da porta serial no console; desativado por padrão.
+        bool isSerialOutputEnabled() const;
 
         // Desenha e apresenta um frame; pode solicitar saída via running e retorna false em falha SDL.
         // gameLoaded controla a exibição do jogo e a medição de FPS, sem consultar o Core.
