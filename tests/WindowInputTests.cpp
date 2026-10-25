@@ -210,6 +210,88 @@ namespace
         check(!running, "Exit must still close the application without a game");
     }
 
+    void windowSizeShortcuts()
+    {
+        R2BOY::Window::Window window;
+        check(window.open(), "resize shortcut window must open");
+        auto *native = SDL_GetWindowFromID(static_cast<SDL_WindowID>(
+            reinterpret_cast<intptr_t>(ImGui::GetMainViewport()->PlatformHandle)));
+        check(native != nullptr, "resize shortcut SDL window must be available");
+        R2BOY::Common::Framebuffer framebuffer{};
+        bool running = true;
+        const auto frame = [&]()
+        {
+            window.pollEvents(running);
+            check(window.renderFrame(running, false, framebuffer), "resize shortcut frame must render");
+        };
+        frame();
+        frame();
+        const auto select = [&](const char *label)
+        {
+            auto *main = ImGui::FindWindowByName("R2BOY");
+            ImGui::ActivateItemByID(ImHashStr("Display", 0, main->GetID("##MenuBar")));
+            frame();
+            frame();
+            auto *menu = ImGui::FindWindowByName("Display###Menu_00");
+            check(menu && menu->Active, "Display menu must open for shortcut test");
+            ImGui::ActivateItemByID(menu->GetID(label));
+            frame();
+            frame();
+            frame();
+            check((SDL_GetWindowFlags(native) & SDL_WINDOW_FULLSCREEN) != 0,
+                  "shortcut test must enter fullscreen");
+        };
+        const auto checkScale = [&](int scale)
+        {
+            int width = 0, height = 0;
+            check(SDL_GetWindowSize(native, &width, &height), "shortcut window size must be available");
+            auto *main = ImGui::FindWindowByName("R2BOY");
+            check(width == 160 * scale && height == 144 * scale + static_cast<int>(main->MenuBarHeight),
+                  "Ctrl+1 through Ctrl+5 must size the game area, excluding the menu");
+            check((SDL_GetWindowFlags(native) & SDL_WINDOW_FULLSCREEN) == 0 && main->MenuBarHeight > 0,
+                  "resize shortcut must return to windowed mode with the menu");
+        };
+        const auto resizeShortcut = [&](SDL_Keycode key, SDL_Keymod modifiers, bool repeat = false)
+        {
+            SDL_Event event{};
+            event.type = SDL_EVENT_KEY_DOWN;
+            event.key.windowID = SDL_GetWindowID(native);
+            event.key.key = key;
+            event.key.scancode = SDL_GetScancodeFromKey(key, nullptr);
+            event.key.mod = modifiers;
+            event.key.down = true;
+            event.key.repeat = repeat;
+            check(SDL_PushEvent(&event), "resize shortcut must enter queue");
+            frame();
+            event.type = SDL_EVENT_KEY_UP;
+            event.key.down = false;
+            event.key.repeat = false;
+            event.key.mod = SDL_KMOD_NONE;
+            check(SDL_PushEvent(&event), "resize shortcut release must enter queue");
+            frame();
+            frame();
+        };
+        for (int scale = 1; scale <= 5; ++scale)
+        {
+            resizeShortcut(SDLK_1 + scale - 1, scale % 2 ? SDL_KMOD_LCTRL : SDL_KMOD_RCTRL);
+            checkScale(scale);
+        }
+        resizeShortcut(SDLK_1, SDL_KMOD_NONE);
+        checkScale(5);
+        resizeShortcut(SDLK_2, SDL_KMOD_CTRL | SDL_KMOD_ALT);
+        checkScale(5);
+        resizeShortcut(SDLK_3, SDL_KMOD_CTRL, true);
+        checkScale(5);
+        resizeShortcut(SDLK_6, SDL_KMOD_CTRL);
+        checkScale(5);
+        select("Borderless Fullscreen");
+        resizeShortcut(SDLK_2, SDL_KMOD_CTRL);
+        checkScale(2);
+        select("Borderless Fullscreen Stretched");
+        resizeShortcut(SDLK_1, SDL_KMOD_CTRL);
+        checkScale(1);
+    }
+
     void displayMenuControlsWindow()
     {
         R2BOY::Window::Window window;
@@ -472,6 +554,7 @@ namespace
             ImGui::ActivateItemByID(submenu->GetID(label));
             frame();
         };
+        selectPalette("Default");
         checkPalette(grayscale);
         selectPalette("Classic Green");
         checkPalette({0xFF9BBC0F, 0xFF8BAC0F, 0xFF306230, 0xFF0F380F});
@@ -481,6 +564,10 @@ namespace
         checkPalette({0xFFFFF1C1, 0xFFE8B45B, 0xFF99602F, 0xFF382414});
         selectPalette("Neon");
         checkPalette({0xFFF4D6FF, 0xFFFF45D8, 0xFF852BFF, 0xFF10004D});
+        selectPalette("Blue Neon");
+        checkPalette({0xFFE0F8FF, 0xFF42DFFF, 0xFF245BFF, 0xFF020B33});
+        selectPalette("Green Neon");
+        checkPalette({0xFFDCFFE9, 0xFF4DFF88, 0xFF16A34A, 0xFF032A18});
         selectPalette("Ocean");
         const std::array<std::uint32_t, 4> ocean{0xFFE0F4FF, 0xFF8CB8D8, 0xFF406888, 0xFF142838};
         checkPalette(ocean);
@@ -544,6 +631,8 @@ namespace
         escape();
         select("1X");
         checkScale(1);
+
+
     }
 }
 
@@ -554,6 +643,7 @@ int main()
         capturesKeyboardOnlyForInterface();
         menusRequestTemporaryPause();
         fileMenuRequestsRomActions();
+        windowSizeShortcuts();
         displayMenuControlsWindow();
         std::cout << "Window input and display tests passed.\n";
         return 0;
