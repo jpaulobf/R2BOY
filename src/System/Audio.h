@@ -26,6 +26,8 @@ namespace R2BOY::System
         void close();
         bool active() const { return stream_ != nullptr; }
         std::uint32_t sampleRate() const { return sampleRate_; }
+        void setEnabled(bool enabled);
+        bool enabled() const { return enabled_; }
 
         // Enfileira amostras L/R intercaladas. Descarta o excesso quando a fila passa de ~150 ms,
         // para que a latência não cresça se o emulador rodar mais rápido que o tempo real.
@@ -37,5 +39,6 @@ namespace R2BOY::System
     private:
         SDL_AudioStream *stream_ = nullptr;
         std::uint32_t sampleRate_ = 48000;
+        bool enabled_ = true;
     };
 }

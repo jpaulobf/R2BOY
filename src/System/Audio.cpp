@@ -38,12 +38,20 @@ namespace R2BOY::System
 
     void Audio::queue(const std::vector<float> &samples)
     {
-        if (!stream_ || samples.empty())
+        if (!stream_ || !enabled_ || samples.empty())
             return;
         const int limit = static_cast<int>(sampleRate_ * 2 * sizeof(float) * 150 / 1000);
         if (SDL_GetAudioStreamQueued(stream_) > limit)
             return;
         SDL_PutAudioStreamData(stream_, samples.data(), static_cast<int>(samples.size() * sizeof(float)));
+    }
+
+    void Audio::setEnabled(bool enabled)
+    {
+        if (enabled_ == enabled)
+            return;
+        enabled_ = enabled;
+        clear();
     }
 
     void Audio::clear()
