@@ -4,11 +4,52 @@ Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
 ## [Não lançado]
 
-- APU completa: canais de pulso 1 (com sweep) e 2, onda e ruído, com length,
-  envelope, frame sequencer ligado ao bit de DIV, NR50/NR51/NR52, Wave RAM e
-  filtro passa-altas; saída estéreo via SDL3 em `System/Audio`, descartada em
-  pausa e avanço rápido. Savestates passam à versão 12. Comportamento verificado
-  contra a Pan Docs (gbdev.io) em `tests/APUTests.cpp`.
+## [0.2.1] - 2026-10-25
+
+### Imagem e paletas
+
+- Novas opções em **Display > Palette Preset**: **Blue Neon**, **Green Neon**,
+  **Yellow Neon**, **Terracotta** e **Petroleum Blue**.
+- **Terracotta** combina tons de creme, marrom e vermelho queimado;
+  **Petroleum Blue** combina verde petróleo, turquesa e azul profundo. Ambas
+  usam variações de cor distribuídas em blocos de 2×2 pixels, fixos entre quadros.
+- As paletas anteriores preservam o mapeamento original. As novas opções se
+  aplicam a jogos monocromáticos, inclusive em compatibilidade no CGB, e podem
+  ser trocadas durante a pausa ou usadas em conjunto com scanlines.
+
+### Áudio
+
+- APU completa: dois canais de pulso (o primeiro com sweep), onda e ruído,
+  com length counters, envelopes, frame sequencer ligado a DIV, controles
+  NR50/NR51/NR52, Wave RAM e filtro passa-altas.
+- Saída estéreo pelo dispositivo padrão via SDL3. O áudio pendente é descartado
+  durante pausas e avanço rápido para evitar reprodução atrasada.
+- Menu **Sound** com **Master Sound** e controles independentes para
+  **Pulse 1**, **Pulse 2**, **Wave** e **Noise**.
+- Sliders de volume de **0 a 100%** para a saída mestre e cada canal, iniciando
+  em 100%. Os ajustes de escuta preservam os registradores emulados e são
+  mantidos durante resets e carregamentos de save states.
+
+### Rewind e diagnóstico
+
+- **Hacks > Enable Rewind**, desligado por padrão. Segurar **Caps Lock** volta
+  até **10 segundos** no jogo; soltar retoma a execução a partir daquele ponto.
+- Histórico em ring buffer na memória, usando o formato dos save states,
+  com áudio silenciado durante o rewind.
+- Submenu **Rewind Level**, disponível com o recurso habilitado: **Light**
+  captura um estado a cada 10 quadros; **Normal**, padrão, a cada 5 quadros;
+  **Precise**, a cada quadro.
+- O histórico é limpo ao desativar o rewind, mudar o nível, trocar ou
+  descarregar a ROM, resetar o jogo ou carregar um save state.
+- **Hacks > Enable Serial Output**, desligado por padrão, controla a impressão
+  dos bytes da porta serial no console, preservando o funcionamento da porta.
+
+### Compatibilidade e validação
+
+- Save states usam o **formato 13**. Estados de versões anteriores precisam
+  ser recriados; saves de bateria `.sav` continuam compatíveis.
+- Testes de APU, volumes por canal, restauração de estados, ring buffer,
+  limite de dez segundos, teclado e opções de rewind no menu.
 
 ## [0.1.0] - 2026-10-25
 
