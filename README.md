@@ -8,7 +8,7 @@ A Game Boy and Game Boy Color emulator written from scratch in C++, developed
 alongside R2NES.
 
 R2BOY is a work in progress. Game compatibility and graphics accuracy are still
-improving, and audio is not available yet.
+improving.
 
 ## Features
 
@@ -17,6 +17,8 @@ improving, and audio is not available yet.
 - Automatic battery saves and three save state slots.
 - Windowed and fullscreen display, color palettes, scanlines and bilinear filtering.
 - Optional CPU overclock and unlimited sprites.
+- Complete audio: two pulse channels (with sweep), wave and noise channels,
+  stereo mixing, played through the default output device.
 
 ## Getting started
 
@@ -64,8 +66,7 @@ compatible.
 
 ## Known limitations
 
-Some games may show graphical glitches or fail to run correctly. Audio,
-cartridge clocks (RTC) and parts of Game Boy Color support are still pending.
+Some games may show graphical glitches or fail to run correctly. Cartridge clocks (RTC) and parts of Game Boy Color support are still pending.
 Optional hacks can affect compatibility and can be toggled in the **Hacks** menu.
 
 ## Building

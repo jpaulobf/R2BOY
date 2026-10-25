@@ -15,15 +15,15 @@ if(WIN32)
 endif()
 FetchContent_Declare(SDL3
     GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-    GIT_TAG release-3.4.18
-    GIT_SHALLOW TRUE
+    # Commit fixado (release-3.4.18): uma tag movida não altera o código baixado.
+    GIT_TAG 829a65d769d935c4852f8159e964312c0957260a
 )
 FetchContent_MakeAvailable(SDL3)
 
 FetchContent_Declare(imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG v1.92.9b
-    GIT_SHALLOW TRUE
+    # Commit fixado (v1.92.9b): uma tag movida não altera o código baixado.
+    GIT_TAG f1cc2ae15e53a861a874c3034aae6798fde194ab
 )
 FetchContent_MakeAvailable(imgui)
 add_library(r2boy_imgui STATIC
@@ -39,8 +39,8 @@ target_link_libraries(r2boy_imgui PUBLIC SDL3::SDL3-static)
 
 FetchContent_Declare(miniz
     GIT_REPOSITORY https://github.com/richgel999/miniz.git
-    GIT_TAG 3.1.0
-    GIT_SHALLOW TRUE
+    # Commit fixado (3.1.0): uma tag movida não altera o código baixado.
+    GIT_TAG 174573d60290f447c13a2b1b3405de2b96e27d6c
 )
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)

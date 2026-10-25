@@ -65,6 +65,7 @@ namespace R2BOY::Core
         // Perfil determinístico sem boot ROM: fases conhecidas DMG/CGB, sem
         // reproduzir o tempo variável da animação/interação da boot ROM original.
         timer_.reset(model_ == Model::CGB, model_ == Model::DMG ? 0xABCC : (executionMode_ == ExecutionMode::CGB ? 0x1EA0 : 0x267C));
+        sequencerBitHigh_ = ((timer_.systemCounter() >> APU::APU::frameSequencerBit(speedSwitch_.doubleSpeed())) & 1) != 0;
         CPU::CPU::Registers registers;
         registers.pc = 0x0100;
         registers.sp = 0xFFFE;
@@ -153,6 +154,12 @@ namespace R2BOY::Core
                 timer_.tick(interrupts_);
                 serial_.clock(previousCounter, timer_.systemCounter(), interrupts_);
             }
+            // O frame sequencer da APU avança na borda de descida de um bit de DIV, o que
+            // inclui o reinício do contador por escrita em DIV e a troca de velocidade.
+            const bool sequencerBit = ((timer_.systemCounter() >> APU::APU::frameSequencerBit(speedSwitch_.doubleSpeed())) & 1) != 0;
+            if (sequencerBitHigh_ && !sequencerBit)
+                apu_.clockFrameSequencer();
+            sequencerBitHigh_ = sequencerBit;
             // A PPU observa no mesmo T-cycle a cópia e o estado ativo atualizados pelo DMA.
             dma_.tick(bus_);
             if (t == 3 && videoRead)
@@ -170,6 +177,7 @@ namespace R2BOY::Core
             {
                 ++baseClockCycles_;
                 ppu_.tick(memory_, interrupts_, dma_.active());
+                apu_.tick();
             }
             speedSwitch_.tick();
             if (tickObserver_)
@@ -209,7 +217,7 @@ namespace R2BOY::Core
         std::vector<std::uint8_t> result;
         StateArchive header(result);
         std::string magic = "R2BOY-STATE";
-        std::uint32_t version = 11;
+        std::uint32_t version = 12;
         auto model = model_;
         auto mode = executionMode_;
         auto romHash = Common::RomFile::hash(cartridge_.rom());
@@ -235,7 +243,7 @@ namespace R2BOY::Core
         ExecutionMode mode{};
         header(magic, version, model, mode, romHash, checksum);
         header.finish();
-        if (magic != "R2BOY-STATE" || version != 11)
+        if (magic != "R2BOY-STATE" || version != 12)
             throw std::runtime_error("Unsupported save state format/version.");
         if (model != model_ || mode != executionMode_ || romHash != Common::RomFile::hash(cartridge_.rom()))
             throw std::runtime_error("Save state belongs to a different ROM or hardware model.");
@@ -252,7 +260,10 @@ namespace R2BOY::Core
         baseClockCycles_ = next.baseClockCycles_;
         baseClockPhase_ = next.baseClockPhase_;
         speedSwitch_ = next.speedSwitch_;
+        // A taxa de saída e a fila de amostras pertencem à sessão, não ao estado salvo.
+        const auto sampleRate = apu_.sampleRate();
         apu_ = next.apu_;
+        apu_.setSampleRate(sampleRate);
         buttons_ = next.buttons_;
         cartridge_ = std::move(next.cartridge_);
         dma_ = std::move(next.dma_);
@@ -260,6 +271,7 @@ namespace R2BOY::Core
         joypad_ = std::move(next.joypad_);
         serial_ = std::move(next.serial_);
         timer_ = std::move(next.timer_);
+        sequencerBitHigh_ = ((timer_.systemCounter() >> APU::APU::frameSequencerBit(speedSwitch_.doubleSpeed())) & 1) != 0;
         memory_ = std::move(next.memory_);
         const bool unlimitedSprites = ppu_.isUnlimitedSpritesEnabled();
         ppu_ = std::move(next.ppu_);

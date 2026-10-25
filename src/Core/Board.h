@@ -125,6 +125,14 @@ namespace R2BOY::Core
         // Saída da porta serial para diagnóstico/testes, sem dependência de console no Core.
         std::string takeSerialOutput() { return serial_.takeOutput(); }
 
+        // Acesso constante à APU para diagnóstico/testes.
+        const APU::APU &apu() const { return apu_; }
+
+        // Amostras estéreo intercaladas (L, R em [-1, 1]) geradas pela APU desde a última chamada,
+        // na taxa definida por setAudioSampleRate().
+        std::vector<float> takeAudioSamples() { return apu_.takeSamples(); }
+        void setAudioSampleRate(std::uint32_t rate) { apu_.setSampleRate(rate); }
+
         // Último frame completo publicado pela PPU, sem dependência da plataforma.
         const Common::Framebuffer &framebuffer() const { return ppu_.framebuffer(); }
 
@@ -165,6 +173,7 @@ namespace R2BOY::Core
         Model model_;
         ExecutionMode executionMode_ = ExecutionMode::DMG;
         APU::APU apu_;
+        bool sequencerBitHigh_ = false; // Última fase do bit de DIV que aciona o frame sequencer.
         Cartridge::Cartridge cartridge_;
         IO::DMA dma_;
         IO::Interrupts interrupts_;

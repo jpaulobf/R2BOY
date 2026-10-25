@@ -14,6 +14,9 @@ namespace R2BOY::Common
         // Limita a alocação tanto do arquivo de entrada quanto de um membro descomprimido.
         constexpr std::size_t maxRomSize = 8 * 1024 * 1024;
         constexpr std::size_t maxZipSize = 128 * 1024 * 1024;
+        // Evita que um diretório central gigantesco force uma enumeração/alocação excessiva.
+        constexpr mz_uint maxZipEntries = 65536;
+        constexpr mz_uint maxZipNameLength = 4096;
 
         std::string extension(const std::filesystem::path &path)
         {
@@ -83,6 +86,9 @@ namespace R2BOY::Common
         Zip zip(path);
         std::vector<Entry> result;
 
+        if (mz_zip_reader_get_num_files(&zip.archive) > maxZipEntries)
+            throw std::runtime_error("ZIP contains too many entries.");
+
         for (mz_uint i = 0; i < mz_zip_reader_get_num_files(&zip.archive); ++i)
         {
             mz_zip_archive_file_stat stat{};
@@ -91,7 +97,7 @@ namespace R2BOY::Common
 
             // Consulta o tamanho real: o nome abreviado em stat pode truncar caminhos longos.
             const auto length = mz_zip_reader_get_filename(&zip.archive, i, nullptr, 0);
-            if (!length)
+            if (!length || length > maxZipNameLength)
                 throw std::runtime_error("Unable to read ZIP member name.");
 
             std::string name(length, '\0');
