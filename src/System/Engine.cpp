@@ -35,6 +35,15 @@ namespace R2BOY::System
         std::unique_ptr<Audio, decltype(stopAudio)> audioSession(&audio, stopAudio);
         if (audio.open())
             board.setAudioSampleRate(audio.sampleRate());
+        const auto applySound = [this](bool master, std::uint8_t channels)
+        {
+            audio.setEnabled(master);
+            board.setAudioOutputChannels(channels);
+            board.takeAudioSamples();
+            audio.clear();
+        };
+        applySound(window.isMasterSoundEnabled(), window.soundChannels());
+        window.setSoundCallback(applySound);
 
         // Configura a callback para inverter os botões A/B e B/A conforme a interface do usuário.
         window.setInvertBAYBCallback([this](bool invert)
@@ -99,6 +108,8 @@ namespace R2BOY::System
         // ROM nova, reset e restauração de estado começam sem entrada ou tempo pendente.
         const auto resetRuntime = [&]()
         {
+            audio.clear();
+            board.takeAudioSamples();
             input.clear();
             paused = false;
             setUncappedSpeed(false);
@@ -249,7 +260,7 @@ namespace R2BOY::System
             }
             else
                 audio.queue(board.takeAudioSamples());
-          
+
             const auto serialOutput = board.takeSerialOutput();
             if (!serialOutput.empty())
                 std::cout << serialOutput << std::flush;
