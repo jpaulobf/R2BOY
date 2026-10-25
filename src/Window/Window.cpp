@@ -80,7 +80,8 @@ namespace R2BOY::Window
                            bool vsyncEnabled, const std::function<void()> &toggleVSync,
                            bool &fastForwardEnabled, const Window::FastForwardCallback &fastForwardCallback,
                            bool &cpuOverclockEnabled, const Window::CPUOverclockCallback &cpuOverclockCallback,
-                           bool &unlimitedSpritesEnabled, const Window::UnlimitedSpritesCallback &unlimitedSpritesCallback)
+                           bool &unlimitedSpritesEnabled, const Window::UnlimitedSpritesCallback &unlimitedSpritesCallback,
+                           bool &masterSound, std::uint8_t &soundChannels, const Window::SoundCallback &soundCallback)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -96,7 +97,7 @@ namespace R2BOY::Window
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
             ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(0, 0, 0, 255));
-            const bool visible = ImGui::Begin("R2BOY", nullptr, flags);
+            const bool visible = ImGui::Begin("R2BOY v.0.2.0", nullptr, flags);
             ImGui::PopStyleColor();
             ImGui::PopStyleVar(2);
             if (visible)
@@ -186,6 +187,23 @@ namespace R2BOY::Window
                         }
                         ImGui::EndMenu();
                     }
+                    if (ImGui::BeginMenu("Sound"))
+                    {
+                        if (ImGui::MenuItem("Master Sound", nullptr, &masterSound) && soundCallback)
+                            soundCallback(masterSound, soundChannels);
+                        ImGui::Separator();
+                        constexpr const char *labels[] = {"Pulse 1", "Pulse 2", "Wave", "Noise"};
+                        for (unsigned i = 0; i < 4; ++i)
+                        {
+                            if (ImGui::MenuItem(labels[i], nullptr, (soundChannels & (1 << i)) != 0))
+                            {
+                                soundChannels ^= 1 << i;
+                                if (soundCallback)
+                                    soundCallback(masterSound, soundChannels);
+                            }
+                        }
+                        ImGui::EndMenu();
+                    }
                     if (ImGui::BeginMenu("Input"))
                     {
                         if (ImGui::MenuItem("Invert BA/YB Buttons", nullptr, &invertBAYB) && invertBAYBCallback)
@@ -256,6 +274,9 @@ namespace R2BOY::Window
         InvertBAYBCallback invertBAYBCallback;
         bool vsyncEnabled = false;
         VSyncCallback vsyncCallback;
+        bool masterSound = true;
+        std::uint8_t soundChannels = 0x0F;
+        SoundCallback soundCallback;
         bool vsyncSuppressed = false;
         bool fastForwardEnabled = true;
         FastForwardCallback fastForwardCallback;
@@ -491,6 +512,14 @@ namespace R2BOY::Window
         impl_->invertBAYBCallback = std::move(callback);
     }
 
+    void Window::setSoundCallback(SoundCallback callback)
+    {
+        impl_->soundCallback = std::move(callback);
+    }
+
+    bool Window::isMasterSoundEnabled() const { return impl_->masterSound; }
+    std::uint8_t Window::soundChannels() const { return impl_->soundChannels; }
+
     void Window::setVSyncCallback(VSyncCallback callback)
     {
         impl_->vsyncCallback = std::move(callback);
@@ -586,7 +615,7 @@ namespace R2BOY::Window
         bool titleChanged = impl_->gameWasLoaded != gameLoaded;
         const bool wasOverclockEnabled = impl_->cpuOverclockEnabled;
         drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
-                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback);
+                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback);
         titleChanged |= wasOverclockEnabled != impl_->cpuOverclockEnabled;
         const Common::Framebuffer *textureFrame = &framebuffer;
         if (gameLoaded && dmgMode && impl_->display.palettePreset != 0)

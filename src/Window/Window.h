@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <cstdint>
 #include <functional>
 #include <string>
 #include "FileManager.h"
@@ -93,6 +94,18 @@ namespace R2BOY::Window
 
         // Retorna se o VSync está habilitado.
         bool isVSyncEnabled() const;
+
+        // Preferências de saída da sessão, independentes dos registradores da APU.
+        using SoundCallback = std::function<void(bool master, std::uint8_t channels)>;
+
+        // Substitui o callback do menu; não aplica as preferências de som imediatamente.
+        void setSoundCallback(SoundCallback callback);
+
+        // Retorna se o som mestre está habilitado.
+        bool isMasterSoundEnabled() const;
+
+        // Retorna os canais de som habilitados.
+        std::uint8_t soundChannels() const;
 
         // Suspende a sincronização durante fast-forward, preservando a opção Display.
         // Retorna false em falha SDL, mantendo o estado anterior.
