@@ -47,6 +47,7 @@ Use **Input > Invert BA/YB Buttons** to switch the action-button layout.
 | Shortcut | Action |
 | --- | --- |
 | Ctrl+O | Open a ROM |
+| Ctrl+1 to Ctrl+5 | Set window size to 1X through 5X |
 | F5 | Save state |
 | F6 | Load state |
 | F12 | Reset the game |

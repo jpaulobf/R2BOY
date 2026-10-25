@@ -21,12 +21,12 @@ namespace R2BOY::System
 
     private:
         // Hardware CGB executa tanto ROMs DMG quanto jogos exclusivos de Game Boy Color.
-        Core::Board board_{Core::Model::CGB};
-        Input input_;
-        Audio audio_;
-        bool vsyncEnabled_ = true;
-        bool fastForwardEnabled_ = true;
-        bool uncappedSpeed_ = false;
-        bool paused_ = false; // Pausa manual; a pausa temporária dos menus é independente.
+        Core::Board board{Core::Model::CGB};
+        Input input;
+        Audio audio;
+        bool vsyncEnabled = true;
+        bool fastForwardEnabled = true;
+        bool uncappedSpeed = false;
+        bool paused = false; // Pausa manual; a pausa temporária dos menus é independente.
     };
 }
