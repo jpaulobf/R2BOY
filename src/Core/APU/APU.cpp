@@ -53,25 +53,41 @@ namespace R2BOY::Core::APU
         const auto &c = channels_;
         switch (address)
         {
-        case 0xFF10: return 0x80 | sweepRegister_;
-        case 0xFF11: return 0x3F | (duty_[0] << 6);
-        case 0xFF12: return c[0].nr2;
-        case 0xFF14: return 0xBF | (c[0].lengthEnabled ? 0x40 : 0);
-        case 0xFF16: return 0x3F | (duty_[1] << 6);
-        case 0xFF17: return c[1].nr2;
-        case 0xFF19: return 0xBF | (c[1].lengthEnabled ? 0x40 : 0);
-        case 0xFF1A: return 0x7F | (c[2].dac ? 0x80 : 0);
-        case 0xFF1C: return 0x9F | (waveLevel_ << 5);
-        case 0xFF1E: return 0xBF | (c[2].lengthEnabled ? 0x40 : 0);
-        case 0xFF21: return c[3].nr2;
-        case 0xFF22: return noiseRegister_;
-        case 0xFF23: return 0xBF | (c[3].lengthEnabled ? 0x40 : 0);
-        case 0xFF24: return volume_;
-        case 0xFF25: return panning_;
+        case 0xFF10:
+            return 0x80 | sweepRegister_;
+        case 0xFF11:
+            return 0x3F | (duty_[0] << 6);
+        case 0xFF12:
+            return c[0].nr2;
+        case 0xFF14:
+            return 0xBF | (c[0].lengthEnabled ? 0x40 : 0);
+        case 0xFF16:
+            return 0x3F | (duty_[1] << 6);
+        case 0xFF17:
+            return c[1].nr2;
+        case 0xFF19:
+            return 0xBF | (c[1].lengthEnabled ? 0x40 : 0);
+        case 0xFF1A:
+            return 0x7F | (c[2].dac ? 0x80 : 0);
+        case 0xFF1C:
+            return 0x9F | (waveLevel_ << 5);
+        case 0xFF1E:
+            return 0xBF | (c[2].lengthEnabled ? 0x40 : 0);
+        case 0xFF21:
+            return c[3].nr2;
+        case 0xFF22:
+            return noiseRegister_;
+        case 0xFF23:
+            return 0xBF | (c[3].lengthEnabled ? 0x40 : 0);
+        case 0xFF24:
+            return volume_;
+        case 0xFF25:
+            return panning_;
         case 0xFF26:
             return 0x70 | (powered_ ? 0x80 : 0) | (c[0].enabled ? 1 : 0) | (c[1].enabled ? 2 : 0) |
                    (c[2].enabled ? 4 : 0) | (c[3].enabled ? 8 : 0);
-        default: return 0xFF;
+        default:
+            return 0xFF;
         }
     }
 
@@ -132,36 +148,67 @@ namespace R2BOY::Core::APU
             duty_[0] = value >> 6;
             c[0].length = 64 - (value & 0x3F);
             break;
-        case 0xFF12: envelope(0); break;
-        case 0xFF13: c[0].frequency = static_cast<std::uint16_t>((c[0].frequency & 0x700) | value); break;
-        case 0xFF14: highBits(0); break;
+        case 0xFF12:
+            envelope(0);
+            break;
+        case 0xFF13:
+            c[0].frequency = static_cast<std::uint16_t>((c[0].frequency & 0x700) | value);
+            break;
+        case 0xFF14:
+            highBits(0);
+            break;
         case 0xFF16:
             duty_[1] = value >> 6;
             c[1].length = 64 - (value & 0x3F);
             break;
-        case 0xFF17: envelope(1); break;
-        case 0xFF18: c[1].frequency = static_cast<std::uint16_t>((c[1].frequency & 0x700) | value); break;
-        case 0xFF19: highBits(1); break;
+        case 0xFF17:
+            envelope(1);
+            break;
+        case 0xFF18:
+            c[1].frequency = static_cast<std::uint16_t>((c[1].frequency & 0x700) | value);
+            break;
+        case 0xFF19:
+            highBits(1);
+            break;
         case 0xFF1A:
             c[2].dac = (value & 0x80) != 0;
             if (!c[2].dac)
                 c[2].enabled = false;
             break;
-        case 0xFF1B: c[2].length = static_cast<std::uint16_t>(256 - value); break;
-        case 0xFF1C: waveLevel_ = (value >> 5) & 3; break;
-        case 0xFF1D: c[2].frequency = static_cast<std::uint16_t>((c[2].frequency & 0x700) | value); break;
-        case 0xFF1E: highBits(2); break;
-        case 0xFF20: c[3].length = 64 - (value & 0x3F); break;
-        case 0xFF21: envelope(3); break;
-        case 0xFF22: noiseRegister_ = value; break;
+        case 0xFF1B:
+            c[2].length = static_cast<std::uint16_t>(256 - value);
+            break;
+        case 0xFF1C:
+            waveLevel_ = (value >> 5) & 3;
+            break;
+        case 0xFF1D:
+            c[2].frequency = static_cast<std::uint16_t>((c[2].frequency & 0x700) | value);
+            break;
+        case 0xFF1E:
+            highBits(2);
+            break;
+        case 0xFF20:
+            c[3].length = 64 - (value & 0x3F);
+            break;
+        case 0xFF21:
+            envelope(3);
+            break;
+        case 0xFF22:
+            noiseRegister_ = value;
+            break;
         case 0xFF23:
             enableLength(3, (value & 0x40) != 0);
             if (value & 0x80)
                 trigger(3);
             break;
-        case 0xFF24: volume_ = value; break;
-        case 0xFF25: panning_ = value; break;
-        default: break;
+        case 0xFF24:
+            volume_ = value;
+            break;
+        case 0xFF25:
+            panning_ = value;
+            break;
+        default:
+            break;
         }
     }
 
