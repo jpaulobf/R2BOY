@@ -53,6 +53,7 @@ Use **Input > Invert BA/YB Buttons** to switch the action-button layout.
 | F12 | Reset the game |
 | Pause/Break | Pause or resume |
 | Tab (hold) | Fast-forward, when enabled in Hacks |
+| Caps Lock (hold) | Rewind, when enabled in Hacks |
 | Esc | Leave fullscreen |
 
 ## Saves
@@ -63,6 +64,13 @@ executable. Save states use the same folder; choose one of three slots in
 
 Save states may become incompatible after an update. Battery saves remain
 compatible.
+
+Enable **Hacks > Enable Rewind** to keep up to ten seconds of emulated history
+in memory. Hold **Caps Lock** to go back; release it to resume from that point.
+**Rewind Level** selects Light (one snapshot every 10 frames), Normal (every 5
+frames, the default), or Precise (every frame). Audio is muted while rewinding.
+Changing the level, disabling rewind, resetting, loading a state, or changing
+ROMs clears the history. Rewind is disabled by default.
 
 ## Known limitations
 
