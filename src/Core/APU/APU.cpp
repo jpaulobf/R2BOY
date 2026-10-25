@@ -17,24 +17,37 @@ namespace R2BOY::Core::APU
         constexpr double capacitorCharge = 0.999958;
     }
 
-    void APU::reset()
+    void APU::reset(bool cgb)
     {
         const auto rate = sampleRate_;
+        const auto outputChannels = outputChannels_;
         *this = APU(nullptr);
         sampleRate_ = rate;
+        outputChannels_ = outputChannels;
+        cgb_ = cgb;
     }
 
     std::uint8_t APU::waveIndexForAccess() const { return wavePosition_ >> 1; }
 
     void APU::powerOff()
     {
-        // Zera todos os registradores NR10–NR51 e os length counters; Wave RAM é preservada.
+        // O DMG preserva length counters; ambos os modelos preservam Wave RAM.
         const auto rate = sampleRate_;
+        const auto cgb = cgb_;
+        const auto outputChannels = outputChannels_;
+        std::array<std::uint16_t, 4> lengths{};
+        for (unsigned i = 0; i < 4; ++i)
+            lengths[i] = channels_[i].length;
         auto wave = waveRam_;
         auto samples = std::move(samples_);
         auto left = capacitorLeft_, right = capacitorRight_;
         *this = APU(nullptr);
         sampleRate_ = rate;
+        cgb_ = cgb;
+        outputChannels_ = outputChannels;
+        if (!cgb_)
+            for (unsigned i = 0; i < 4; ++i)
+                channels_[i].length = lengths[i];
         waveRam_ = wave;
         samples_ = std::move(samples);
         capacitorLeft_ = left;
@@ -113,7 +126,32 @@ namespace R2BOY::Core::APU
                 powerOff();
             return;
         }
-        if (!powered_ || address < 0xFF10 || address > 0xFF25)
+        if (!powered_)
+        {
+            // No DMG apenas os bits de length de NRx1 aceitam escritas desligado.
+            if (!cgb_)
+            {
+                switch (address)
+                {
+                case 0xFF11:
+                    channels_[0].length = 64 - (value & 0x3F);
+                    break;
+                case 0xFF16:
+                    channels_[1].length = 64 - (value & 0x3F);
+                    break;
+                case 0xFF1B:
+                    channels_[2].length = 256 - value;
+                    break;
+                case 0xFF20:
+                    channels_[3].length = 64 - (value & 0x3F);
+                    break;
+                default:
+                    break;
+                }
+            }
+            return;
+        }
+        if (address < 0xFF10 || address > 0xFF25)
             return;
 
         auto &c = channels_;
@@ -264,10 +302,15 @@ namespace R2BOY::Core::APU
                 --c.length;
         }
         c.timer = period(index);
+        if (index < 2)
+            dutyStarted_[index] = true;
         if (index != 2)
         {
             c.volume = c.nr2 >> 4;
             c.envelopeTimer = (c.nr2 & 7) ? (c.nr2 & 7) : 8;
+            // O próximo clock de envelope não conta como um período completo.
+            if (frameStep_ == 7)
+                ++c.envelopeTimer;
         }
         if (index == 3)
             lfsr_ = 0x7FFF;
@@ -353,6 +396,8 @@ namespace R2BOY::Core::APU
             for (unsigned i = 0; i < 4; ++i)
             {
                 auto &c = channels_[i];
+                if (i < 2 && !dutyStarted_[i])
+                    continue;
                 if (c.timer > 1)
                 {
                     --c.timer;
@@ -362,7 +407,10 @@ namespace R2BOY::Core::APU
                 if (i == 3 && (noiseRegister_ >> 4) >= 14)
                     continue; // Com shift 14/15 o LFSR não recebe clock.
                 if (i < 2)
+                {
                     dutyPosition_[i] = (dutyPosition_[i] + 1) & 7;
+                    dutyFirstSample_[i] = false;
+                }
                 else if (i == 2)
                 {
                     wavePosition_ = (wavePosition_ + 1) & 31;
@@ -384,7 +432,7 @@ namespace R2BOY::Core::APU
                 if (c.enabled)
                 {
                     if (i < 2)
-                        out = ((dutyPatterns[duty_[i]] >> dutyPosition_[i]) & 1) ? c.volume : 0;
+                        out = !dutyFirstSample_[i] && ((dutyPatterns[duty_[i]] >> dutyPosition_[i]) & 1) ? c.volume : 0;
                     else if (i == 2)
                         out = waveLevel_ ? waveSample_ >> (waveLevel_ - 1) : 0;
                     else
@@ -410,9 +458,9 @@ namespace R2BOY::Core::APU
         for (unsigned i = 0; i < 4; ++i)
         {
             const float level = channelSum_[i] / static_cast<float>(sampleTicks_);
-            if (panning_ & (0x10 << i))
+            if ((outputChannels_ & (1 << i)) && (panning_ & (0x10 << i)))
                 left += level;
-            if (panning_ & (1 << i))
+            if ((outputChannels_ & (1 << i)) && (panning_ & (1 << i)))
                 right += level;
             channelSum_[i] = 0;
         }
@@ -422,10 +470,17 @@ namespace R2BOY::Core::APU
 
         // Filtro passa-altas do capacitor de acoplamento, aplicado à taxa de saída.
         const float charge = static_cast<float>(std::pow(capacitorCharge, static_cast<double>(ClockRate) / sampleRate_));
-        const float outLeft = left - capacitorLeft_;
-        const float outRight = right - capacitorRight_;
-        capacitorLeft_ = left - outLeft * charge;
-        capacitorRight_ = right - outRight * charge;
+        float outLeft = 0, outRight = 0;
+        bool dacsEnabled = false;
+        for (unsigned i = 0; i < 4; ++i)
+            dacsEnabled |= (outputChannels_ & (1 << i)) && channels_[i].dac;
+        if (dacsEnabled)
+        {
+            outLeft = left - capacitorLeft_;
+            outRight = right - capacitorRight_;
+            capacitorLeft_ = left - outLeft * charge;
+            capacitorRight_ = right - outRight * charge;
+        }
 
         if (samples_.size() + 2 > maxQueuedSamples)
             return;
@@ -445,11 +500,21 @@ namespace R2BOY::Core::APU
     std::vector<float> APU::takeSamples() { return std::exchange(samples_, {}); }
     void APU::clearSamples() { samples_.clear(); }
 
+    void APU::setOutputChannels(std::uint8_t mask)
+    {
+        mask &= 0x0F;
+        if (outputChannels_ == mask)
+            return;
+        outputChannels_ = mask;
+        setSampleRate(sampleRate_);
+        capacitorLeft_ = capacitorRight_ = 0;
+    }
+
     void APU::state(StateArchive &archive)
     {
         archive(powered_, volume_, panning_, channels_, frameStep_, duty_, dutyPosition_, sweepRegister_,
                 sweepShadow_, sweepTimer_, sweepEnabled_, sweepNegated_, waveLevel_, wavePosition_, waveSample_,
-                waveRam_, noiseRegister_, lfsr_);
+                waveRam_, noiseRegister_, lfsr_, dutyStarted_, dutyFirstSample_);
         if (archive.reading())
         {
             // Valida campos que indexam tabelas ou deslocamentos.
@@ -457,7 +522,7 @@ namespace R2BOY::Core::APU
                 waveSample_ > 15 || dutyPosition_[0] > 7 || dutyPosition_[1] > 7)
                 throw std::runtime_error("Invalid APU save state.");
             for (const auto &c : channels_)
-                if (c.volume > 15 || c.envelopeTimer > 8 || c.length > 256 || c.frequency > 2047)
+                if (c.volume > 15 || c.envelopeTimer > 9 || c.length > 256 || c.frequency > 2047)
                     throw std::runtime_error("Invalid APU save state.");
             if (lfsr_ > 0x7FFF)
                 throw std::runtime_error("Invalid APU save state.");

@@ -19,8 +19,7 @@ namespace R2BOY::Core::APU
      * O Core não depende de plataforma: tick() avança um T-cycle do clock base
      * (4.194.304 Hz) e as amostras estéreo intercaladas (L, R em [-1, 1]) ficam
      * numa fila lida por takeSamples(). A saída física cabe a System/Audio.
-     * Modelo de referência: comportamento CGB (escritas em NRx1 com a APU desligada
-     * são ignoradas e o desligamento zera também os length counters).
+     * O modelo físico distingue a preservação e escrita dos length counters no DMG.
      */
     class APU
     {
@@ -30,7 +29,7 @@ namespace R2BOY::Core::APU
         APU() = default;
 
         // Estado pós-boot (sem boot ROM): APU ligada, NR50=77, NR51=F3, canal 1 sem DAC ativo.
-        void reset();
+        void reset(bool cgb = true);
         std::uint8_t read(std::uint16_t address) const;
         void write(std::uint16_t address, std::uint8_t value);
 
@@ -51,6 +50,11 @@ namespace R2BOY::Core::APU
         // Retorna e remove as amostras estéreo intercaladas geradas desde a última chamada.
         std::vector<float> takeSamples();
         void clearSamples();
+
+        // Preferência de escuta: bits 0..3 = Pulse 1, Pulse 2, Wave, Noise.
+        // Não altera os canais emulados nem faz parte dos snapshots.
+        void setOutputChannels(std::uint8_t mask);
+        std::uint8_t outputChannels() const { return outputChannels_; }
 
         // Estado dos canais (bits de NR52), para diagnóstico e testes.
         bool channelActive(unsigned channel) const { return channel < 4 && channels_[channel].enabled; }
@@ -95,12 +99,15 @@ namespace R2BOY::Core::APU
         static constexpr std::uint16_t maxLength(unsigned index) { return index == 2 ? 256 : 64; }
 
         bool powered_ = true;
+        bool cgb_ = true; // Configuração física da Board; não pertence ao snapshot.
         std::uint8_t volume_ = 0x77;
         std::uint8_t panning_ = 0xF3;
         std::array<Channel, 4> channels_{};
         std::uint8_t frameStep_ = 0;
         std::array<std::uint8_t, 2> duty_{};
         std::array<std::uint8_t, 2> dutyPosition_{};
+        std::array<bool, 2> dutyStarted_{};
+        std::array<bool, 2> dutyFirstSample_{true, true};
         std::uint8_t sweepRegister_ = 0;
         std::uint16_t sweepShadow_ = 0;
         std::uint8_t sweepTimer_ = 0;
@@ -115,6 +122,7 @@ namespace R2BOY::Core::APU
 
         // Saída: não serializada, pois pertence à sessão de áudio e não ao hardware.
         std::uint32_t sampleRate_ = 48000;
+        std::uint8_t outputChannels_ = 0x0F;
         std::uint32_t sampleAccumulator_ = 0;
         std::uint32_t sampleTicks_ = 0;
         std::array<float, 4> channelSum_{};
