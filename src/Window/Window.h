@@ -150,6 +150,10 @@ namespace R2BOY::Window
         // Permite imprimir os bytes da porta serial no console; desativado por padrão.
         bool isSerialOutputEnabled() const;
 
+        // Preferências do rewind da sessão; desligado por padrão, nível Normal.
+        bool isRewindEnabled() const;
+        unsigned rewindFrameInterval() const;
+
         // Desenha e apresenta um frame; pode solicitar saída via running e retorna false em falha SDL.
         // gameLoaded controla a exibição do jogo e a medição de FPS, sem consultar o Core.
         // O framebuffer é usado por referência apenas durante esta chamada.

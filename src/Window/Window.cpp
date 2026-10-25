@@ -17,15 +17,33 @@ namespace R2BOY::Window
     {
         constexpr int screenWidth = Common::Constants::ScreenWidth;
         constexpr int screenHeight = Common::Constants::ScreenHeight;
-        const char *emuTitle = "R2BOY v0.2.0";
+        const char *emuTitle = "R2BOY v0.2.1";
 
         struct PalettePreset
         {
             const char *name;
             std::array<std::uint32_t, 4> colors; // Claro para escuro, após BGP/OBP.
+            const std::array<std::array<std::uint32_t, 4>, 4> *pixelColors = nullptr;
         };
 
-        constexpr std::array<PalettePreset, 9> palettePresets{{
+        // Cada linha corresponde a uma posição do bloco, do tom claro ao escuro.
+        // Creme, areia e rosa queimado convergem para sombras marrons e bordô.
+        constexpr std::array<std::array<std::uint32_t, 4>, 4> terracottaPaletteColors{{
+            {0xFFF5E6D3, 0xFFD0A080, 0xFF87513E, 0xFF321D19},
+            {0xFFF1DCD0, 0xFFCA9284, 0xFF8C443F, 0xFF381B20},
+            {0xFFEEDDD5, 0xFFC49A8C, 0xFF7D4B46, 0xFF301D20},
+            {0xFFF3E2C8, 0xFFC7A17A, 0xFF80573D, 0xFF342419},
+        }};
+
+        // Petróleo Azul: luzes aquáticas, meios-tons de verde petróleo e sombras azuis.
+        constexpr std::array<std::array<std::uint32_t, 4>, 4> petroleumBluePaletteColors{{
+            {0xFFDAEEE5, 0xFF82B7A8, 0xFF326E6A, 0xFF102F3B},
+            {0xFFD9EDF0, 0xFF7EB5C3, 0xFF326781, 0xFF142B45},
+            {0xFFE0ECEC, 0xFF8CAEBE, 0xFF426580, 0xFF1B2943},
+            {0xFFD5EBE8, 0xFF76B5B6, 0xFF296D7C, 0xFF102E40},
+        }};
+
+        constexpr std::array<PalettePreset, 11> palettePresets{{
             {"Default", {0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000}},
             {"Classic Green", {0xFF9BBC0F, 0xFF8BAC0F, 0xFF306230, 0xFF0F380F}},
             {"Pocket", {0xFFE0E8D8, 0xFFA8B8A0, 0xFF607058, 0xFF202820}},
@@ -35,6 +53,8 @@ namespace R2BOY::Window
             {"Blue Neon", {0xFFE0F8FF, 0xFF42DFFF, 0xFF245BFF, 0xFF020B33}},
             {"Green Neon", {0xFFDCFFE9, 0xFF4DFF88, 0xFF16A34A, 0xFF032A18}},
             {"Yellow Neon", {0xFFFFFFCC, 0xFFFFF000, 0xFF9C8500, 0xFF000000}},
+            {"Terracotta", terracottaPaletteColors[0], &terracottaPaletteColors},
+            {"Petroleum Blue", petroleumBluePaletteColors[0], &petroleumBluePaletteColors},
         }};
 
         enum class DisplayMode
@@ -85,7 +105,7 @@ namespace R2BOY::Window
                            bool &masterSound, std::uint8_t &soundChannels, const Window::SoundCallback &soundCallback,
                            int &soundVolume, const Window::VolumeCallback &volumeCallback,
                            std::array<int, 4> &channelVolumes, const Window::ChannelVolumeCallback &channelVolumeCallback,
-                           bool &serialOutputEnabled)
+                           bool &serialOutputEnabled, bool &rewindEnabled, int &rewindLevel)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -232,6 +252,15 @@ namespace R2BOY::Window
                             cpuOverclockCallback(cpuOverclockEnabled);
                         if (ImGui::MenuItem("Enable Unlimited Sprites", nullptr, &unlimitedSpritesEnabled) && unlimitedSpritesCallback)
                             unlimitedSpritesCallback(unlimitedSpritesEnabled);
+                        ImGui::MenuItem("Enable Rewind", nullptr, &rewindEnabled);
+                        if (ImGui::BeginMenu("Rewind Level", rewindEnabled))
+                        {
+                            constexpr const char *levels[] = {"Light", "Normal", "Precise"};
+                            for (int level = 0; level < 3; ++level)
+                                if (ImGui::MenuItem(levels[level], nullptr, rewindLevel == level))
+                                    rewindLevel = level;
+                            ImGui::EndMenu();
+                        }
                         ImGui::Separator();
                         ImGui::MenuItem("Enable Serial Output", nullptr, &serialOutputEnabled);
                         ImGui::EndMenu();
@@ -305,6 +334,8 @@ namespace R2BOY::Window
         bool unlimitedSpritesEnabled = true;
         UnlimitedSpritesCallback unlimitedSpritesCallback;
         bool serialOutputEnabled = false;
+        bool rewindEnabled = false;
+        int rewindLevel = 1;
         double currentFPS = 0;
         Uint64 fpsSampleStart = 0;
         unsigned presentedFrames = 0;
@@ -629,6 +660,14 @@ namespace R2BOY::Window
         return impl_->serialOutputEnabled;
     }
 
+    bool Window::isRewindEnabled() const { return impl_->rewindEnabled; }
+
+    unsigned Window::rewindFrameInterval() const
+    {
+        constexpr unsigned intervals[] = {10, 5, 1};
+        return intervals[impl_->rewindLevel];
+    }
+
     Window::RomAction Window::takeRomAction()
     {
         return std::exchange(impl_->romAction, RomAction::None);
@@ -658,7 +697,7 @@ namespace R2BOY::Window
         bool titleChanged = impl_->gameWasLoaded != gameLoaded;
         const bool wasOverclockEnabled = impl_->cpuOverclockEnabled;
         drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
-                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled);
+                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled, impl_->rewindEnabled, impl_->rewindLevel);
         titleChanged |= wasOverclockEnabled != impl_->cpuOverclockEnabled;
         const Common::Framebuffer *textureFrame = &framebuffer;
         if (gameLoaded && dmgMode && impl_->display.palettePreset != 0)
@@ -666,9 +705,14 @@ namespace R2BOY::Window
             // Recolore o resultado de BGP/OBP sem alterar a PPU ou os save states.
             // Também atualiza imediatamente o quadro congelado durante a pausa.
             impl_->filteredFrame = framebuffer;
-            const auto &colors = palettePresets[impl_->display.palettePreset].colors;
-            for (auto &pixel : impl_->filteredFrame)
+            const auto &preset = palettePresets[impl_->display.palettePreset];
+            for (std::size_t i = 0; i < impl_->filteredFrame.size(); ++i)
             {
+                // Cada posição do bloco 2x2 usa quatro cores, fixas entre frames.
+                const auto &colors = preset.pixelColors
+                                         ? (*preset.pixelColors)[(i / screenWidth % 2) * 2 + (i % screenWidth % 2)]
+                                         : preset.colors;
+                auto &pixel = impl_->filteredFrame[i];
                 switch (pixel)
                 {
                 case 0xFFFFFFFF:
