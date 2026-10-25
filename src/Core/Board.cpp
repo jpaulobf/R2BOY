@@ -263,9 +263,14 @@ namespace R2BOY::Core
         // A taxa de saída e a fila de amostras pertencem à sessão, não ao estado salvo.
         const auto sampleRate = apu_.sampleRate();
         const auto outputChannels = apu_.outputChannels();
+        std::array<int, 4> outputVolumes{};
+        for (unsigned i = 0; i < outputVolumes.size(); ++i)
+            outputVolumes[i] = apu_.outputVolume(i);
         apu_ = next.apu_;
         apu_.setSampleRate(sampleRate);
         apu_.setOutputChannels(outputChannels);
+        for (unsigned i = 0; i < outputVolumes.size(); ++i)
+            apu_.setOutputVolume(i, outputVolumes[i]);
         buttons_ = next.buttons_;
         cartridge_ = std::move(next.cartridge_);
         dma_ = std::move(next.dma_);

@@ -138,6 +138,9 @@ namespace R2BOY::Core
         // Configura os canais de saída de áudio da APU.
         void setAudioOutputChannels(std::uint8_t mask) { apu_.setOutputChannels(mask); }
 
+        // Volume de escuta de cada canal, independente dos registradores emulados.
+        void setAudioOutputVolume(unsigned channel, int percent) { apu_.setOutputVolume(channel, percent); }
+
         // Último frame completo publicado pela PPU, sem dependência da plataforma.
         const Common::Framebuffer &framebuffer() const { return ppu_.framebuffer(); }
 
