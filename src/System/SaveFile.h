@@ -28,6 +28,6 @@ namespace R2BOY::System
         bool save(Core::Cartridge::Cartridge &cartridge) const;
 
     private:
-        std::filesystem::path directory_;
+        std::filesystem::path directory;
     };
 }

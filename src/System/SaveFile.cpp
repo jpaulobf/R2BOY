@@ -13,13 +13,13 @@
 
 namespace R2BOY::System
 {
-    SaveFile::SaveFile(std::filesystem::path directory) : directory_(std::move(directory)) {}
+    SaveFile::SaveFile(std::filesystem::path directory) : directory(std::move(directory)) {}
 
     std::filesystem::path SaveFile::pathFor(const Core::Cartridge::Cartridge &cartridge) const
     {
         if (!cartridge.loaded())
             throw std::runtime_error("Cannot identify save for an empty cartridge.");
-        return directory_ / (Common::RomFile::hash(cartridge.rom()) + ".sav");
+        return directory / (Common::RomFile::hash(cartridge.rom()) + ".sav");
     }
 
     bool SaveFile::load(Core::Cartridge::Cartridge &cartridge) const
@@ -54,7 +54,7 @@ namespace R2BOY::System
         if (!cartridge.hasBattery() || cartridge.ram().empty() || !cartridge.ramDirty())
             return false;
 
-        std::filesystem::create_directories(directory_);
+        std::filesystem::create_directories(directory);
         const auto path = pathFor(cartridge);
         auto temporary = path;
         // O arquivo definitivo só é substituído após gravar e fechar o temporário.
