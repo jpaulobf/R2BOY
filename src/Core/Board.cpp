@@ -57,7 +57,7 @@ namespace R2BOY::Core
         interrupts_.reset(true);
         buttons_ = 0;
         joypad_.reset();
-        apu_.reset();
+        apu_.reset(model_ == Model::CGB);
         serial_.reset(executionMode_ == ExecutionMode::CGB);
         dma_.reset(model_ == Model::CGB);
         ppu_.reset(model_ == Model::CGB, executionMode_ == ExecutionMode::CGB);
@@ -217,7 +217,7 @@ namespace R2BOY::Core
         std::vector<std::uint8_t> result;
         StateArchive header(result);
         std::string magic = "R2BOY-STATE";
-        std::uint32_t version = 12;
+        std::uint32_t version = 13;
         auto model = model_;
         auto mode = executionMode_;
         auto romHash = Common::RomFile::hash(cartridge_.rom());
@@ -243,7 +243,7 @@ namespace R2BOY::Core
         ExecutionMode mode{};
         header(magic, version, model, mode, romHash, checksum);
         header.finish();
-        if (magic != "R2BOY-STATE" || version != 12)
+        if (magic != "R2BOY-STATE" || version != 13)
             throw std::runtime_error("Unsupported save state format/version.");
         if (model != model_ || mode != executionMode_ || romHash != Common::RomFile::hash(cartridge_.rom()))
             throw std::runtime_error("Save state belongs to a different ROM or hardware model.");
@@ -262,8 +262,10 @@ namespace R2BOY::Core
         speedSwitch_ = next.speedSwitch_;
         // A taxa de saída e a fila de amostras pertencem à sessão, não ao estado salvo.
         const auto sampleRate = apu_.sampleRate();
+        const auto outputChannels = apu_.outputChannels();
         apu_ = next.apu_;
         apu_.setSampleRate(sampleRate);
+        apu_.setOutputChannels(outputChannels);
         buttons_ = next.buttons_;
         cartridge_ = std::move(next.cartridge_);
         dma_ = std::move(next.dma_);

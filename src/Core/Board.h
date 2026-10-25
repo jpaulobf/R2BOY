@@ -131,7 +131,12 @@ namespace R2BOY::Core
         // Amostras estéreo intercaladas (L, R em [-1, 1]) geradas pela APU desde a última chamada,
         // na taxa definida por setAudioSampleRate().
         std::vector<float> takeAudioSamples() { return apu_.takeSamples(); }
+
+        // Configura a taxa de amostragem de áudio da APU.
         void setAudioSampleRate(std::uint32_t rate) { apu_.setSampleRate(rate); }
+
+        // Configura os canais de saída de áudio da APU.
+        void setAudioOutputChannels(std::uint8_t mask) { apu_.setOutputChannels(mask); }
 
         // Último frame completo publicado pela PPU, sem dependência da plataforma.
         const Common::Framebuffer &framebuffer() const { return ppu_.framebuffer(); }
