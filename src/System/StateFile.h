@@ -15,6 +15,6 @@ namespace R2BOY::System
         void load(Core::Board &board, int slot) const;
 
     private:
-        std::filesystem::path directory_;
+        std::filesystem::path directory;
     };
 }

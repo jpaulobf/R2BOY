@@ -13,7 +13,7 @@
 
 namespace R2BOY::System
 {
-    StateFile::StateFile(std::filesystem::path directory) : directory_(std::move(directory)) {}
+    StateFile::StateFile(std::filesystem::path directory) : directory(std::move(directory)) {}
 
     std::filesystem::path StateFile::pathFor(const Core::Board &board, int slot) const
     {
@@ -21,14 +21,14 @@ namespace R2BOY::System
             throw std::runtime_error("Invalid save state slot.");
         if (!board.cartridge().loaded())
             throw std::runtime_error("No ROM loaded.");
-        return directory_ / (Common::RomFile::hash(board.cartridge().rom()) + ".slot" + std::to_string(slot) + ".state");
+        return directory / (Common::RomFile::hash(board.cartridge().rom()) + ".slot" + std::to_string(slot) + ".state");
     }
 
     void StateFile::save(Core::Board &board, int slot) const
     {
         const auto path = pathFor(board, slot);
         auto data = board.saveState();
-        std::filesystem::create_directories(directory_);
+        std::filesystem::create_directories(directory);
         auto temporary = path;
         temporary += ".tmp";
         std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
