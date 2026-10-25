@@ -29,6 +29,9 @@ namespace R2BOY::System
         void setEnabled(bool enabled);
         bool enabled() const { return enabled_; }
 
+        // Ajusta o ganho da saída entre 0 e 100%, preservando o estado de mute.
+        void setVolume(int percent);
+
         // Enfileira amostras L/R intercaladas. Descarta o excesso quando a fila passa de ~150 ms,
         // para que a latência não cresça se o emulador rodar mais rápido que o tempo real.
         void queue(const std::vector<float> &samples);
@@ -40,5 +43,6 @@ namespace R2BOY::System
         SDL_AudioStream *stream_ = nullptr;
         std::uint32_t sampleRate_ = 48000;
         bool enabled_ = true;
+        int volume_ = 100;
     };
 }

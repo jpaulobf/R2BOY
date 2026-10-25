@@ -1,6 +1,7 @@
 #include "Audio.h"
 
 #include <SDL3/SDL.h>
+#include <algorithm>
 #include <iostream>
 
 namespace R2BOY::System
@@ -23,6 +24,7 @@ namespace R2BOY::System
             return false;
         }
         // O stream nasce pausado.
+        setVolume(volume_);
         SDL_ResumeAudioStreamDevice(stream_);
         return true;
     }
@@ -52,6 +54,13 @@ namespace R2BOY::System
             return;
         enabled_ = enabled;
         clear();
+    }
+
+    void Audio::setVolume(int percent)
+    {
+        volume_ = std::clamp(percent, 0, 100);
+        if (stream_ && !SDL_SetAudioStreamGain(stream_, static_cast<float>(volume_) / 100.0f))
+            std::cerr << "Audio: Unable to set volume: " << SDL_GetError() << '\n';
     }
 
     void Audio::clear()
