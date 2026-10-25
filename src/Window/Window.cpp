@@ -24,13 +24,16 @@ namespace R2BOY::Window
             std::array<std::uint32_t, 4> colors; // Claro para escuro, após BGP/OBP.
         };
 
-        constexpr std::array<PalettePreset, 6> palettePresets{{
+        constexpr std::array<PalettePreset, 9> palettePresets{{
             {"Default", {0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000}},
             {"Classic Green", {0xFF9BBC0F, 0xFF8BAC0F, 0xFF306230, 0xFF0F380F}},
             {"Pocket", {0xFFE0E8D8, 0xFFA8B8A0, 0xFF607058, 0xFF202820}},
             {"Amber", {0xFFFFF1C1, 0xFFE8B45B, 0xFF99602F, 0xFF382414}},
             {"Ocean", {0xFFE0F4FF, 0xFF8CB8D8, 0xFF406888, 0xFF142838}},
             {"Neon", {0xFFF4D6FF, 0xFFFF45D8, 0xFF852BFF, 0xFF10004D}},
+            {"Blue Neon", {0xFFE0F8FF, 0xFF42DFFF, 0xFF245BFF, 0xFF020B33}},
+            {"Green Neon", {0xFFDCFFE9, 0xFF4DFF88, 0xFF16A34A, 0xFF032A18}},
+            {"Yellow Neon", {0xFFFFFFCC, 0xFFFFF000, 0xFF9C8500, 0xFF000000}},
         }};
 
         enum class DisplayMode
@@ -152,8 +155,10 @@ namespace R2BOY::Window
                         for (int scale = 1; scale <= 5; ++scale)
                         {
                             char label[8];
+                            char shortcut[16];
                             SDL_snprintf(label, sizeof(label), "%dX", scale);
-                            if (ImGui::MenuItem(label, nullptr, display.scale == scale && display.mode == DisplayMode::Windowed))
+                            SDL_snprintf(shortcut, sizeof(shortcut), "Ctrl+%d", scale);
+                            if (ImGui::MenuItem(label, shortcut, display.scale == scale && display.mode == DisplayMode::Windowed))
                             {
                                 display.scale = scale;
                                 display.mode = DisplayMode::Windowed;
@@ -449,6 +454,15 @@ namespace R2BOY::Window
             if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_O &&
                 (event.key.mod & SDL_KMOD_CTRL) != 0 && !event.key.repeat)
                 impl_->fileManager.requestOpen();
+            if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+                event.key.key >= SDLK_1 && event.key.key <= SDLK_5 &&
+                (event.key.mod & SDL_KMOD_CTRL) != 0 &&
+                (event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0)
+            {
+                impl_->display.scale = static_cast<int>(event.key.key - SDLK_1) + 1;
+                impl_->display.mode = DisplayMode::Windowed;
+                impl_->display.pending = true;
+            }
             if (event.type == SDL_EVENT_QUIT ||
                 (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                  event.window.windowID == SDL_GetWindowID(impl_->window.get())))
