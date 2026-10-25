@@ -44,6 +44,15 @@ namespace R2BOY::System
         };
         applySound(window.isMasterSoundEnabled(), window.soundChannels());
         window.setSoundCallback(applySound);
+        audio.setVolume(window.soundVolume());
+        window.setVolumeCallback([this](int percent)
+                                 { audio.setVolume(percent); });
+        for (unsigned i = 0; i < 4; ++i)
+            board.setAudioOutputVolume(i, window.soundChannelVolume(i));
+        window.setChannelVolumeCallback([this](unsigned channel, int percent)
+                                        {
+                                            board.setAudioOutputVolume(channel, percent);
+                                            audio.clear(); });
 
         // Configura a callback para inverter os botões A/B e B/A conforme a interface do usuário.
         window.setInvertBAYBCallback([this](bool invert)
@@ -155,7 +164,8 @@ namespace R2BOY::System
                     std::cout << "SaveFile: Loaded RAM -> " << saves.pathFor(board.cartridge()).u8string() << std::endl;
                 
                 std::cout << "CPU: Reset without boot ROM -> PC=0100, SP=FFFE" << std::endl;
-                std::cout << "Serial: ROM output follows in this console.\n" << std::endl;
+                if (window.isSerialOutputEnabled())
+                    std::cout << "Serial: ROM output follows in this console.\n" << std::endl;
                 // O carregamento não conta como tempo de execução da nova ROM.
                 resetRuntime();
             }
@@ -262,7 +272,7 @@ namespace R2BOY::System
                 audio.queue(board.takeAudioSamples());
 
             const auto serialOutput = board.takeSerialOutput();
-            if (!serialOutput.empty())
+            if (window.isSerialOutputEnabled() && !serialOutput.empty())
                 std::cout << serialOutput << std::flush;
             if (board.cpu().stopped() && !cpuStopReported)
             {
