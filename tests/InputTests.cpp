@@ -137,6 +137,42 @@ namespace
         check(!input.isFastForwardPressed(), "modified TAB must not start fast-forward");
     }
 
+    void rewindShortcut()
+    {
+        System::Input input;
+        check(!input.isRewindPressed(), "rewind starts released");
+        key(input, SDLK_CAPSLOCK, true);
+        check(input.isRewindPressed() && input.update(0) == 0,
+              "Caps Lock starts rewind without pressing joypad buttons");
+        SDL_Event event{};
+        event.type = SDL_EVENT_KEY_DOWN;
+        event.key.key = SDLK_CAPSLOCK;
+        event.key.repeat = true;
+        input.handleEvent(event, true);
+        check(input.isRewindPressed(), "Caps Lock repeat must not toggle rewind");
+        key(input, SDLK_CAPSLOCK, false);
+        check(!input.isRewindPressed(), "Caps Lock release stops rewind");
+        event.key.repeat = false;
+        event.key.mod = SDL_KMOD_CAPS;
+        input.handleEvent(event, true);
+        check(input.isRewindPressed(), "Caps Lock modifier does not change hold behavior");
+        event.type = SDL_EVENT_WINDOW_FOCUS_LOST;
+        input.handleEvent(event, true);
+        check(!input.isRewindPressed(), "focus loss stops rewind");
+        key(input, SDLK_CAPSLOCK, true, false);
+        check(!input.isRewindPressed(), "menus block rewind input");
+        key(input, SDLK_CAPSLOCK, true);
+        input.update(0, false);
+        check(!input.isRewindPressed(), "UI capture releases rewind");
+        key(input, SDLK_CAPSLOCK, true);
+        input.clear();
+        check(!input.isRewindPressed(), "runtime reset releases rewind");
+        event.type = SDL_EVENT_KEY_DOWN;
+        event.key.mod = SDL_KMOD_CTRL;
+        input.handleEvent(event, true);
+        check(!input.isRewindPressed(), "modified Caps Lock does not start rewind");
+    }
+
     void pauseShortcut()
     {
         System::Input input;
@@ -219,6 +255,7 @@ int main()
         joypad();
         keyboard();
         fastForward();
+        rewindShortcut();
         pauseShortcut();
         gamepad();
         std::cout << "Input mapping, turbo, virtual gamepad and JOYP tests passed.\n";

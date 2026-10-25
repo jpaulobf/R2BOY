@@ -113,6 +113,71 @@ namespace
         }
     }
 
+    void rewindMenuControlsHistory()
+    {
+        R2BOY::Window::Window window;
+        check(window.open(), "rewind menu window must open");
+        R2BOY::Common::Framebuffer framebuffer{};
+        bool running = true;
+        const auto frame = [&]()
+        {
+            window.pollEvents(running);
+            check(window.renderFrame(running, false, framebuffer), "rewind menu renders without a ROM");
+        };
+        frame();
+        frame();
+        check(!window.isRewindEnabled() && window.rewindFrameInterval() == 5,
+              "rewind defaults to disabled with Normal granularity");
+        const auto openHacks = [&]()
+        {
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.0");
+            check(main != nullptr, "main window exists");
+            ImGui::ActivateItemByID(ImHashStr("Hacks", 0, main->GetID("##MenuBar")));
+            frame();
+            frame();
+            auto *menu = ImGui::FindWindowByName("Hacks###Menu_00");
+            check(menu && menu->Active, "Hacks menu opens");
+            return menu;
+        };
+        const auto closeMenus = [&]()
+        {
+            ImGui::ClosePopupsOverWindow(ImGui::FindWindowByName("R2BOY v0.2.0"), false);
+            frame();
+        };
+        auto *menu = openHacks();
+        ImGui::ActivateItemByID(menu->GetID("Rewind Level"));
+        frame();
+        auto *levels = ImGui::FindWindowByName("Rewind Level###Menu_01");
+        check(!levels || !levels->Active, "Rewind Level is disabled until rewind is enabled");
+        closeMenus();
+        menu = openHacks();
+        ImGui::ActivateItemByID(menu->GetID("Enable Rewind"));
+        frame();
+        check(window.isRewindEnabled(), "Enable Rewind toggles on");
+        closeMenus();
+        const char *labels[] = {"Light", "Normal", "Precise"};
+        const unsigned intervals[] = {10, 5, 1};
+        for (unsigned i = 0; i < 3; ++i)
+        {
+            menu = openHacks();
+            ImGui::ActivateItemByID(menu->GetID("Rewind Level"));
+            frame();
+            frame();
+            levels = ImGui::FindWindowByName("Rewind Level###Menu_01");
+            check(levels && levels->Active, "Rewind Level opens when enabled");
+            ImGui::ActivateItemByID(levels->GetID(labels[i]));
+            frame();
+            check(window.rewindFrameInterval() == intervals[i], "level selects its frame interval");
+            closeMenus();
+        }
+        menu = openHacks();
+        ImGui::ActivateItemByID(menu->GetID("Enable Rewind"));
+        frame();
+        check(!window.isRewindEnabled() && window.rewindFrameInterval() == 1,
+              "disabling rewind preserves the selected level");
+        closeMenus();
+    }
+
     void soundMenuControlsOutput()
     {
         R2BOY::Window::Window window;
@@ -683,10 +748,16 @@ namespace
     }
 }
 
-int main()
+int main(int argc, char **argv)
 {
     try
     {
+        if (argc == 2 && std::string(argv[1]) == "--rewind")
+        {
+            rewindMenuControlsHistory();
+            std::cout << "Rewind menu tests passed.\n";
+            return 0;
+        }
         capturesKeyboardOnlyForInterface();
         menusRequestTemporaryPause();
         soundMenuControlsOutput();
