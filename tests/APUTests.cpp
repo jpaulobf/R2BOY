@@ -530,6 +530,25 @@ namespace
             const auto audible = capture(board, 50000);
             check(audible.hi - audible.lo > 0.1f, "each enabled channel reaches the output");
             const auto hardware = board.saveState();
+            // Compara o mesmo trecho, com o filtro de saída reiniciado em ambos os ganhos.
+            board.setAudioOutputVolume(channel, 0);
+            board.setAudioOutputVolume(channel, 100);
+            const auto full = capture(board, 50000);
+            board.loadState(hardware);
+            board.setAudioOutputVolume(channel, 50);
+            check(board.saveState() == hardware, "channel volume changes no hardware or snapshot data");
+            const auto half = capture(board, 50000);
+            check(std::abs((half.hi - half.lo) / (full.hi - full.lo) - 0.5f) < 0.001f &&
+                      std::abs((half.hiR - half.loR) / (full.hiR - full.loR) - 0.5f) < 0.001f,
+                  "channel volume scales the output to half amplitude");
+            board.setAudioOutputVolume(channel, 0);
+            const auto zero = capture(board, 50000);
+            check(zero.lo == 0 && zero.hi == 0 && zero.loR == 0 && zero.hiR == 0,
+                  "zero channel volume silences both outputs");
+            check(board.apu().channelActive(channel), "zero volume leaves the emulated channel running");
+            board.loadState(hardware);
+            check(board.apu().outputVolume(channel) == 0, "load state preserves channel volume");
+            board.setAudioOutputVolume(channel, 50);
             const auto mask = static_cast<std::uint8_t>(15 & ~(1 << channel));
             board.setAudioOutputChannels(mask);
             check(board.saveState() == hardware, "muting changes no emulated hardware or snapshot data");
@@ -541,13 +560,17 @@ namespace
             check(board.apu().outputChannels() == mask, "load state preserves channel preferences");
             board.write(0xFF26, 0);
             check(board.apu().outputChannels() == mask, "APU power off preserves channel preferences");
+            check(board.apu().outputVolume(channel) == 50, "APU power off preserves channel volume");
             board.reset();
             check(board.apu().outputChannels() == mask, "reset preserves channel preferences");
+            check(board.apu().outputVolume(channel) == 50, "reset preserves channel volume");
             board.unloadCartridge();
             idle(board);
             check(board.apu().outputChannels() == mask, "ROM changes preserve channel preferences");
+            check(board.apu().outputVolume(channel) == 50, "ROM changes preserve channel volume");
             board.loadState(hardware);
             board.setAudioOutputChannels(15);
+            board.setAudioOutputVolume(channel, 100);
             const auto resumed = capture(board, 50000);
             check(resumed.hi - resumed.lo > 0.1f, "unmuting restores channel output");
         }
