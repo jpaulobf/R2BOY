@@ -89,6 +89,7 @@ namespace R2BOY::System
     {
         pressedKeys_.clear();
         fastForwardPressed_ = false;
+        rewindPressed_ = false;
         pauseToggleRequested_ = false;
     }
 
@@ -112,12 +113,16 @@ namespace R2BOY::System
             pressedKeys_.erase(event.key.key);
             if (event.key.key == SDLK_TAB)
                 fastForwardPressed_ = false;
+            if (event.key.key == SDLK_CAPSLOCK)
+                rewindPressed_ = false;
         }
         else if (event.type == SDL_EVENT_KEY_DOWN && enabled && !event.key.repeat &&
                  !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)))
         {
             if (event.key.key == SDLK_TAB)
                 fastForwardPressed_ = true;
+            else if (event.key.key == SDLK_CAPSLOCK)
+                rewindPressed_ = true;
             else if (event.key.key == SDLK_PAUSE)
                 pauseToggleRequested_ = !pauseToggleRequested_;
             else if (keyMap_.count(event.key.key))

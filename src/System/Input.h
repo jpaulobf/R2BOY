@@ -44,6 +44,9 @@ namespace R2BOY::System
         // TAB permanece ativo até a soltura, perda de foco ou captura pela interface.
         bool isFastForwardPressed() const;
 
+        // CAPSLOCK funciona enquanto pressionada, independente do estado de Caps Lock.
+        bool isRewindPressed() const { return rewindPressed_; }
+
         // Consome a solicitação de alternar pausa feita pela tecla Pause.
         bool takePauseToggleRequest();
 
@@ -71,6 +74,7 @@ namespace R2BOY::System
         std::map<SDL_JoystickID, Gamepad> gamepads_;
         bool initialized_ = false;
         bool fastForwardPressed_ = false;
+        bool rewindPressed_ = false;
         bool pauseToggleRequested_ = false;
     };
 }
