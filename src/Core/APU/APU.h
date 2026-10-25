@@ -56,6 +56,10 @@ namespace R2BOY::Core::APU
         void setOutputChannels(std::uint8_t mask);
         std::uint8_t outputChannels() const { return outputChannels_; }
 
+        // Ganho de escuta por canal (0 a 100%), independente do hardware e dos snapshots.
+        void setOutputVolume(unsigned channel, int percent);
+        int outputVolume(unsigned channel) const { return channel < 4 ? outputVolumes_[channel] : 0; }
+
         // Estado dos canais (bits de NR52), para diagnóstico e testes.
         bool channelActive(unsigned channel) const { return channel < 4 && channels_[channel].enabled; }
         std::uint8_t channelVolume(unsigned channel) const { return channel < 4 ? channels_[channel].volume : 0; }
@@ -123,6 +127,7 @@ namespace R2BOY::Core::APU
         // Saída: não serializada, pois pertence à sessão de áudio e não ao hardware.
         std::uint32_t sampleRate_ = 48000;
         std::uint8_t outputChannels_ = 0x0F;
+        std::array<int, 4> outputVolumes_{100, 100, 100, 100};
         std::uint32_t sampleAccumulator_ = 0;
         std::uint32_t sampleTicks_ = 0;
         std::array<float, 4> channelSum_{};

@@ -21,9 +21,11 @@ namespace R2BOY::Core::APU
     {
         const auto rate = sampleRate_;
         const auto outputChannels = outputChannels_;
+        const auto outputVolumes = outputVolumes_;
         *this = APU(nullptr);
         sampleRate_ = rate;
         outputChannels_ = outputChannels;
+        outputVolumes_ = outputVolumes;
         cgb_ = cgb;
     }
 
@@ -35,6 +37,7 @@ namespace R2BOY::Core::APU
         const auto rate = sampleRate_;
         const auto cgb = cgb_;
         const auto outputChannels = outputChannels_;
+        const auto outputVolumes = outputVolumes_;
         std::array<std::uint16_t, 4> lengths{};
         for (unsigned i = 0; i < 4; ++i)
             lengths[i] = channels_[i].length;
@@ -45,6 +48,7 @@ namespace R2BOY::Core::APU
         sampleRate_ = rate;
         cgb_ = cgb;
         outputChannels_ = outputChannels;
+        outputVolumes_ = outputVolumes;
         if (!cgb_)
             for (unsigned i = 0; i < 4; ++i)
                 channels_[i].length = lengths[i];
@@ -457,7 +461,8 @@ namespace R2BOY::Core::APU
         float left = 0, right = 0;
         for (unsigned i = 0; i < 4; ++i)
         {
-            const float level = channelSum_[i] / static_cast<float>(sampleTicks_);
+            const float level = channelSum_[i] / static_cast<float>(sampleTicks_) *
+                                static_cast<float>(outputVolumes_[i]) / 100.0f;
             if ((outputChannels_ & (1 << i)) && (panning_ & (0x10 << i)))
                 left += level;
             if ((outputChannels_ & (1 << i)) && (panning_ & (1 << i)))
@@ -499,6 +504,18 @@ namespace R2BOY::Core::APU
 
     std::vector<float> APU::takeSamples() { return std::exchange(samples_, {}); }
     void APU::clearSamples() { samples_.clear(); }
+
+    void APU::setOutputVolume(unsigned channel, int percent)
+    {
+        if (channel >= outputVolumes_.size())
+            return;
+        percent = std::clamp(percent, 0, 100);
+        if (outputVolumes_[channel] == percent)
+            return;
+        outputVolumes_[channel] = percent;
+        setSampleRate(sampleRate_);
+        capacitorLeft_ = capacitorRight_ = 0;
+    }
 
     void APU::setOutputChannels(std::uint8_t mask)
     {
