@@ -2,6 +2,11 @@
 
 namespace R2BOY::Core::Memory
 {
+    void Memory::writeVRAM(std::uint16_t address, std::uint8_t value, unsigned bank)
+    {
+        if (address >= 0x8000 && address < 0xA000 && bank < 2)
+            vram_[bank * 0x2000 + address - 0x8000] = value;
+    }
     std::uint8_t Memory::readVRAM(std::uint16_t address, unsigned bank) const
     {
         if (address < 0x8000 || address >= 0xA000 || bank > 1)
