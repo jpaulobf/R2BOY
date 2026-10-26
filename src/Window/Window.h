@@ -138,6 +138,15 @@ namespace R2BOY::Window
         // Retorna se o overclock da CPU está habilitado.
         bool isCPUOverclockEnabled() const;
 
+        // Callback para o CPU Overclock Percent
+        using CPUOverclockPercentCallback = std::function<void(int)>;
+        
+        // Atualiza o callback do CPU Overclock Percent
+        void setCPUOverclockPercentCallback(CPUOverclockPercentCallback callback);
+        
+        // Retorna o percentual de overclock utilizado pela cpu
+        int cpuOverclockPercent() const;
+
         // Callback para notificar mudanças no estado do hack de sprites ilimitadas.
         using UnlimitedSpritesCallback = std::function<void(bool)>;
 

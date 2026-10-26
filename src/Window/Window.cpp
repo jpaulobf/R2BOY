@@ -101,6 +101,7 @@ namespace R2BOY::Window
                            bool vsyncEnabled, const std::function<void()> &toggleVSync,
                            bool &fastForwardEnabled, const Window::FastForwardCallback &fastForwardCallback,
                            bool &cpuOverclockEnabled, const Window::CPUOverclockCallback &cpuOverclockCallback,
+                           int &cpuOverclockPercent, const Window::CPUOverclockPercentCallback &cpuOverclockPercentCallback,
                            bool &unlimitedSpritesEnabled, const Window::UnlimitedSpritesCallback &unlimitedSpritesCallback,
                            bool &masterSound, std::uint8_t &soundChannels, const Window::SoundCallback &soundCallback,
                            int &soundVolume, const Window::VolumeCallback &volumeCallback,
@@ -250,6 +251,20 @@ namespace R2BOY::Window
                             fastForwardCallback(fastForwardEnabled);
                         if (ImGui::MenuItem("Enable CPU Overclock", nullptr, &cpuOverclockEnabled) && cpuOverclockCallback)
                             cpuOverclockCallback(cpuOverclockEnabled);
+                        ImGui::BeginDisabled(!cpuOverclockEnabled);
+                        ImGui::SetNextItemWidth(150.0f);
+                        float multiplier = cpuOverclockPercent / 100.0f;
+                        if (ImGui::SliderFloat("CPU Multiplier", &multiplier, 1.0f, 2.0f, "%.2fx", ImGuiSliderFlags_AlwaysClamp))
+                        {
+                            const int percent = static_cast<int>(multiplier * 100.0f + 0.5f);
+                            if (percent != cpuOverclockPercent)
+                            {
+                                cpuOverclockPercent = percent;
+                                if (cpuOverclockPercentCallback)
+                                    cpuOverclockPercentCallback(percent);
+                            }
+                        }
+                        ImGui::EndDisabled();
                         if (ImGui::MenuItem("Enable Unlimited Sprites", nullptr, &unlimitedSpritesEnabled) && unlimitedSpritesCallback)
                             unlimitedSpritesCallback(unlimitedSpritesEnabled);
                         ImGui::MenuItem("Enable Rewind", nullptr, &rewindEnabled);
@@ -330,6 +345,8 @@ namespace R2BOY::Window
         bool fastForwardEnabled = true;
         FastForwardCallback fastForwardCallback;
         bool cpuOverclockEnabled = false;
+        int cpuOverclockPercent = 200;
+        CPUOverclockPercentCallback cpuOverclockPercentCallback;
         CPUOverclockCallback cpuOverclockCallback;
         bool unlimitedSpritesEnabled = true;
         UnlimitedSpritesCallback unlimitedSpritesCallback;
@@ -645,6 +662,16 @@ namespace R2BOY::Window
         return impl_->cpuOverclockEnabled;
     }
 
+    void Window::setCPUOverclockPercentCallback(CPUOverclockPercentCallback callback)
+    {
+        impl_->cpuOverclockPercentCallback = std::move(callback);
+    }
+
+    int Window::cpuOverclockPercent() const
+    {
+        return impl_->cpuOverclockPercent;
+    }
+
     void Window::setUnlimitedSpritesCallback(UnlimitedSpritesCallback callback)
     {
         impl_->unlimitedSpritesCallback = std::move(callback);
@@ -697,7 +724,7 @@ namespace R2BOY::Window
         bool titleChanged = impl_->gameWasLoaded != gameLoaded;
         const bool wasOverclockEnabled = impl_->cpuOverclockEnabled;
         drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
-                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled, impl_->rewindEnabled, impl_->rewindLevel);
+                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->cpuOverclockPercent, impl_->cpuOverclockPercentCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled, impl_->rewindEnabled, impl_->rewindLevel);
         titleChanged |= wasOverclockEnabled != impl_->cpuOverclockEnabled;
         const Common::Framebuffer *textureFrame = &framebuffer;
         if (gameLoaded && dmgMode && impl_->display.palettePreset != 0)
