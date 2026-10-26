@@ -48,7 +48,7 @@ namespace
 
         // Fecha o modal e verifica que o foco devolvido à janela libera o teclado.
         ImGui::NewFrame();
-        ImGui::Begin("R2BOY", nullptr, ImGuiWindowFlags_NoNavInputs);
+        ImGui::Begin("R2BOY v0.2.1", nullptr, ImGuiWindowFlags_NoNavInputs);
         check(ImGui::BeginPopupModal("Open ROM"), "ROM selector must be open");
         ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
@@ -83,7 +83,7 @@ namespace
         };
         for (const auto *label : {"File", "Display", "Sound", "Input", "Hacks"})
         {
-            auto *main = ImGui::FindWindowByName("R2BOY");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             ImGui::ActivateItemByID(ImHashStr(label, 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -130,7 +130,7 @@ namespace
               "rewind defaults to disabled with Normal granularity");
         const auto openHacks = [&]()
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             check(main != nullptr, "main window exists");
             ImGui::ActivateItemByID(ImHashStr("Hacks", 0, main->GetID("##MenuBar")));
             frame();
@@ -141,7 +141,7 @@ namespace
         };
         const auto closeMenus = [&]()
         {
-            ImGui::ClosePopupsOverWindow(ImGui::FindWindowByName("R2BOY v0.2.0"), false);
+            ImGui::ClosePopupsOverWindow(ImGui::FindWindowByName("R2BOY v0.2.1"), false);
             frame();
         };
         auto *menu = openHacks();
@@ -199,7 +199,7 @@ namespace
         check(window.isMasterSoundEnabled() && window.soundChannels() == 15, "sound starts fully enabled");
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             ImGui::ActivateItemByID(ImHashStr("Sound", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -244,7 +244,7 @@ namespace
         frame();
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             ImGui::ActivateItemByID(ImHashStr("File", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -294,7 +294,7 @@ namespace
         // Seleciona cada slot pelo submenu real do ImGui.
         for (int slot : {2, 3, 1})
         {
-            auto *main = ImGui::FindWindowByName("R2BOY");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             ImGui::ActivateItemByID(ImHashStr("File", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -342,7 +342,7 @@ namespace
         frame();
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             ImGui::ActivateItemByID(ImHashStr("Display", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -359,7 +359,7 @@ namespace
         {
             int width = 0, height = 0;
             check(SDL_GetWindowSize(native, &width, &height), "shortcut window size must be available");
-            auto *main = ImGui::FindWindowByName("R2BOY");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             check(width == 160 * scale && height == 144 * scale + static_cast<int>(main->MenuBarHeight),
                   "Ctrl+1 through Ctrl+5 must size the game area, excluding the menu");
             check((SDL_GetWindowFlags(native) & SDL_WINDOW_FULLSCREEN) == 0 && main->MenuBarHeight > 0,
@@ -429,7 +429,7 @@ namespace
             int width = 0;
             int height = 0;
             check(SDL_GetWindowSize(native, &width, &height), "window size must be available");
-            auto *main = ImGui::FindWindowByName("R2BOY");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             check(main->MenuBarHeight > 0, "windowed mode must show the menu again");
             check(width == 160 * scale && height == 144 * scale + static_cast<int>(main->MenuBarHeight),
                   "scale must size the game area, excluding the menu");
@@ -438,7 +438,7 @@ namespace
         };
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             ImGui::ActivateItemByID(ImHashStr("Display", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -472,7 +472,7 @@ namespace
                   "fullscreen menu must enable fullscreen");
             check(SDL_GetWindowFullscreenMode(native) == nullptr,
                   "fullscreen must use the desktop without an exclusive display mode");
-            auto *main = ImGui::FindWindowByName("R2BOY");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             check(main->MenuBarHeight == 0, "fullscreen must not draw or reserve space for the menu");
             const auto &vertices = main->DrawList->VtxBuffer;
             check(vertices.Size >= 4, "game image must be drawn");
@@ -493,7 +493,7 @@ namespace
 
         const auto checkScanlines = [&](Uint8 brightness)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
             frame();
@@ -563,7 +563,7 @@ namespace
             ++fastForwardChanges; });
         const auto selectHack = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
             ImGui::ActivateItemByID(ImHashStr("Hacks", 0, main->GetID("##MenuBar")));
@@ -611,7 +611,7 @@ namespace
                           : position == std::string::npos,
                   "title must immediately append or remove the complete overclock warning");
             if (enabled)
-                check(title.find("R2BOY | FPS: ") == 0,
+                check(title.find("R2BOY v0.2.1 | FPS: ") == 0,
                       "overclock warning must appear after the FPS value");
         };
         checkTitle(false);
@@ -619,6 +619,47 @@ namespace
         check(window.isCPUOverclockEnabled() && overclockEnabled && overclockChanges == 1,
               "Hacks must enable CPU overclock and notify the Engine once");
         checkTitle(true);
+        check(window.cpuOverclockPercent() == 200, "overclock slider must default to 2x");
+        int multiplierChanges = 0;
+        int selectedPercent = 200;
+        window.setCPUOverclockPercentCallback([&](int percent)
+                                              {
+            selectedPercent = percent;
+            ++multiplierChanges; });
+        const auto clickMultiplier = [&](float fraction)
+        {
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
+            ImGui::ClosePopupsOverWindow(main, false);
+            frame();
+            ImGui::ActivateItemByID(ImHashStr("Hacks", 0, main->GetID("##MenuBar")));
+            frame();
+            frame();
+            auto *menu = ImGui::FindWindowByName("Hacks###Menu_00");
+            check(menu && menu->Active, "Hacks menu must open for multiplier selection");
+            auto &io = ImGui::GetIO();
+            const auto &style = ImGui::GetStyle();
+            const float rowHeight = ImGui::GetFontSize() + style.ItemSpacing.y;
+            io.AddMousePosEvent(menu->DC.CursorStartPos.x + 1.0f + 148.0f * fraction,
+                                menu->DC.CursorStartPos.y + 2 * rowHeight + ImGui::GetFrameHeight() / 2);
+            frame();
+            io.AddMouseButtonEvent(0, true);
+            frame();
+            io.AddMouseButtonEvent(0, false);
+            frame();
+            ImGui::ClosePopupsOverWindow(main, false);
+            io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+            frame();
+        };
+        clickMultiplier(0.5f);
+        check(window.cpuOverclockPercent() == 150 && selectedPercent == 150 && multiplierChanges == 1,
+              "slider must select 1.5x and notify the Engine once");
+        clickMultiplier(0.0f);
+        check(window.cpuOverclockPercent() == 100 && selectedPercent == 100,
+              "slider lower endpoint must select native CPU speed");
+        clickMultiplier(1.0f);
+        check(window.cpuOverclockPercent() == 200 && selectedPercent == 200,
+              "slider upper endpoint must select the existing 2x overclock");
+        clickMultiplier(0.5f);
         // Verifica que a próxima amostra de FPS preserva o aviso completo.
         SDL_Delay(1010);
         frame();
@@ -629,6 +670,10 @@ namespace
         check(!window.isCPUOverclockEnabled() && !overclockEnabled && overclockChanges == 2,
               "Hacks must disable CPU overclock and notify the Engine once");
         checkTitle(false);
+        const int changesBeforeDisabled = multiplierChanges;
+        clickMultiplier(1.0f);
+        check(window.cpuOverclockPercent() == 150 && multiplierChanges == changesBeforeDisabled,
+              "disabled slider must retain its selection and ignore clicks");
         // Cada faixa contém um tom já resolvido por BGP/OBP; o quadro não avança.
         const std::array<std::uint32_t, 4> grayscale{0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000};
         for (int y = 0; y < 144; ++y)
@@ -637,7 +682,7 @@ namespace
         const auto originalFrame = framebuffer;
         const auto checkPalette = [&](const std::array<std::uint32_t, 4> &expected, unsigned brightness = 100)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.1");
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
             frame();

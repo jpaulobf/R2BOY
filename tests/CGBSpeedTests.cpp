@@ -193,9 +193,9 @@ namespace
         rom[0x143] = 0x80;
         const std::uint8_t program[] = {
             0x3E, 1, 0xE0, 0x4D, 0x10, 0, // LD A,1; LDH [KEY1],A; STOP
-            0xF0, 0x4D, 0xEA, 0, 0xC0,     // LDH A,[KEY1]; LD [C000],A
+            0xF0, 0x4D, 0xEA, 0, 0xC0,    // LDH A,[KEY1]; LD [C000],A
             0x3E, 1, 0xE0, 0x4D, 0x10, 0, // Switch back
-            0xF0, 0x4D, 0xEA, 1, 0xC0,     // LDH A,[KEY1]; LD [C001],A
+            0xF0, 0x4D, 0xEA, 1, 0xC0,    // LDH A,[KEY1]; LD [C001],A
             0x76};
         for (unsigned i = 0; i < sizeof(program); ++i)
             rom[0x100 + i] = program[i];
@@ -290,7 +290,7 @@ namespace
             while (f.board.baseClockCycles() - start < 2 * 70224)
                 f.board.step();
             check(f.board.frameNumber() - frames == 2 &&
-                          f.board.clockCycles() - cpuStart == 2 * 70224 * nativeSpeed * 2,
+                      f.board.clockCycles() - cpuStart == 2 * 70224 * nativeSpeed * 2,
                   "overclock must preserve video cadence while supplying twice the native CPU cycles");
 
             const auto snapshot = f.board.saveState();
@@ -312,11 +312,62 @@ namespace
         }
     }
 
+    void fractionalCPUOverclock()
+    {
+        for (unsigned mode = 0; mode < 4; ++mode)
+        {
+            Fixture f(mode == 0 ? Core::Model::DMG : Core::Model::CGB, mode >= 2);
+            if (mode == 3)
+                f.doubleSpeed();
+            const unsigned nativeSpeed = mode == 3 ? 2 : 1;
+            f.board.setCPUOverclock(true);
+            for (int percent = 100; percent <= 200; ++percent)
+            {
+                f.board.setCPUOverclockPercent(percent);
+                f.program({0x03, 0x18, 0xFD}); // INC BC; JR -3, 20 T-cycles.
+                f.board.write(0xFF04, 0);
+                const auto start = f.board.baseClockCycles();
+                const auto bc = f.board.cpu().registers().bc();
+                for (int i = 0; i < percent * 20; ++i)
+                    f.board.step();
+                check(f.board.baseClockCycles() - start == 20000 / nativeSpeed &&
+                          f.board.cpu().registers().bc() == static_cast<std::uint16_t>(bc + percent * 10),
+                      "every fractional setting must deliver the requested CPU work at native hardware cadence");
+                check(f.board.read(0xFF04) == 20000 / 256,
+                      "fractional overclock must keep DIV running at native speed");
+                check(f.board.cpuSpeedMultiplier() == nativeSpeed * (percent / 100.0),
+                      "reported CPU speed must include the fractional multiplier");
+            }
+
+            f.board.setCPUOverclockPercent(133);
+            f.board.step();
+            const auto snapshot = f.board.saveState();
+            for (int i = 0; i < 101; ++i)
+                f.board.step();
+            const auto future = f.board.saveState();
+            f.board.loadState(snapshot);
+            for (int i = 0; i < 101; ++i)
+                f.board.step();
+            check(f.board.saveState() == future, "fractional overclock must replay deterministically");
+            f.board.setCPUOverclockPercent(175);
+            f.board.loadState(snapshot);
+            check(f.board.cpuOverclockPercent() == 175, "load state must preserve the selected multiplier");
+            f.board.reset();
+            check(f.board.cpuOverclockPercent() == 175, "reset must preserve the selected multiplier");
+            f.board.setCPUOverclock(false);
+            check(f.board.cpuSpeedMultiplier() == 1.0, "disabling overclock must ignore the selected multiplier");
+            f.board.setCPUOverclockPercent(0);
+            check(f.board.cpuOverclockPercent() == 100, "multiplier must clamp to the lower limit");
+            f.board.setCPUOverclockPercent(999);
+            check(f.board.cpuOverclockPercent() == 200, "multiplier must clamp to the upper limit");
+        }
+    }
+
     void overclockDMAWaitRoutine()
     {
         for (unsigned mode = 0; mode < 4; ++mode)
         {
-            for (const bool overclock : {false, true})
+            for (const int percent : {100, 125, 133, 150, 175, 200})
             {
                 Fixture f(mode == 0 ? Core::Model::DMG : Core::Model::CGB, mode >= 2);
                 if (mode == 3)
@@ -331,7 +382,8 @@ namespace
                 auto registers = f.board.cpu().registers();
                 registers.sp = 0xD000;
                 f.board.cpu().reset(registers);
-                f.board.setCPUOverclock(overclock);
+                f.board.setCPUOverclock(true);
+                f.board.setCPUOverclockPercent(percent);
                 for (unsigned step = 0; step < 2000 && !f.board.cpu().halted() && !f.board.cpu().locked(); ++step)
                     f.board.step();
                 check(f.board.cpu().halted() && !f.board.cpu().locked() && f.board.read(0xC110) == 0x42,
@@ -446,7 +498,8 @@ namespace
         check(f.board.doubleSpeed() && !f.board.switchingSpeed(), "save state must restore stable double speed");
         f.board.reset();
         check(!f.board.doubleSpeed() && !f.board.switchingSpeed() && f.board.baseClockCycles() == 0 &&
-                  f.board.read(0xFF4D) == 0x7E, "reset must restore normal speed and clear all clock phases");
+                  f.board.read(0xFF4D) == 0x7E,
+              "reset must restore normal speed and clear all clock phases");
         f.doubleSpeed();
         f.board.unloadCartridge();
         check(!f.board.doubleSpeed() && f.board.read(0xFF4D) == 0xFF, "unload must clear CGB speed state");
@@ -463,6 +516,7 @@ int main()
         videoAndStates();
         videoMemoryAndIRQs();
         cpuOverclock();
+        fractionalCPUOverclock();
         overclockDMAWaitRoutine();
         std::cout << "CGB speed switching, CPU overclock, clocks, DMA, video and state tests passed.\n";
     }
