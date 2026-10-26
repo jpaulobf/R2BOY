@@ -91,20 +91,30 @@ namespace R2BOY::Core::CPU
         void reset(Registers registers);
 
         // Executa uma instrução, atende uma interrupção ou avança um período ocioso.
+        // O retorno inclui esperas adicionais de barramento entre M-cycles.
         // Opcodes inválidos travam a CPU até reset(), como no hardware.
         // Em STOP, os 4 ciclos retornados/contabilizados são uma unidade de espera da API;
         // não representam o avanço do oscilador parado nem devem acionar timers.
         unsigned step();
+
+        // Espera de barramento: mantém registradores/IME/HALT e avança o hardware.
+        unsigned stall();
+
         // Expõe o estado atual para diagnóstico, sem permitir alterações externas.
         const Registers &registers() const { return r_; }
+
         // Habilitação global de interrupções; não equivale aos bits de IE.
         bool ime() const { return ime_; }
+
         // HALT suspende instruções até um pedido habilitado, mantendo o clock ativo.
         bool halted() const { return halted_; }
+
         // STOP suspende o clock até uma chamada a wakeFromStop().
         bool stopped() const { return stopped_; }
+
         // Indica travamento por opcode inválido, recuperável apenas por reset().
         bool locked() const { return locked_; }
+
         // T-cycles contabilizados desde reset(), incluindo as unidades de espera de STOP.
         std::uint64_t cycles() const { return cycles_; }
 
@@ -138,6 +148,7 @@ namespace R2BOY::Core::CPU
                                   std::uint16_t address = 0, std::uint8_t value = 0);
         // Avança um M-cycle interno e o informa ao observador, sem acessar memória.
         void idle();
+        void waitCycle();
         // Obtém o byte amostrado pelo callback e notifica ao concluir o M-cycle.
         std::uint8_t read8(std::uint16_t address);
         // Grava um byte no final de um M-cycle e registra o acesso no observador.
@@ -185,5 +196,6 @@ namespace R2BOY::Core::CPU
         bool locked_ = false;
         std::uint64_t cycles_ = 0;
         unsigned stepCycles_ = 0;
+        unsigned waitCycles_ = 0; // Transitório, zerado no início de step()/stall().
     };
 }

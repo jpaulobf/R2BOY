@@ -11,10 +11,13 @@ namespace R2BOY::Core::CPU
         imeDelay_ = 0;
         cycles_ = 0;
         stepCycles_ = 0;
+        waitCycles_ = 0;
     }
 
     std::uint8_t CPU::machineCycle(CycleType type, std::uint16_t address, std::uint8_t value)
     {
+        while (bus_.cpuHeld())
+            waitCycle();
         cycles_ += 4;
         stepCycles_ += 4;
         if (clock_)
@@ -31,6 +34,23 @@ namespace R2BOY::Core::CPU
         machineCycle();
         if (observer_)
             observer_({CycleType::Internal, 0, 0, cycles_});
+    }
+
+    void CPU::waitCycle()
+    {
+        cycles_ += 4;
+        waitCycles_ += 4;
+        if (clock_)
+            clock_(CycleType::Internal, 0, 0);
+        if (observer_)
+            observer_({CycleType::Internal, 0, 0, cycles_});
+    }
+
+    unsigned CPU::stall()
+    {
+        stepCycles_ = waitCycles_ = 0;
+        waitCycle();
+        return waitCycles_;
     }
 
     std::uint8_t CPU::read8(std::uint16_t address)
@@ -622,12 +642,13 @@ namespace R2BOY::Core::CPU
         // Verifica a tabela em Debug; nunca adiciona ciclos faltantes ao final.
         assert(stepCycles_ == cycles);
         (void)cycles;
-        return stepCycles_;
+        return stepCycles_ + waitCycles_;
     }
 
     unsigned CPU::step()
     {
         stepCycles_ = 0;
+        waitCycles_ = 0;
         if (stopped_)
         {
             // Unidade de espera da API, sem avançar o clock do hardware.
