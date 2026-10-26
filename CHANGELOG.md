@@ -4,6 +4,36 @@ Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
 ## [Não lançado]
 
+- HDMA do CGB com blocos por HBlank, suspensão da CPU apenas durante a cópia,
+  cancelamento por FF55, pausa em HALT/VBlank e integração com LCD e bancos.
+  Testes cobrem normal/double speed, overclock, 128 blocos e replay de estados.
+- GDMA geral do CGB em FF51–FF55, com bancos, cópia temporizada, espera da CPU
+  e restauração de transferências parciais. Batman: Chaos in Gotham volta a
+  exibir o personagem no cenário validado.
+- Savestates passam à **versão 16**, incompatível com as anteriores.
+
+- Escritas da CPU em BGP/OBP0/OBP1 no DMG passam por old|new em T2 e new em
+  T3, após a borda de vídeo. Três imagens Mealybug melhoram sem piorar as outras
+  16; Mooneye 120/124 e AVP 601/601 nas duas sequências são preservados.
+  Testes incluem o pixel intermediário de paleta, overclock e replay de estado.
+
+- Novo diagnóstico `window_startup_probe`, com matriz WX=0 e rastros por dot,
+  e comparação independente com SameBoy alinhada pelo estrobo de SCX. Corrigido
+  o alinhamento do executor anterior; nenhuma nova correção de WX=0 é mantida.
+
+- Rastreador por T-cycle passa a expor SCX/WX/WY, partida e descarte do FIFO,
+  posição e linha da janela e latch vertical de WY. Investigação de WX=0 e
+  tentativas rejeitadas em `tests/PPUWXZeroInvestigation.md`.
+
+- SCX fino passa a ser comparado durante a partida do FIFO, incluindo a volta
+  após uma escrita perder o match. Mealybug WX=0 melhora de 375 para 284 pixels
+  diferentes, preservando os demais 18 resultados e 120/124 passes Mooneye.
+- AVP passa de 599/601 para **601/601 quadros exatos** contra o SameBoy na
+  sequência automatizada de caminhada e saltos; saltos parado preservam 601/601.
+- Savestates passam à versão **14**, incompatível com as anteriores. Testes
+  cobrem escrita da CPU, HBlank e replay da partida do FIFO; detalhes e limites
+  em `tests/PPUFineScrollValidation.md`.
+
 ## [0.2.1] - 2026-10-25
 
 ### Imagem e paletas
