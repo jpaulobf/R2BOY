@@ -44,7 +44,7 @@ int main(int argc, char **argv)
             throw std::runtime_error("Cannot open trace destination.");
         output << "event,cpu_t,base_t,pc,address,value,line,ly,dot,mode,x,lcd,stat_line,if,ie,vram_blocked,oam_blocked,"
                   "fetch_stage,fetch_phase,bg_fifo,map_address,tile_address,obj_ticks,obj_wait,obj_waiting,window,window_delay,dma,double_speed,lcdc,scy,"
-                  "warmup,discard,window_pixel,window_line,scx,wx,wy,wy_triggered\n";
+                  "warmup,discard,window_pixel,window_line,scx,wx,wy,wy_triggered,gdma,gdma_bytes,vram_dma_busy\n";
         const auto emit = [&](const char *event, const Core::Board::Timing &s, unsigned address, unsigned value)
         {
             if (s.cpuCycles < first || s.cpuCycles > last)
@@ -59,7 +59,8 @@ int main(int argc, char **argv)
                    << ',' << p.windowActive << ',' << p.windowDelay << ',' << s.dmaActive << ',' << s.doubleSpeed
                    << ',' << unsigned(p.lcdc) << ',' << unsigned(p.scy)
                    << ',' << p.warmup << ',' << p.discard << ',' << p.windowPixel << ',' << p.windowLine
-                   << ',' << unsigned(p.scx) << ',' << unsigned(p.wx) << ',' << unsigned(p.wy) << ',' << p.windowTriggered << '\n';
+                   << ',' << unsigned(p.scx) << ',' << unsigned(p.wx) << ',' << unsigned(p.wy) << ',' << p.windowTriggered
+                   << ',' << s.vramDMAActive << ',' << s.vramDMABytes << ',' << s.vramDMABusy << '\n';
         };
         board.setTickObserver([&](const Core::Board::Timing &s)
                               { emit("tick", s, 0, 0); });

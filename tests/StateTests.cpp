@@ -152,10 +152,10 @@ namespace
 
             auto previousFormat = snapshot;
             constexpr auto versionOffset = sizeof(std::uint32_t) + sizeof("R2BOY-STATE") - 1;
-            previousFormat[versionOffset] = 13;
+            previousFormat[versionOffset] = 15;
             rejects([&]
                     { board.loadState(previousFormat); });
-            check(board.saveState() == future, "Rejecting format 13 must preserve the running DMA");
+            check(board.saveState() == future, "Rejecting format 15 must preserve the running DMA");
         }
     }
 
