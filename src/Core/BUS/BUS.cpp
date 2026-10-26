@@ -4,8 +4,17 @@ namespace R2BOY::Core::BUS
 {
     BUS::BUS(Cartridge::Cartridge &cartridge, Memory::Memory &memory, IO::Interrupts &interrupts,
              IO::Serial &serial, IO::Timer &timer, IO::DMA &dma, PPU::PPU &ppu, IO::Joypad &joypad,
-             IO::SpeedSwitch &speedSwitch, APU::APU &apu)
-        : cartridge_(cartridge), memory_(memory), interrupts_(interrupts), serial_(serial), timer_(timer), dma_(dma), ppu_(ppu), joypad_(joypad), speedSwitch_(speedSwitch), apu_(apu) {}
+             IO::SpeedSwitch &speedSwitch, APU::APU &apu, IO::VRAMDMA *vramDMA)
+        : cartridge_(cartridge), memory_(memory), interrupts_(interrupts), serial_(serial), timer_(timer), dma_(dma), ppu_(ppu), joypad_(joypad), speedSwitch_(speedSwitch), apu_(apu), vramDMA_(vramDMA) {}
+
+    std::uint8_t BUS::readVRAMDMA(std::uint16_t address) const
+    {
+        if (address < 0x8000 || (address >= 0xA000 && address < 0xC000))
+            return cartridge_.read(address);
+        if (address >= 0xC000 && address < 0xE000)
+            return memory_.read(address);
+        return 0xFF; // Invalid source ranges are not routed through CPU I/O.
+    }
 
     std::uint8_t BUS::read(std::uint16_t address) const
     {
@@ -18,6 +27,8 @@ namespace R2BOY::Core::BUS
 
     std::uint8_t BUS::readDMA(std::uint16_t address) const
     {
+        if (address >= 0xFF51 && address <= 0xFF55)
+            return vramDMA_ ? vramDMA_->read(address) : 0xFF;
         if ((address >= 0xFF10 && address <= 0xFF26) || (address >= 0xFF30 && address <= 0xFF3F))
             return apu_.read(address);
         if (address == 0xFF4D)
@@ -47,6 +58,12 @@ namespace R2BOY::Core::BUS
 
     void BUS::write(std::uint16_t address, std::uint8_t value)
     {
+        if (address >= 0xFF51 && address <= 0xFF55)
+        {
+            if (vramDMA_)
+                vramDMA_->write(address, value, speedSwitch_.doubleSpeed(), memory_.read(0xFF4F) & 1, ppu_.vramDMAHBlank());
+            return;
+        }
         // FF46 aceita reinícios mesmo com o barramento da CPU bloqueado.
         if (address == 0xFF46)
         {
