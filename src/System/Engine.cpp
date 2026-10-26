@@ -95,6 +95,9 @@ namespace R2BOY::System
         window.setFastForwardCallback([this](bool enabled)
                                       { fastForwardEnabled = enabled; });
         board.setCPUOverclock(window.isCPUOverclockEnabled());
+        board.setCPUOverclockPercent(window.cpuOverclockPercent());
+        window.setCPUOverclockPercentCallback([this](int percent)
+                                              { board.setCPUOverclockPercent(percent); });
         window.setCPUOverclockCallback([this](bool enabled)
                                        { board.setCPUOverclock(enabled); });
         board.setUnlimitedSprites(window.isUnlimitedSpritesEnabled());
