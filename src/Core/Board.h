@@ -12,6 +12,7 @@
 #include "IO/Timer.h"
 #include "Memory/Memory.h"
 #include "PPU/PPU.h"
+#include <algorithm>
 #include <functional>
 #include <utility>
 
@@ -71,12 +72,16 @@ namespace R2BOY::Core
         bool doubleSpeed() const { return speedSwitch_.doubleSpeed(); }
         bool switchingSpeed() const { return speedSwitch_.switching(); }
 
-        // Hack de 2x somente na CPU, independente de KEY1 e do modo DMG/CGB.
+        // Hack de 1x a 2x somente na CPU, independente de KEY1 e do modo DMG/CGB.
         // Preferência da sessão: preservada em reset, troca de ROM e load state.
         void setCPUOverclock(bool enabled) { cpuOverclockEnabled_ = enabled; }
 
         // Retorna se o overclock da CPU está habilitado.
         bool isCPUOverclockEnabled() const { return cpuOverclockEnabled_; }
+
+        // Percentual da velocidade nativa (100 a 200); preferência da sessão.
+        void setCPUOverclockPercent(int percent) { cpuOverclockPercent_ = std::clamp(percent, 100, 200); }
+        int cpuOverclockPercent() const { return cpuOverclockPercent_; }
 
         // Retorna se o hack de sprites ilimitadas está habilitado.
         void setUnlimitedSprites(bool enabled) { ppu_.setUnlimitedSprites(enabled); }
@@ -85,9 +90,9 @@ namespace R2BOY::Core
         bool isUnlimitedSpritesEnabled() const { return ppu_.isUnlimitedSpritesEnabled(); }
 
         // Multiplicador efetivo de velocidade da CPU, considerando double speed e overclock.
-        unsigned cpuSpeedMultiplier() const
+        double cpuSpeedMultiplier() const
         {
-            return (doubleSpeed() ? 2u : 1u) * (cpuOverclockEnabled_ ? 2u : 1u);
+            return (doubleSpeed() ? 2.0 : 1.0) * (cpuOverclockEnabled_ ? cpuOverclockPercent_ / 100.0 : 1.0);
         }
 
         // Controle de diagnóstico: permite observar ciclos e acordar STOP explicitamente.
@@ -179,6 +184,7 @@ namespace R2BOY::Core
         std::uint64_t baseClockCycles_ = 0;
         bool baseClockPhase_ = false;
         bool cpuOverclockEnabled_ = false;
+        int cpuOverclockPercent_ = 200;
         TickObserver tickObserver_;
         ReadObserver readObserver_;
         Model model_;

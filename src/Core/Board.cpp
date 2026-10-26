@@ -153,8 +153,17 @@ namespace R2BOY::Core
         {
             ++clockCycles_;
             // Overclock adiciona ciclos de CPU entre os ticks do hardware nativo.
-            // A fase reinicia em cada M-cycle (4 T-cycles), sem estado parcial extra.
+            // Cada par de T-cycles entrega um ou dois ticks nativos. Distribui os
+            // pares fracionários pelo contador já salvo, sem fase adicional.
+            // T2/T4 sempre avançam o hardware, preservando as bordas do BUS.
+            bool skipTick = false;
             if (overclockActive && (t & 1) == 0)
+            {
+                const auto pair = ((clockCycles_ - 1) / 2) % cpuOverclockPercent_;
+                skipTick = (pair + 1) * 200 / cpuOverclockPercent_ -
+                               pair * 200 / cpuOverclockPercent_ == 1;
+            }
+            if (skipTick)
             {
                 latchPalette(t);
                 if (tickObserver_)
