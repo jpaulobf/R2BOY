@@ -2,7 +2,12 @@
 
 Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
-## [Não lançado]
+## [0.2.5] - 2026-10-25
+
+- Slider `CPU Multiplier` abaixo de `Enable CPU Overclock`, de 1,00x a 2,00x
+  em passos de 0,01x. Mantém 2,00x como padrão e preserva a seleção na sessão.
+  Valores intermediários mantêm os relógios nativos dos periféricos e o replay
+  determinístico, sem alterar o formato dos save states.
 
 - HDMA do CGB com blocos por HBlank, suspensão da CPU apenas durante a cópia,
   cancelamento por FF55, pausa em HALT/VBlank e integração com LCD e bancos.
