@@ -211,7 +211,7 @@ namespace R2BOY::Core::PPU
         bgFIFO_.fill(Pixel{});
         fetchStep_ = fetchTicks_ = fetchX_ = 0;
         warmup_ = 12;
-        discard_ = scx_ & 7;
+        discard_ = 0;
         windowDelay_ = 0;
         windowInsertionBlocked_ = false;
         objFIFO_.fill(ObjectPixel{});
@@ -469,7 +469,7 @@ namespace R2BOY::Core::PPU
                 return;
             }
         }
-        if (warmup_ <= 8 && discard_ == 0)
+        if (warmup_ <= 8 && (warmup_ == 8 ? discard_ == (scx_ & 7) : discard_ == 0))
         {
             if (warmup_ == 0 && !windowActive_ && windowTriggered_ && (lcdc_ & 0x20) && (colorMode_ || (lcdc_ & 1)) &&
                 wx_ <= 166 && (wx_ < 7 ? x_ == 0 : x_ + 7 == wx_))
@@ -495,11 +495,14 @@ namespace R2BOY::Core::PPU
                 bgHead_ = (bgHead_ + 1) & 15;
                 --bgSize_;
                 fetchBackground(memory);
-                if (discard_)
+                // O comparador fino consulta SCX a cada pixel de partida.
+                // Se uma escrita ultrapassa o match, a posição volta a zero.
+                if (warmup_ == 8 && discard_ != (scx_ & 7))
                 {
-                    --discard_;
+                    discard_ = (discard_ + 1) & 7;
                     return;
                 }
+                discard_ = 0;
                 for (unsigned i = 0; i < 7; ++i)
                     objFIFO_[i] = objFIFO_[i + 1];
                 objFIFO_[7] = ObjectPixel{};

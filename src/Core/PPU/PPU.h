@@ -35,7 +35,8 @@ namespace R2BOY::Core::PPU
         void write(std::uint16_t address, std::uint8_t value, IO::Interrupts &interrupts);
 
         // Perfil DMG: campos de endereçamento visíveis durante a fase de dados
-        // da escrita da CPU (T2), antes de seu término. Alimentação e demais
+        // da escrita da CPU (T2), antes de seu término. BGP/OBP usam latches
+        // após a borda de vídeo em T2 (old|new) e T3 (new). Alimentação e demais
         // controles de LCDC são aplicados no fim do M-cycle. O CGB usa a fase
         // posterior; revisões anteriores ao CGB-D continuam fora do perfil.
         std::uint8_t earlyWriteMask(std::uint16_t address, std::uint8_t value) const
@@ -43,6 +44,10 @@ namespace R2BOY::Core::PPU
             if (colorHardware_)
                 return 0;
             if (address == 0xFF42 || address == 0xFF43)
+                return 0xFF;
+            if (address >= 0xFF47 && address <= 0xFF49)
+                return 0xFF;
+            if (address >= 0xFF47 && address <= 0xFF49)
                 return 0xFF;
             if (address == 0xFF40 && ((lcdc_ ^ value) & 0x80) == 0)
                 return 0x58; // BG map, tile data select e window map.
@@ -54,6 +59,9 @@ namespace R2BOY::Core::PPU
 
         // Modo atual: 0=HBlank, 1=VBlank, 2=OAM, 3=transferência de pixels.
         unsigned mode() const { return mode_; }
+
+        // The initial mode-0 interval after LCD on is warmup, not HBlank.
+        bool vramDMAHBlank() const { return !enabled() || (mode_ == 0 && dot_ >= 80); }
 
         // Posição temporal dentro da linha, em dots, independente do pixel visível.
         unsigned dot() const { return dot_; }
@@ -70,12 +78,16 @@ namespace R2BOY::Core::PPU
             bool lcdEnabled, statLine, vramBlocked, oamBlocked;
             bool objectWaiting, windowActive;
             std::uint8_t lcdc, scy;
+            unsigned warmup, discard, windowPixel, windowLine;
+            std::uint8_t scx, wx, wy;
+            bool windowTriggered;
         };
         Timing timing() const
         {
             return {line_, ly(), dot_, mode_, x_, fetchStep_, fetchTicks_, bgSize_,
                     objectTicks_, objectWait_, windowDelay_, tileMapAddress_, tileAddress_,
-                    enabled(), statLine_, blocksVRAM(), blocksOAM(), objectWaiting_, windowActive_, lcdc_, scy_};
+                    enabled(), statLine_, blocksVRAM(), blocksOAM(), objectWaiting_, windowActive_, lcdc_, scy_,
+                    warmup_, discard_, windowPixel_, windowLine_, scx_, wx_, wy_, windowTriggered_};
         }
 
         // A CPU não acessa VRAM durante a transferência de pixels com LCD ligado.
@@ -192,6 +204,8 @@ namespace R2BOY::Core::PPU
         bool objectWaiting_ = false;
         unsigned objectWait_ = 0;
         unsigned bgHead_ = 0, bgSize_ = 0, fetchStep_ = 0, fetchTicks_ = 0, fetchX_ = 0;
+        // Em warmup=8, discard conta a posição do comparador fino (módulo 8).
+        // Após a partida, volta a ser o descarte restante de WX<7.
         unsigned warmup_ = 0, discard_ = 0, windowDelay_ = 0, windowLine_ = 0;
         unsigned windowPixel_ = 0;
         unsigned statWriteTicks_ = 0; // Pulso DMG: seleções de STAT ativas por um M-cycle.
