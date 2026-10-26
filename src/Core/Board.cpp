@@ -5,7 +5,7 @@
 
 namespace R2BOY::Core
 {
-    Board::Board(Model model) : model_(model), bus_(cartridge_, memory_, interrupts_, serial_, timer_, dma_, ppu_, joypad_, speedSwitch_, apu_),
+    Board::Board(Model model) : model_(model), bus_(cartridge_, memory_, interrupts_, serial_, timer_, dma_, ppu_, joypad_, speedSwitch_, apu_, &vramDMA_),
                                 cpu_(bus_, [this](CPU::CPU::CycleType type, std::uint16_t address, std::uint8_t value)
                                      { return tickMachineCycle(type, address, value); })
     {
@@ -60,6 +60,7 @@ namespace R2BOY::Core
         apu_.reset(model_ == Model::CGB);
         serial_.reset(executionMode_ == ExecutionMode::CGB);
         dma_.reset(model_ == Model::CGB);
+        vramDMA_.reset(executionMode_ == ExecutionMode::CGB);
         ppu_.reset(model_ == Model::CGB, executionMode_ == ExecutionMode::CGB);
 
         // Perfil determinístico sem boot ROM: fases conhecidas DMG/CGB, sem
@@ -115,6 +116,8 @@ namespace R2BOY::Core
     {
         if (!cartridge_.loaded())
             return 0;
+        if (vramDMA_.cpuHeld() && !cpu_.stopped())
+            return cpu_.stall();
         return cpu_.step();
     }
 
@@ -125,6 +128,16 @@ namespace R2BOY::Core
         // LY e IF pertencem às atualizações de contador/IRQ, após essa borda.
         const bool videoRead = type == Type::Read && BUS::BUS::samplesBeforeVideoEdge(address);
         const auto earlyMask = type == Type::Write ? bus_.earlyVideoWriteMask(address, value) : 0;
+        const bool paletteWrite = earlyMask && address >= 0xFF47 && address <= 0xFF49;
+        // O decodificador de paleta usa o valor anterior no pixel desta borda.
+        // T2 mistura old|new; T3 entrega new. O observador vê o latch atualizado.
+        const auto latchPalette = [&](unsigned t)
+        {
+            if (paletteWrite && t == 1)
+                bus_.write(address, static_cast<std::uint8_t>(bus_.read(address) | value));
+            if (paletteWrite && t == 2)
+                bus_.write(address, value);
+        };
         std::uint8_t result = 0;
         const auto sampleRead = [&]()
         {
@@ -135,7 +148,7 @@ namespace R2BOY::Core
         // Esperas de DMA em HRAM contam ciclos da CPU: acelerá-las pode fazer RET
         // acessar a pilha ainda bloqueada. Preserva também a pausa nativa de KEY1.
         // Decide por M-cycle inteiro para manter a fase dos relógios consistente.
-        const bool overclockActive = cpuOverclockEnabled_ && !dma_.inProgress() && !speedSwitch_.switching();
+        const bool overclockActive = cpuOverclockEnabled_ && !dma_.inProgress() && !vramDMA_.active() && !speedSwitch_.switching();
         for (unsigned t = 0; t < 4; ++t)
         {
             ++clockCycles_;
@@ -143,6 +156,7 @@ namespace R2BOY::Core
             // A fase reinicia em cada M-cycle (4 T-cycles), sem estado parcial extra.
             if (overclockActive && (t & 1) == 0)
             {
+                latchPalette(t);
                 if (tickObserver_)
                     tickObserver_(timing());
                 continue;
@@ -164,7 +178,7 @@ namespace R2BOY::Core
             dma_.tick(bus_);
             if (t == 3 && videoRead)
                 sampleRead();
-            if (t == 1 && earlyMask)
+            if (t == 1 && earlyMask && !paletteWrite)
             {
                 // Endereços de tile já observam o dado dirigido em T2. Campos
                 // de controle que não pertencem à máscara mantêm o valor antigo.
@@ -176,10 +190,14 @@ namespace R2BOY::Core
             if (!baseClockPhase_)
             {
                 ++baseClockCycles_;
+                vramDMA_.tick(bus_);
                 ppu_.tick(memory_, interrupts_, dma_.active());
+                vramDMA_.observeDisplay(ppu_.vramDMAHBlank(), !cpu_.halted() && !cpu_.stopped(),
+                                        doubleSpeed(), memory_.read(0xFF4F) & 1);
                 apu_.tick();
             }
             speedSwitch_.tick();
+            latchPalette(t);
             if (tickObserver_)
                 tickObserver_(timing());
         }
@@ -205,6 +223,7 @@ namespace R2BOY::Core
         archive(clockCycles_, buttons_, cartridge_, dma_, interrupts_, joypad_, serial_, timer_, memory_, ppu_, cpu_);
         archive(baseClockCycles_, baseClockPhase_, speedSwitch_);
         archive(apu_);
+        archive(vramDMA_);
     }
 
     std::vector<std::uint8_t> Board::saveState()
@@ -217,7 +236,7 @@ namespace R2BOY::Core
         std::vector<std::uint8_t> result;
         StateArchive header(result);
         std::string magic = "R2BOY-STATE";
-        std::uint32_t version = 13;
+        std::uint32_t version = 16;
         auto model = model_;
         auto mode = executionMode_;
         auto romHash = Common::RomFile::hash(cartridge_.rom());
@@ -243,7 +262,7 @@ namespace R2BOY::Core
         ExecutionMode mode{};
         header(magic, version, model, mode, romHash, checksum);
         header.finish();
-        if (magic != "R2BOY-STATE" || version != 13)
+        if (magic != "R2BOY-STATE" || version != 16)
             throw std::runtime_error("Unsupported save state format/version.");
         if (model != model_ || mode != executionMode_ || romHash != Common::RomFile::hash(cartridge_.rom()))
             throw std::runtime_error("Save state belongs to a different ROM or hardware model.");
@@ -274,6 +293,7 @@ namespace R2BOY::Core
         buttons_ = next.buttons_;
         cartridge_ = std::move(next.cartridge_);
         dma_ = std::move(next.dma_);
+        vramDMA_ = std::move(next.vramDMA_);
         interrupts_ = std::move(next.interrupts_);
         joypad_ = std::move(next.joypad_);
         serial_ = std::move(next.serial_);

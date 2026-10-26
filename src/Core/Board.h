@@ -107,11 +107,14 @@ namespace R2BOY::Core
             PPU::PPU::Timing ppu;
             std::uint8_t requestedInterrupts, enabledInterrupts;
             bool dmaActive, doubleSpeed;
+            bool vramDMAActive;
+            unsigned vramDMABytes;
+            bool vramDMABusy;
         };
         Timing timing() const
         {
             return {clockCycles_, baseClockCycles_, ppu_.timing(), interrupts_.readIF(),
-                    interrupts_.readIE(), dma_.active(), doubleSpeed()};
+                    interrupts_.readIE(), dma_.active(), doubleSpeed(), vramDMA_.active(), vramDMA_.remaining(), vramDMA_.cpuHeld()};
         }
         using TickObserver = std::function<void(const Timing &)>;
         // Diagnóstico da sessão, não serializado; preservado em reset/loadState.
@@ -184,6 +187,7 @@ namespace R2BOY::Core
         bool sequencerBitHigh_ = false; // Última fase do bit de DIV que aciona o frame sequencer.
         Cartridge::Cartridge cartridge_;
         IO::DMA dma_;
+        IO::VRAMDMA vramDMA_;
         IO::Interrupts interrupts_;
         IO::Joypad joypad_;
         std::uint8_t buttons_ = 0;
