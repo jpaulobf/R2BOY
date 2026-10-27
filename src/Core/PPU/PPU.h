@@ -108,6 +108,14 @@ namespace R2BOY::Core::PPU
         // Retorna se o hack de sprites ilimitadas está habilitado.
         bool isUnlimitedSpritesEnabled() const { return unlimitedSprites_; }
 
+        // Preferências visuais da sessão; preservam o pipeline e os registradores LCD.
+        void setRenderLayers(bool tiles, bool sprites, bool window)
+        {
+            renderTiles_ = tiles;
+            renderSprites_ = sprites;
+            renderWindow_ = window;
+        }
+
     private:
         friend class R2BOY::Core::StateArchive;
         void state(StateArchive &archive)
@@ -192,6 +200,7 @@ namespace R2BOY::Core::PPU
         std::array<Sprite, 30> extraSprites_{};
         unsigned extraSpriteCount_ = 0;
         bool unlimitedSprites_ = true;
+        bool renderTiles_ = true, renderSprites_ = true, renderWindow_ = true;
         Sprite fetchingObject_{};
         std::uint8_t lcdc_ = 0, stat_ = 0, scy_ = 0, scx_ = 0, lyc_ = 0;
         std::uint8_t bgp_ = 0xFC, obp0_ = 0xFF, obp1_ = 0xFF, wy_ = 0, wx_ = 0;

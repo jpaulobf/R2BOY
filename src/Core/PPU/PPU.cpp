@@ -7,8 +7,10 @@ namespace R2BOY::Core::PPU
     void PPU::reset(bool colorHardware, bool colorMode, bool afterBoot)
     {
         const bool unlimitedSprites = unlimitedSprites_;
+        const bool renderTiles = renderTiles_, renderSprites = renderSprites_, renderWindow = renderWindow_;
         *this = PPU{};
         unlimitedSprites_ = unlimitedSprites;
+        setRenderLayers(renderTiles, renderSprites, renderWindow);
         colorHardware_ = colorHardware;
         colorMode_ = colorMode;
         lcdc_ = afterBoot ? 0x91 : 0;
@@ -440,13 +442,14 @@ namespace R2BOY::Core::PPU
 
     std::uint32_t PPU::mix(Pixel background, const ObjectPixel &object) const
     {
-        if (!colorMode_ && !(lcdc_ & 1))
+        const bool renderBackground = windowActive_ ? renderWindow_ : renderTiles_;
+        if (!renderBackground || (!colorMode_ && !(lcdc_ & 1)))
             background.color = 0;
         const bool bgWins = background.color != 0 && (colorMode_ ? (lcdc_ & 1) && (background.priority || object.behind)
                                                                  : object.behind);
-        if ((lcdc_ & 2) && object.color != 0 && !bgWins)
+        if (renderSprites_ && (lcdc_ & 2) && object.color != 0 && !bgWins)
             return paletteColor(true, object.palette, object.color);
-        if (!colorMode_ && !(lcdc_ & 1))
+        if (!renderBackground || (!colorMode_ && !(lcdc_ & 1)))
             return 0xFFFFFFFF;
         return paletteColor(false, background.palette, background.color);
     }
