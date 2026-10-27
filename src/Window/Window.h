@@ -156,6 +156,13 @@ namespace R2BOY::Window
         // Retorna se o hack de sprites ilimitadas está habilitado.
         bool isUnlimitedSpritesEnabled() const;
 
+        // Controla fundo, sprites e window de forma independente, habilitados por padrão.
+        using RenderLayersCallback = std::function<void(bool tiles, bool sprites, bool window)>;
+        void setRenderLayersCallback(RenderLayersCallback callback);
+        bool isRenderTilesEnabled() const;
+        bool isRenderSpritesEnabled() const;
+        bool isRenderWindowEnabled() const;
+
         // Permite imprimir os bytes da porta serial no console; desativado por padrão.
         bool isSerialOutputEnabled() const;
 

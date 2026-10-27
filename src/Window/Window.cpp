@@ -1,4 +1,5 @@
 #include "Window.h"
+#include "ConfigManager.h"
 #include "Common/Constants.h"
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -17,7 +18,7 @@ namespace R2BOY::Window
     {
         constexpr int screenWidth = Common::Constants::ScreenWidth;
         constexpr int screenHeight = Common::Constants::ScreenHeight;
-        const char *emuTitle = "R2BOY v0.2.1";
+        const char *emuTitle = "R2BOY v0.2.6";
 
         struct PalettePreset
         {
@@ -106,7 +107,8 @@ namespace R2BOY::Window
                            bool &masterSound, std::uint8_t &soundChannels, const Window::SoundCallback &soundCallback,
                            int &soundVolume, const Window::VolumeCallback &volumeCallback,
                            std::array<int, 4> &channelVolumes, const Window::ChannelVolumeCallback &channelVolumeCallback,
-                           bool &serialOutputEnabled, bool &rewindEnabled, int &rewindLevel)
+                           bool &serialOutputEnabled, bool &rewindEnabled, int &rewindLevel,
+                           bool &renderTiles, bool &renderSprites, bool &renderWindow, const Window::RenderLayersCallback &renderLayersCallback)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -155,6 +157,7 @@ namespace R2BOY::Window
                             ImGui::EndMenu();
                         }
                         ImGui::Separator();
+                        fileManager.drawRecentMenu();
                         if (ImGui::MenuItem("Exit"))
                             running = false;
                         ImGui::EndMenu();
@@ -202,6 +205,13 @@ namespace R2BOY::Window
                         };
                         fullscreenItem("Borderless Fullscreen Stretched", DisplayMode::FullscreenStretched);
                         fullscreenItem("Borderless Fullscreen", DisplayMode::Fullscreen);
+                        ImGui::Separator();
+                        if (ImGui::MenuItem("Render Tiles", nullptr, &renderTiles) && renderLayersCallback)
+                            renderLayersCallback(renderTiles, renderSprites, renderWindow);
+                        if (ImGui::MenuItem("Render Sprites", nullptr, &renderSprites) && renderLayersCallback)
+                            renderLayersCallback(renderTiles, renderSprites, renderWindow);
+                        if (ImGui::MenuItem("Render Window", nullptr, &renderWindow) && renderLayersCallback)
+                            renderLayersCallback(renderTiles, renderSprites, renderWindow);
                         ImGui::Separator();
                         if (ImGui::BeginMenu("Palette Preset"))
                         {
@@ -326,7 +336,8 @@ namespace R2BOY::Window
         std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)> renderer{nullptr, SDL_DestroyRenderer};
         std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)> texture{nullptr, SDL_DestroyTexture};
         ImGuiSession gui;
-        FileManager fileManager;
+        ConfigManager configManager;
+        FileManager fileManager{configManager};
         RomAction romAction = RomAction::None;
         int stateSlot = 1;
         bool bilinearFilter = false;
@@ -350,6 +361,8 @@ namespace R2BOY::Window
         CPUOverclockCallback cpuOverclockCallback;
         bool unlimitedSpritesEnabled = true;
         UnlimitedSpritesCallback unlimitedSpritesCallback;
+        bool renderTiles = true, renderSprites = true, renderWindow = true;
+        RenderLayersCallback renderLayersCallback;
         bool serialOutputEnabled = false;
         bool rewindEnabled = false;
         int rewindLevel = 1;
@@ -682,6 +695,26 @@ namespace R2BOY::Window
         return impl_->unlimitedSpritesEnabled;
     }
 
+    void Window::setRenderLayersCallback(RenderLayersCallback callback)
+    {
+        impl_->renderLayersCallback = std::move(callback);
+    }
+
+    bool Window::isRenderTilesEnabled() const
+    {
+        return impl_->renderTiles;
+    }
+
+    bool Window::isRenderSpritesEnabled() const
+    {
+        return impl_->renderSprites;
+    }
+
+    bool Window::isRenderWindowEnabled() const
+    {
+        return impl_->renderWindow;
+    }
+
     bool Window::isSerialOutputEnabled() const
     {
         return impl_->serialOutputEnabled;
@@ -724,7 +757,7 @@ namespace R2BOY::Window
         bool titleChanged = impl_->gameWasLoaded != gameLoaded;
         const bool wasOverclockEnabled = impl_->cpuOverclockEnabled;
         drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
-                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->cpuOverclockPercent, impl_->cpuOverclockPercentCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled, impl_->rewindEnabled, impl_->rewindLevel);
+                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->cpuOverclockPercent, impl_->cpuOverclockPercentCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled, impl_->rewindEnabled, impl_->rewindLevel, impl_->renderTiles, impl_->renderSprites, impl_->renderWindow, impl_->renderLayersCallback);
         titleChanged |= wasOverclockEnabled != impl_->cpuOverclockEnabled;
         const Common::Framebuffer *textureFrame = &framebuffer;
         if (gameLoaded && dmgMode && impl_->display.palettePreset != 0)
