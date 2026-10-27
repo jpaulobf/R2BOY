@@ -2,6 +2,11 @@
 
 Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
+## [0.2.6] - 2026-10-27
+
+- Apresentação sem VSync passa de 60 Hz para a frequência nativa de aproximadamente
+  59,7275 Hz (70.224 dots a 4.194.304 Hz), mantendo a compensação do tempo de processamento.
+
 ## [0.2.5] - 2026-10-25
 
 - Slider `CPU Multiplier` abaixo de `Enable CPU Overclock`, de 1,00x a 2,00x
