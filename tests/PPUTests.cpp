@@ -1016,6 +1016,72 @@ namespace R2BOY::Test
             check(behind.pixel(0) == light, "extra sprites must respect background priority");
         }
 
+        void renderLayerVisibility()
+        {
+            for (const bool color : {false, true})
+                for (const bool tiles : {false, true})
+                    for (const bool sprites : {false, true})
+                    {
+                        Fixture f(color);
+                        f.ppu.setRenderLayers(tiles, sprites, true);
+                        // Reset mantém as preferências, como ao abrir outra ROM.
+                        f.ppu.reset(color, color, false);
+                        f.bus.write(0xFF47, 0xE4);
+                        f.bus.write(0xFF48, 0xE4);
+                        f.tile(0, 0xFF, 0); // Fundo de cor 1.
+                        f.tile(1, 0, 0xFF); // OBJ de cor 2, atrás do fundo.
+                        f.sprite(0, 8, 16, 1, 0x80);
+                        f.sprite(1, 16, 16, 1);
+                        if (color)
+                        {
+                            f.color(false, 0, 1, 0x001F); // Vermelho.
+                            f.color(true, 0, 2, 0x03E0); // Verde.
+                        }
+                        f.render(0x93);
+                        const auto background = color ? 0xFFFF0000u : light;
+                        const auto object = color ? 0xFF00FF00u : dark;
+                        check(f.pixel(0, 0) == (tiles ? background : sprites ? object : white),
+                              "hidden tiles must reveal behind-priority sprites; hidden layers must be blank");
+                        check(f.pixel(20, 0) == (tiles ? background : white),
+                              "tiles visibility must apply outside sprite coverage");
+                        check(f.pixel(8, 0) == (sprites ? object : tiles ? background : white),
+                              "sprite visibility must hide foreground objects independently of tiles");
+                        check(f.ppu.read(0xFF40) == 0x93, "visual preferences must preserve LCDC");
+                        f.ppu.setRenderLayers(true, true, true);
+                        f.advance(70224);
+                        check(f.pixel(0, 0) == background, "layers must render again when reenabled");
+                    }
+
+            for (const bool color : {false, true})
+                for (const bool tiles : {false, true})
+                    for (const bool renderWindow : {false, true})
+                    {
+                        Fixture f(color);
+                        f.ppu.setRenderLayers(tiles, true, renderWindow);
+                        f.ppu.reset(color, color, false);
+                        f.bus.write(0xFF47, 0xE4);
+                        f.tile(0, 0xFF, 0);
+                        f.tile(1, 0xFF, 0xFF);
+                        f.memory.write(0x9C00, 1);
+                        f.bus.write(0xFF4A, 0);
+                        f.bus.write(0xFF4B, 87); // BG até x=79; window a partir de x=80.
+                        if (color)
+                        {
+                            f.color(false, 0, 1, 0x001F);
+                            f.color(false, 0, 3, 0x03E0);
+                        }
+                        f.render(0xF1);
+                        check(f.pixel(0, 0) == (tiles ? (color ? 0xFFFF0000u : light) : white),
+                              "window preference must leave background visibility independent");
+                        check(f.pixel(80, 0) == (renderWindow ? (color ? 0xFF00FF00u : black) : white),
+                              "window visibility must be independent of Render Tiles and survive reset");
+                        f.ppu.setRenderLayers(true, true, true);
+                        f.advance(70224);
+                        check(f.pixel(80, 0) == (color ? 0xFF00FF00u : black),
+                              "reenabling window must restore its pixels");
+                    }
+        }
+
         void colorPalettesAndAttributes()
         {
             Fixture f(true);
@@ -1149,6 +1215,7 @@ namespace R2BOY::Test
             objectSelectionAndMasking();
             overlappingObjectsAtZero();
             unlimitedSprites();
+            renderLayerVisibility();
             colorPalettesAndAttributes();
             dmaAndBoard();
             std::cout << "PPU FIFO, modes, interrupts, pixel composition, CGB and integration tests passed.\n";

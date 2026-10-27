@@ -21,7 +21,7 @@ int main()
     {
         const Pacer::Clock::time_point start{};
         constexpr auto period = Pacer::FrameDuration;
-        check(period > 16ms && period < 17ms, "60 FPS needs approximately 16.67 ms");
+        check(period == 16742706ns, "native frame period must match 70224 dots at 4194304 Hz within one nanosecond");
 
         Pacer pacer(start);
         check(pacer.remaining(start + 5ms) == period - 5ms,
@@ -50,7 +50,7 @@ int main()
         check(pacer.remaining(start + 10s + 6ms) == period - 6ms,
               "resume and ROM loading must start a fresh cadence");
 
-        // Mesmo com oversleep recorrente, os prazos continuam na grade de 60 Hz.
+        // Mesmo com oversleep recorrente, os prazos continuam na grade nativa.
         pacer.reset(start);
         for (int frame = 0; frame < 600; ++frame)
         {
