@@ -4,14 +4,15 @@
 
 namespace R2BOY::System
 {
-    // Agenda a apresentação a 60 Hz sem somar o custo do frame à espera.
+    // Agenda a apresentação na frequência nativa sem somar o custo do frame à espera.
     // O relógio é recebido pelo chamador para permitir testes sem sleeps reais.
     class FramePacer
     {
     public:
         using Clock = std::chrono::steady_clock;
         using Duration = std::chrono::nanoseconds;
-        static constexpr Duration FrameDuration{1000000000 / 60};
+        // 70.224 dots por quadro a 4.194.304 Hz: aproximadamente 59,7275 Hz.
+        static constexpr Duration FrameDuration{1000000000ull * 70224 / 4194304};
 
         // Agenda a primeira apresentação para um intervalo após o instante informado.
         explicit FramePacer(Clock::time_point now)
