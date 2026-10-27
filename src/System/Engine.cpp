@@ -101,6 +101,9 @@ namespace R2BOY::System
         window.setCPUOverclockCallback([this](bool enabled)
                                        { board.setCPUOverclock(enabled); });
         board.setUnlimitedSprites(window.isUnlimitedSpritesEnabled());
+        board.setRenderLayers(window.isRenderTilesEnabled(), window.isRenderSpritesEnabled(), window.isRenderWindowEnabled());
+        window.setRenderLayersCallback([this](bool tiles, bool sprites, bool window)
+                                       { board.setRenderLayers(tiles, sprites, window); });
         window.setUnlimitedSpritesCallback([this](bool enabled)
                                            { board.setUnlimitedSprites(enabled); });
         // Ao mudar de ritmo, reinicia os relógios para não acumular tempo do modo anterior.
@@ -307,7 +310,7 @@ namespace R2BOY::System
 
             // Com VSync ou fast-forward, avança um quadro por apresentação.
             // Fast-forward suspende a espera SDL e o limitador abaixo.
-            // Sem VSync, mantém o avanço por tempo decorrido e o cap de 60 FPS.
+            // Sem VSync, mantém o avanço por tempo decorrido e a apresentação a ~59,7275 Hz.
             // O orçamento usa o clock base, independente de double speed e overclock.
             if (!emulationPaused() && !rewinding && board.cartridge().loaded() && !board.cpu().locked())
             {
