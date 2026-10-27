@@ -1,4 +1,5 @@
 #include "FileManager.h"
+#include "ConfigManager.h"
 #include <imgui.h>
 #include <algorithm>
 #include <stdexcept>
@@ -21,15 +22,49 @@ namespace R2BOY::Window
 
     void FileManager::requestOpen()
     {
+        recentFile.reset();
         requested = true;
     }
 
-    FileManager::FileManager()
+    void FileManager::requestOpen(const std::filesystem::path &file)
+    {
+        recentFile = file;
+        requested = true;
+    }
+
+    void FileManager::drawRecentMenu()
+    {
+        const auto &roms = config.getRecentRoms();
+        if (!ImGui::BeginMenu("Recent Files", !roms.empty()))
+            return;
+        for (const auto &rom : roms)
+        {
+            const auto label = std::filesystem::u8path(rom).filename().u8string();
+            ImGui::PushID(rom.c_str());
+            if (ImGui::MenuItem(label.c_str()))
+                requestOpen(std::filesystem::u8path(rom));
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", rom.c_str());
+            ImGui::PopID();
+        }
+        ImGui::EndMenu();
+    }
+
+    void FileManager::setDirectory(const std::filesystem::path &path)
+    {
+        directory = path;
+        config.setLastRomPath(directory.u8string());
+    }
+
+    FileManager::FileManager(ConfigManager &settings) : config(settings)
     {
         std::error_code ec;
         directory = std::filesystem::current_path(ec);
         if (ec)
             directory = ".";
+        const auto saved = std::filesystem::u8path(config.getLastRomPath());
+        if (!saved.empty() && std::filesystem::is_directory(saved, ec))
+            directory = saved;
     }
 
     void FileManager::drawDriveSelector()
@@ -56,7 +91,7 @@ namespace R2BOY::Window
                 std::error_code ec;
                 if (std::filesystem::is_directory(root, ec))
                 {
-                    directory = root;
+                    setDirectory(root);
                     selectedFile.clear();
                     chooseArchive = false;
                     error.clear();
@@ -77,7 +112,10 @@ namespace R2BOY::Window
         {
             if (!open)
                 throw std::runtime_error("ROM loading is unavailable.");
-            open(file, entry);
+            const auto fullPath = std::filesystem::absolute(file).lexically_normal();
+            open(fullPath, entry);
+            config.addRomToList(fullPath.u8string());
+            setDirectory(fullPath.parent_path());
             error.clear();
             return true;
         }
@@ -94,7 +132,7 @@ namespace R2BOY::Window
         {
             if (std::filesystem::is_directory(file))
             {
-                directory = file;
+                setDirectory(file);
                 selectedFile.clear();
                 error.clear();
                 return false;
@@ -122,18 +160,28 @@ namespace R2BOY::Window
 
     void FileManager::draw()
     {
+        bool openRecent = false;
         // Adia OpenPopup até existir um frame ImGui, inclusive para pedidos via Ctrl+O.
         if (requested)
         {
             requested = false;
             chooseArchive = false;
             error.clear();
+            openRecent = recentFile.has_value();
             ImGui::OpenPopup("Open ROM");
         }
         ImGui::SetNextWindowSize(ImVec2(570, 430), ImGuiCond_FirstUseEver);
         bool visible = true;
         if (!ImGui::BeginPopupModal("Open ROM", &visible))
             return;
+
+        if (openRecent)
+        {
+            const auto file = std::move(*recentFile);
+            recentFile.reset();
+            if (select(file))
+                ImGui::CloseCurrentPopup();
+        }
 
         drawDriveSelector();
         ImGui::TextWrapped("%s", (chooseArchive ? archive : directory).u8string().c_str());
@@ -146,7 +194,7 @@ namespace R2BOY::Window
             {
                 const auto parent = directory.parent_path();
                 if (!parent.empty())
-                    directory = parent;
+                    setDirectory(parent);
             }
             selectedFile.clear();
             error.clear();
