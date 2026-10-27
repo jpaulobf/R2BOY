@@ -86,6 +86,9 @@ namespace R2BOY::Core
         // Retorna se o hack de sprites ilimitadas está habilitado.
         void setUnlimitedSprites(bool enabled) { ppu_.setUnlimitedSprites(enabled); }
 
+        // Preferências de composição visual, independentes dos bits de LCDC.
+        void setRenderLayers(bool tiles, bool sprites, bool window) { ppu_.setRenderLayers(tiles, sprites, window); }
+
         // Retorna se o hack de sprites ilimitadas está habilitado.
         bool isUnlimitedSpritesEnabled() const { return ppu_.isUnlimitedSpritesEnabled(); }
 
