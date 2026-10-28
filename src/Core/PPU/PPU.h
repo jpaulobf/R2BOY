@@ -102,6 +102,12 @@ namespace R2BOY::Core::PPU
         // Conta entradas em VBlank desde reset(), inclusive o primeiro frame ocultado.
         std::uint64_t frameNumber() const { return frameNumber_; }
 
+        // Inspeção de paleta sem acessar registradores ou alterar seus índices.
+        std::uint32_t debugPaletteColor(bool object, unsigned palette, unsigned color) const
+        {
+            return paletteColor(object, palette, color);
+        }
+
         // Habilita ou desabilita o hack de sprites ilimitadas.
         void setUnlimitedSprites(bool enabled) { unlimitedSprites_ = enabled; }
 
