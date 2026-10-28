@@ -1,5 +1,6 @@
 #include "Window.h"
 #include "ConfigManager.h"
+#include "TileViewer.h"
 #include "Common/Constants.h"
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -108,7 +109,8 @@ namespace R2BOY::Window
                            int &soundVolume, const Window::VolumeCallback &volumeCallback,
                            std::array<int, 4> &channelVolumes, const Window::ChannelVolumeCallback &channelVolumeCallback,
                            bool &serialOutputEnabled, bool &rewindEnabled, int &rewindLevel,
-                           bool &renderTiles, bool &renderSprites, bool &renderWindow, const Window::RenderLayersCallback &renderLayersCallback)
+                           bool &renderTiles, bool &renderSprites, bool &renderWindow, const Window::RenderLayersCallback &renderLayersCallback,
+                           bool &tileViewerOpen)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -255,6 +257,20 @@ namespace R2BOY::Window
                             invertBAYBCallback(invertBAYB);
                         ImGui::EndMenu();
                     }
+                    if (ImGui::BeginMenu("Debug"))
+                    {
+                        ImGui::MenuItem("Disassembler + CPU");
+                        ImGui::MenuItem("PPU / I/O Viewer");
+                        ImGui::Separator();
+                        ImGui::MenuItem("Tile Viewer", nullptr, &tileViewerOpen);
+                        ImGui::MenuItem("Tile Map Viewer");
+                        ImGui::Separator();
+                        ImGui::MenuItem("Memory Viewer");
+                        ImGui::Separator();
+                        ImGui::MenuItem("Palette Viewer");
+                        ImGui::MenuItem("OAM Viewer");
+                        ImGui::EndMenu();
+                    }
                     if (ImGui::BeginMenu("Hacks"))
                     {
                         if (ImGui::MenuItem("Enable Fast Forward", nullptr, &fastForwardEnabled) && fastForwardCallback)
@@ -336,6 +352,9 @@ namespace R2BOY::Window
         std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)> renderer{nullptr, SDL_DestroyRenderer};
         std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)> texture{nullptr, SDL_DestroyTexture};
         ImGuiSession gui;
+        TileViewer tileViewer;
+        TileSnapshotProvider tileSnapshotProvider;
+        bool tileViewerOpen = false;
         ConfigManager configManager;
         FileManager fileManager{configManager};
         RomAction romAction = RomAction::None;
@@ -539,6 +558,15 @@ namespace R2BOY::Window
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            if (impl_->tileViewer.processEvent(event))
+            {
+                impl_->tileViewerOpen = impl_->tileViewer.isOpen();
+                continue;
+            }
+            if ((event.type == SDL_EVENT_WINDOW_MOVED || event.type == SDL_EVENT_WINDOW_RESIZED ||
+                 event.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED) &&
+                event.window.windowID == SDL_GetWindowID(impl_->window.get()))
+                impl_->tileViewer.snapTo(impl_->window.get());
             ImGui_ImplSDL3_ProcessEvent(&event);
             if (inputHandler)
                 inputHandler(event, acceptsGameInput());
@@ -581,6 +609,34 @@ namespace R2BOY::Window
     void Window::setRomOpenHandler(RomOpenHandler handler)
     {
         impl_->fileManager.setRomOpenHandler(std::move(handler));
+    }
+
+    void Window::setTileSnapshotProvider(TileSnapshotProvider provider)
+    {
+        impl_->tileSnapshotProvider = std::move(provider);
+    }
+
+    void Window::renderTileViewer()
+    {
+        bool justOpened = false;
+        if (impl_->tileViewerOpen && !impl_->tileViewer.isOpen())
+        {
+            impl_->tileViewerOpen = impl_->tileViewer.open();
+            justOpened = impl_->tileViewerOpen;
+            if (justOpened)
+                impl_->tileViewer.snapTo(impl_->window.get());
+        }
+        else if (!impl_->tileViewerOpen && impl_->tileViewer.isOpen())
+            impl_->tileViewer.close();
+        if (impl_->tileViewerOpen && !impl_->tileViewer.render(impl_->tileSnapshotProvider))
+        {
+            std::cerr << "Tile Viewer: Failed to render: " << SDL_GetError() << '\n';
+            impl_->tileViewer.close();
+            impl_->tileViewerOpen = false;
+        }
+        else if (justOpened)
+            // Repete após a primeira apresentação, quando o sistema já pode informar as bordas.
+            impl_->tileViewer.snapTo(impl_->window.get());
     }
 
     void Window::setRomFileName(std::string name)
@@ -757,7 +813,7 @@ namespace R2BOY::Window
         bool titleChanged = impl_->gameWasLoaded != gameLoaded;
         const bool wasOverclockEnabled = impl_->cpuOverclockEnabled;
         drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
-                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->cpuOverclockPercent, impl_->cpuOverclockPercentCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled, impl_->rewindEnabled, impl_->rewindLevel, impl_->renderTiles, impl_->renderSprites, impl_->renderWindow, impl_->renderLayersCallback);
+                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->cpuOverclockPercent, impl_->cpuOverclockPercentCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled, impl_->rewindEnabled, impl_->rewindLevel, impl_->renderTiles, impl_->renderSprites, impl_->renderWindow, impl_->renderLayersCallback, impl_->tileViewerOpen);
         titleChanged |= wasOverclockEnabled != impl_->cpuOverclockEnabled;
         const Common::Framebuffer *textureFrame = &framebuffer;
         if (gameLoaded && dmgMode && impl_->display.palettePreset != 0)
@@ -833,6 +889,7 @@ namespace R2BOY::Window
             std::cerr << "Failed to present frame: " << SDL_GetError() << '\n';
             return false;
         }
+        renderTileViewer();
         // Mede apresentações reais por segundo; atualiza o título uma vez por segundo.
         const auto now = SDL_GetTicksNS();
         if (!gameLoaded || !impl_->gameWasLoaded)

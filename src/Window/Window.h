@@ -6,6 +6,7 @@
 #include <string>
 #include "FileManager.h"
 #include "Common/Framebuffer.h"
+#include "Common/TileSnapshot.h"
 
 union SDL_Event;
 
@@ -58,6 +59,15 @@ namespace R2BOY::Window
         // Substitui o callback; configure antes de oferecer a abertura de ROMs.
         void setRomOpenHandler(RomOpenHandler handler);
 
+        // Fornece instantâneos somente enquanto o Tile Viewer estiver aberto.
+        using TileSnapshotProvider = std::function<Common::TileSnapshot()>;
+
+        // Atualiza o provedor do Tile Snapshot
+        void setTileSnapshotProvider(TileSnapshotProvider provider);
+
+        // Atualiza a janela de diagnóstico mesmo com a janela principal minimizada.
+        void renderTileViewer();
+
         // Atualiza imediatamente o nome do arquivo exibido após o FPS; vazio ao descarregar.
         void setRomFileName(std::string name);
 
@@ -109,7 +119,11 @@ namespace R2BOY::Window
 
         // Volume da saída de áudio da sessão (0 a 100), independente de Master Sound.
         using VolumeCallback = std::function<void(int)>;
+
+        // Seta o Volume Callback
         void setVolumeCallback(VolumeCallback callback);
+
+        // Retorna o volume do som
         int soundVolume() const;
 
         using ChannelVolumeCallback = std::function<void(unsigned channel, int percent)>;
