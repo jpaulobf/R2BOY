@@ -1,5 +1,6 @@
 #include "Window/Window.h"
 #include "Window/ConfigManager.h"
+#include "Window/TileViewer.h"
 #include <chrono>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -71,6 +72,123 @@ namespace
         std::filesystem::remove(configPath);
     }
 
+    void tileViewerLifecycle()
+    {
+        R2BOY::Common::TileSnapshot sample;
+        sample.banks[1][0] = 0xA0;
+        sample.banks[1][1] = 0x60;
+        sample.banks[1][16 * 383 + 14] = 0x01;
+        sample.palettes[1][3] = {0xFF000000, 0xFF111111, 0xFF222222, 0xFF333333};
+        const auto pixels = R2BOY::Window::TileViewer::decode(sample, 1, 1, 3);
+        check(pixels[0] == 0xFF111111 && pixels[1] == 0xFF222222 && pixels[2] == 0xFF333333 &&
+              pixels[3] == 0xFF000000 && pixels.back() == 0xFF111111,
+              "tiles must decode both bit planes, bank, palette and final tile in grid order");
+        R2BOY::Window::Window window;
+        check(window.open(), "tile viewer test window must open");
+        R2BOY::Common::Framebuffer framebuffer{};
+        bool running = true;
+        unsigned snapshots = 0;
+        window.setTileSnapshotProvider([&]()
+        {
+            ++snapshots;
+            R2BOY::Common::TileSnapshot data;
+            data.loaded = true;
+            data.banks[0][0] = 0x80;
+            data.palettes[0][0] = {0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000};
+            return data;
+        });
+        const auto frame = [&]()
+        {
+            window.pollEvents(running);
+            check(window.renderFrame(running, true, framebuffer), "tile viewer frame must render");
+        };
+        const auto findViewer = []() -> SDL_Window *
+        {
+            int count = 0;
+            SDL_Window **windows = SDL_GetWindows(&count);
+            SDL_Window *found = nullptr;
+            for (int i = 0; i < count; ++i)
+                if (std::string(SDL_GetWindowTitle(windows[i])) == "Tile Viewer")
+                    found = windows[i];
+            SDL_free(windows);
+            return found;
+        };
+        const auto toggle = [&]()
+        {
+            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            check(main != nullptr, "main window must exist");
+            ImGui::ActivateItemByID(ImHashStr("Debug", 0, main->GetID("##MenuBar")));
+            frame();
+            frame();
+            auto *menu = ImGui::FindWindowByName("Debug###Menu_00");
+            check(menu && menu->Active, "Debug menu must open");
+            ImGui::ActivateItemByID(menu->GetID("Tile Viewer"));
+            frame();
+            frame();
+        };
+        frame();
+        frame();
+        check(!findViewer() && snapshots == 0, "viewer starts closed without requesting snapshots");
+        toggle();
+        check(findViewer() && snapshots > 0, "menu must open an updating native viewer");
+        int count = 0;
+        SDL_Window **windows = SDL_GetWindows(&count);
+        SDL_Window *mainWindow = nullptr;
+        for (int i = 0; i < count; ++i)
+            if (windows[i] != findViewer())
+                mainWindow = windows[i];
+        SDL_free(windows);
+        check(mainWindow != nullptr, "main SDL window must exist");
+        const auto checkSnap = [&]()
+        {
+            int mainX = 0, mainY = 0, mainWidth = 0, viewerX = 0, viewerY = 0;
+            int mainTop = 0, mainRight = 0, viewerTop = 0, viewerLeft = 0;
+            check(SDL_GetWindowPosition(mainWindow, &mainX, &mainY) && SDL_GetWindowSize(mainWindow, &mainWidth, nullptr) &&
+                  SDL_GetWindowPosition(findViewer(), &viewerX, &viewerY), "window positions must be readable");
+            SDL_GetWindowBordersSize(mainWindow, &mainTop, nullptr, nullptr, &mainRight);
+            SDL_GetWindowBordersSize(findViewer(), &viewerTop, &viewerLeft, nullptr, nullptr);
+            check(viewerX - viewerLeft == mainX + mainWidth + mainRight + 1 &&
+                  viewerY - viewerTop == mainY - mainTop,
+                  "viewer must align outer top edges with one pixel after main window");
+        };
+        checkSnap();
+        int mainX = 0, mainY = 0;
+        check(SDL_GetWindowPosition(mainWindow, &mainX, &mainY), "main position must be readable");
+        check(SDL_SetWindowPosition(mainWindow, mainX + 37, mainY + 29) && SDL_SyncWindow(mainWindow),
+              "main window must move");
+        frame();
+        frame();
+        checkSnap();
+        check(SDL_SetWindowSize(mainWindow, 800, 730) && SDL_SyncWindow(mainWindow), "main window must resize");
+        frame();
+        frame();
+        checkSnap();
+        SDL_Event key{};
+        key.type = SDL_EVENT_KEY_DOWN;
+        key.key.windowID = SDL_GetWindowID(findViewer());
+        key.key.key = SDLK_F5;
+        check(SDL_PushEvent(&key), "viewer key event must enter queue");
+        frame();
+        check(window.takeRomAction() == R2BOY::Window::Window::RomAction::None,
+              "viewer keyboard input must not trigger emulator shortcuts");
+        toggle();
+        check(!findViewer(), "selecting the checked menu item must close viewer");
+        const auto closedCount = snapshots;
+        frame();
+        check(snapshots == closedCount, "closed viewer must stop requesting snapshots");
+        toggle();
+        auto *viewer = findViewer();
+        check(viewer != nullptr, "viewer must reopen after menu close");
+        SDL_Event close{};
+        close.type = SDL_EVENT_WINDOW_CLOSE_REQUESTED;
+        close.window.windowID = SDL_GetWindowID(viewer);
+        check(SDL_PushEvent(&close), "viewer close event must enter queue");
+        frame();
+        check(running && !findViewer(), "viewer close must not exit the emulator");
+        toggle();
+        check(findViewer(), "closing with X must uncheck menu so next click reopens viewer");
+    }
+
     void capturesKeyboardOnlyForInterface()
     {
         R2BOY::Window::Window window;
@@ -138,7 +256,7 @@ namespace
             ImGui::GetIO().AddKeyEvent(ImGuiKey_Escape, false);
             frame();
         };
-        for (const auto *label : {"File", "Display", "Sound", "Input", "Hacks"})
+        for (const auto *label : {"File", "Display", "Sound", "Input", "Debug", "Hacks"})
         {
             auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
             ImGui::ActivateItemByID(ImHashStr(label, 0, main->GetID("##MenuBar")));
@@ -913,6 +1031,7 @@ int main(int argc, char **argv)
             return 0;
         }
         recentFilesUseRomLoadingFlow();
+        tileViewerLifecycle();
         capturesKeyboardOnlyForInterface();
         menusRequestTemporaryPause();
         soundMenuControlsOutput();

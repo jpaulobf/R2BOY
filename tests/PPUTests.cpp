@@ -1016,6 +1016,52 @@ namespace R2BOY::Test
             check(behind.pixel(0) == light, "extra sprites must respect background priority");
         }
 
+        void tileDebugSnapshot()
+        {
+            Core::Board board(Core::Model::CGB);
+            check(!board.tileSnapshot().loaded, "snapshot must indicate when no cartridge is loaded");
+            std::vector<std::uint8_t> rom(32768);
+            rom[0x100] = 0x76; // HALT mantém a CPU parada enquanto a PPU avança.
+            rom[0x143] = 0x80;
+            board.loadCartridge(rom, "tile snapshot");
+            board.write(0xFF40, 0);
+            board.write(0xFF4F, 0);
+            board.write(0x8000, 0x81);
+            board.write(0x97FF, 0x42);
+            board.write(0xFF4F, 1);
+            board.write(0x8000, 0x24);
+            board.write(0xFF68, 0x80 | 10); // BG paleta 1, cor 1.
+            board.write(0xFF69, 0x1F);
+            board.write(0xFF69, 0x00);
+            board.write(0xFF6A, 0x80 | 20); // OBJ paleta 2, cor 2.
+            board.write(0xFF6B, 0xE0);
+            board.write(0xFF6B, 0x03);
+            board.write(0xFF40, 0x91);
+            while (board.timing().ppu.mode != 3)
+                board.step();
+            check(board.read(0x8000) == 0xFF, "CPU VRAM read must be blocked during transfer");
+            const auto stateBefore = board.saveState();
+            const auto snapshot = board.tileSnapshot();
+            check(snapshot.loaded && snapshot.color, "snapshot must identify an active CGB cartridge");
+            check(snapshot.banks[0][0] == 0x81 && snapshot.banks[0][0x17FF] == 0x42 &&
+                  snapshot.banks[1][0] == 0x24, "snapshot must inspect both complete tile banks during mode 3");
+            check(snapshot.palettes[0][1][1] == 0xFFFF0000 && snapshot.palettes[1][2][2] == 0xFF00FF00,
+                  "snapshot must expose actual CGB BG and OBJ palette colors");
+            check(board.saveState() == stateBefore, "snapshot must not change emulated state or palette indices");
+            board.unloadCartridge();
+            check(!board.tileSnapshot().loaded, "snapshot must clear after unloading a cartridge");
+
+            Core::Board dmg;
+            rom[0x143] = 0;
+            dmg.loadCartridge(rom, "DMG tile snapshot");
+            dmg.write(0xFF47, 0xE4);
+            dmg.write(0xFF48, 0x1B);
+            const auto monochrome = dmg.tileSnapshot();
+            check(!monochrome.color && monochrome.palettes[0][0][1] == light &&
+                  monochrome.palettes[1][0][1] == dark,
+                  "DMG snapshot must decode BGP and OBP independently");
+        }
+
         void renderLayerVisibility()
         {
             for (const bool color : {false, true})
@@ -1215,6 +1261,7 @@ namespace R2BOY::Test
             objectSelectionAndMasking();
             overlappingObjectsAtZero();
             unlimitedSprites();
+            tileDebugSnapshot();
             renderLayerVisibility();
             colorPalettesAndAttributes();
             dmaAndBoard();
