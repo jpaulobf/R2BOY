@@ -102,6 +102,8 @@ namespace R2BOY::System
                                        { board.setCPUOverclock(enabled); });
         board.setUnlimitedSprites(window.isUnlimitedSpritesEnabled());
         board.setRenderLayers(window.isRenderTilesEnabled(), window.isRenderSpritesEnabled(), window.isRenderWindowEnabled());
+        window.setTileSnapshotProvider([this]()
+                                       { return board.tileSnapshot(); });
         window.setRenderLayersCallback([this](bool tiles, bool sprites, bool window)
                                        { board.setRenderLayers(tiles, sprites, window); });
         window.setUnlimitedSpritesCallback([this](bool enabled)
@@ -273,6 +275,7 @@ namespace R2BOY::System
             if (window.isMinimized())
             {
                 // Reduz uso de CPU em segundo plano e descarta o tempo pausado.
+                window.renderTileViewer();
                 SDL_Delay(50);
                 lastExecution = FramePacer::Clock::now();
                 framePacer.reset(lastExecution);
