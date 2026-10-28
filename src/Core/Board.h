@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Model.h"
+#include "Common/TileSnapshot.h"
 #include "APU/APU.h"
 #include "BUS/BUS.h"
 #include "CPU/CPU.h"
@@ -157,6 +158,9 @@ namespace R2BOY::Core
 
         // Contador de entradas em VBlank da PPU; não representa frames apresentados pela janela.
         std::uint64_t frameNumber() const { return ppu_.frameNumber(); }
+
+        // Copia VRAM e paletas diretamente, sem bloqueios ou efeitos do barramento da CPU.
+        Common::TileSnapshot tileSnapshot() const;
 
         // Estado combinado pela plataforma; cada bit em 1 representa um botão pressionado.
         void setButtons(std::uint8_t buttons);

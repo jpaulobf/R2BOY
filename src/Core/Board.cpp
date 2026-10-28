@@ -5,6 +5,22 @@
 
 namespace R2BOY::Core
 {
+    Common::TileSnapshot Board::tileSnapshot() const
+    {
+        Common::TileSnapshot snapshot;
+        snapshot.loaded = cartridge_.loaded();
+        snapshot.color = executionMode_ == ExecutionMode::CGB;
+        if (!snapshot.loaded)
+            return snapshot;
+        for (unsigned bank = 0; bank < (snapshot.color ? 2u : 1u); ++bank)
+            for (unsigned offset = 0; offset < Common::TileSnapshot::TileBytes; ++offset)
+                snapshot.banks[bank][offset] = memory_.readVRAM(static_cast<std::uint16_t>(0x8000 + offset), bank);
+        for (unsigned object = 0; object < 2; ++object)
+            for (unsigned palette = 0; palette < 8; ++palette)
+                for (unsigned color = 0; color < 4; ++color)
+                    snapshot.palettes[object][palette][color] = ppu_.debugPaletteColor(object != 0, palette, color);
+        return snapshot;
+    }
     Board::Board(Model model) : model_(model), bus_(cartridge_, memory_, interrupts_, serial_, timer_, dma_, ppu_, joypad_, speedSwitch_, apu_, &vramDMA_),
                                 cpu_(bus_, [this](CPU::CPU::CycleType type, std::uint16_t address, std::uint8_t value)
                                      { return tickMachineCycle(type, address, value); })
@@ -161,7 +177,8 @@ namespace R2BOY::Core
             {
                 const auto pair = ((clockCycles_ - 1) / 2) % cpuOverclockPercent_;
                 skipTick = (pair + 1) * 200 / cpuOverclockPercent_ -
-                               pair * 200 / cpuOverclockPercent_ == 1;
+                               pair * 200 / cpuOverclockPercent_ ==
+                           1;
             }
             if (skipTick)
             {
