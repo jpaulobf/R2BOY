@@ -126,6 +126,7 @@ namespace R2BOY::Core::PPU
         friend class R2BOY::Core::StateArchive;
         void state(StateArchive &archive)
         {
+            const bool expectedColorHardware = colorHardware_, expectedColorMode = colorMode_;
             archive(front_, back_, bgColors_, objColors_, bgFIFO_, objFIFO_, sprites_);
             archive(fetchingObject_, lcdc_, stat_, scy_, scx_, lyc_, bgp_);
             archive(obp0_, obp1_, wy_, wx_, bgIndex_, objIndex_, opri_);
@@ -144,8 +145,22 @@ namespace R2BOY::Core::PPU
                                       warmup_ > 12 || discard_ > 7 || windowDelay_ > 6 ||
                                       extraSpriteCount_ > extraSprites_.size() ||
                                       (lcdStartup_ && line_ != 0) || windowPixel_ > 7 || statWriteTicks_ > 4 ||
-                                      (statWriteTicks_ && (colorHardware_ || !enabled()))))
+                                      (statWriteTicks_ && (colorHardware_ || !enabled())) ||
+                                      colorHardware_ != expectedColorHardware || colorMode_ != expectedColorMode ||
+                                      (!enabled() && (mode_ != 0 || line_ != 0 || dot_ != 0)) ||
+                                      (mode_ == 3 && (!enabled() || line_ >= Height || x_ >= Width || dot_ < 80)) ||
+                                      (mode_ == 2 && (!enabled() || line_ >= Height || dot_ >= 80)) ||
+                                      (mode_ == 1 && (!enabled() || line_ < Height))))
                 throw std::runtime_error("Invalid PPU save state.");
+            if (archive.reading())
+            {
+                for (const auto &pixel : bgFIFO_)
+                    if (pixel.color > 3 || pixel.palette > (colorMode_ ? 7 : 0) || pixel.priority > 1)
+                        throw std::runtime_error("Invalid PPU background FIFO.");
+                for (const auto &pixel : objFIFO_)
+                    if (pixel.color > 3 || pixel.palette > (colorMode_ ? 7 : 1))
+                        throw std::runtime_error("Invalid PPU object FIFO.");
+            }
         }
         // Pixel de fundo/window antes da aplicação da paleta e da prioridade com OBJ.
         struct Pixel

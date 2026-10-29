@@ -423,6 +423,8 @@ namespace R2BOY::Core::PPU
 
     std::uint32_t PPU::paletteColor(bool object, unsigned palette, unsigned color) const
     {
+        if (color > 3 || palette > 7)
+            throw std::runtime_error("Invalid PPU palette index.");
         if (!colorMode_)
         {
             const auto mapping = object ? (palette ? obp1_ : obp0_) : bgp_;
@@ -533,6 +535,8 @@ namespace R2BOY::Core::PPU
             fetchBackground(memory);
             return;
         }
+        if (line_ >= Height || x_ >= Width)
+            throw std::runtime_error("Invalid PPU pixel position.");
         back_[line_ * Width + x_] = mix(pixel, withExtraSprites(memory, objFIFO_[0]));
         for (unsigned i = 0; i < 7; ++i)
             objFIFO_[i] = objFIFO_[i + 1];
