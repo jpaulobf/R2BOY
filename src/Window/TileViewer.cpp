@@ -58,6 +58,9 @@ namespace R2BOY::Window
     TileViewer::Pixels TileViewer::decode(const Common::TileSnapshot &snapshot, unsigned bank, unsigned object, unsigned palette)
     {
         Pixels pixels{};
+        if (bank >= snapshot.banks.size() || object >= snapshot.palettes.size() ||
+            palette >= snapshot.palettes[object].size())
+            return pixels;
         const auto &data = snapshot.banks[bank];
         const auto &colors = snapshot.palettes[object][palette];
         for (int tile = 0; tile < static_cast<int>(Common::TileSnapshot::TileCount); ++tile)
@@ -182,10 +185,11 @@ namespace R2BOY::Window
             ImGui::SetNextItemWidth(150);
             ImGui::Combo("Palette Type", &impl_->object, "Background\0Sprites\0");
             const int paletteCount = snapshot.color ? 8 : impl_->object ? 2 : 1;
-            impl_->palette = std::min(impl_->palette, paletteCount - 1);
+            impl_->palette = std::clamp(impl_->palette, 0, paletteCount - 1);
             ImGui::BeginDisabled(paletteCount == 1);
             ImGui::SetNextItemWidth(100);
-            ImGui::SliderInt("Palette", &impl_->palette, 0, paletteCount - 1);
+            ImGui::SliderInt("Palette", &impl_->palette, 0, paletteCount - 1, "%d", ImGuiSliderFlags_AlwaysClamp);
+            impl_->palette = std::clamp(impl_->palette, 0, paletteCount - 1);
             ImGui::EndDisabled();
             impl_->pixels = decode(snapshot, impl_->bank, impl_->object, impl_->palette);
             if (!SDL_UpdateTexture(impl_->texture, nullptr, impl_->pixels.data(), imageWidth * sizeof(std::uint32_t)))

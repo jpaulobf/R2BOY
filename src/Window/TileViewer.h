@@ -17,6 +17,7 @@ namespace R2BOY::Window
         using SnapshotProvider = std::function<Common::TileSnapshot()>;
         // Grade 16 x 24; saída ARGB com 128 x 192 pixels.
         using Pixels = std::array<std::uint32_t, 128 * 192>;
+        // Seleções fora dos bancos/tipos/paletas disponíveis retornam uma imagem vazia.
         static Pixels decode(const Common::TileSnapshot &snapshot, unsigned bank, unsigned object, unsigned palette);
         TileViewer();
         ~TileViewer();
