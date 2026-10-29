@@ -20,3 +20,4 @@ TODO.md
 tests/*.py
 tests/reference/*.c
 tests/*.md
+build-linux.sh
