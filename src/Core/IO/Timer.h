@@ -36,7 +36,11 @@ namespace R2BOY::Core::IO
         friend class R2BOY::Core::StateArchive;
         void state(StateArchive &archive)
         {
+            const bool expectedHardware = cgbHardware_;
             archive(divider_, tima_, tma_, tac_, reloadDelay_, reloadWindow_, cgbHardware_);
+            if (archive.reading() && (cgbHardware_ != expectedHardware || tac_ > 7 ||
+                                      reloadDelay_ > 4 || reloadWindow_ > 4 || (reloadDelay_ && reloadWindow_)))
+                throw std::runtime_error("Invalid timer save state.");
         }
         // Nível do bit do divisor selecionado por TAC, condicionado à habilitação.
         bool signal() const;
