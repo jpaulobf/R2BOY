@@ -262,10 +262,10 @@ namespace R2BOY::Core
         std::vector<std::uint8_t> result;
         StateArchive header(result);
         std::string magic = "R2BOY-STATE";
-        std::uint32_t version = 16;
+        std::uint32_t version = 17;
         auto model = model_;
         auto mode = executionMode_;
-        auto romHash = Common::RomFile::hash(cartridge_.rom());
+        auto romHash = cartridge_.identity();
         auto checksum = Common::RomFile::hash(payload);
         header(magic, version, model, mode, romHash, checksum);
         result.insert(result.end(), payload.begin(), payload.end());
@@ -277,7 +277,7 @@ namespace R2BOY::Core
         if (!cartridge_.loaded())
             throw std::runtime_error("No ROM loaded.");
         // Três comprimentos de texto, versão/modelo/modo e textos fixos de assinatura e hash.
-        constexpr std::size_t headerSize = sizeof("R2BOY-STATE") - 1 + 8 + 8 + 6 * 4;
+        constexpr std::size_t headerSize = sizeof("R2BOY-STATE") - 1 + 64 + 8 + 6 * 4;
         if (data.size() < headerSize)
             throw std::runtime_error("Truncated save state header.");
         const std::vector<std::uint8_t> headerBytes(data.begin(), data.begin() + headerSize);
@@ -288,9 +288,10 @@ namespace R2BOY::Core
         ExecutionMode mode{};
         header(magic, version, model, mode, romHash, checksum);
         header.finish();
-        if (magic != "R2BOY-STATE" || version != 16)
+        if (magic != "R2BOY-STATE" || version != 17)
             throw std::runtime_error("Unsupported save state format/version.");
-        if (model != model_ || mode != executionMode_ || romHash != Common::RomFile::hash(cartridge_.rom()))
+        if (model != model_ || mode != executionMode_ ||
+            romHash != cartridge_.identity())
             throw std::runtime_error("Save state belongs to a different ROM or hardware model.");
         const std::vector<std::uint8_t> payload(data.begin() + headerSize, data.end());
         if (checksum != Common::RomFile::hash(payload))
