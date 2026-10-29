@@ -1,4 +1,5 @@
 #include "Cartridge.h"
+#include "Common/RomFile.h"
 
 #include <stdexcept>
 #include <utility>
@@ -58,8 +59,10 @@ namespace R2BOY::Core::Cartridge
         std::vector<std::uint8_t> ram(ramSize, controller.kind() == Kind::MBC2 ? 0x0F : 0xFF);
 
         // Só substitui o estado após validar a imagem, preservando a ROM anterior em caso de erro.
+        auto identity = Common::RomFile::identity(rom);
         header_ = std::move(header);
         rom_ = std::move(rom);
+        identity_ = std::move(identity);
         source_ = std::move(source);
         mbc_ = controller;
         ram_ = std::move(ram);
@@ -84,7 +87,7 @@ namespace R2BOY::Core::Cartridge
         const auto bank = mbc_.ramBank();
         if (!bank)
             return 0xFF;
-        
+
         // A janela A000–BFFF também espelha RAMs menores que 8 KiB, como a do MBC2.
         const auto value = ram_[(*bank * 8192 + (address - 0xA000)) % ram_.size()];
 
