@@ -154,6 +154,47 @@ namespace R2BOY::Test
             check(f.timer.read(0xFF05) == 0x42 && (f.interrupts.readIF() & 4) != 0, "DIV/TAC writes do not cancel pending reload");
         }
 
+        void reloadStateBoundaries()
+        {
+            for (const bool color : {false, true})
+            {
+                Fixture f;
+                f.reset(color);
+                f.timer.write(0xFF05, 0xFF);
+                f.timer.write(0xFF06, 0x42);
+                f.timer.write(0xFF07, 5);
+                bool sawDelay = false, sawWindow = false;
+                for (unsigned tick = 0; tick < 28; ++tick)
+                {
+                    std::vector<std::uint8_t> snapshot;
+                    Core::StateArchive writer(snapshot);
+                    writer(f.timer);
+                    sawDelay = sawDelay || snapshot.at(5) == 4;
+                    sawWindow = sawWindow || snapshot.at(9) == 4;
+                    auto expected = f.timer;
+                    Core::IO::Timer restored;
+                    restored.reset(color);
+                    const auto &input = snapshot;
+                    Core::StateArchive reader(input);
+                    reader(restored);
+                    reader.finish();
+                    Core::IO::Interrupts expectedIRQ, restoredIRQ;
+                    expectedIRQ.reset();
+                    restoredIRQ.reset();
+                    for (unsigned i = 0; i < 8; ++i)
+                    {
+                        expected.tick(expectedIRQ);
+                        restored.tick(restoredIRQ);
+                        for (std::uint16_t address = 0xFF04; address <= 0xFF07; ++address)
+                            check(restored.read(address) == expected.read(address), "valid timer phases must replay exactly");
+                        check(restoredIRQ.readIF() == expectedIRQ.readIF(), "timer reload IRQ timing must survive restoration");
+                    }
+                    f.advance(1);
+                }
+                check(sawDelay && sawWindow, "timer restoration must cover both four-cycle boundaries");
+            }
+        }
+
         void boardIntegration()
         {
             std::vector<std::uint8_t> image(32768);
@@ -231,6 +272,7 @@ namespace R2BOY::Test
             frequenciesAndDivider();
             fallingEdges();
             reloadConflicts();
+            reloadStateBoundaries();
             boardIntegration();
             std::cout << "Timer frequencies, edge effects, reload and integration tests passed.\n";
             return 0;

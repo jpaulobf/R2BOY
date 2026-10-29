@@ -363,6 +363,41 @@ namespace
         }
     }
 
+    void fractionalOverclockReturnToNormalSpeed()
+    {
+        bool sawHalfDot = false;
+        for (const int percent : {125, 133, 150, 175})
+            for (unsigned alignment = 0; alignment < 8; ++alignment)
+            {
+                Fixture f;
+                f.doubleSpeed();
+                f.board.setCPUOverclock(true);
+                f.board.setCPUOverclockPercent(percent);
+                f.program({0x10, 0}, static_cast<std::uint16_t>(0xC000 + alignment));
+                for (unsigned i = 0; i < alignment; ++i)
+                    f.board.write(static_cast<std::uint16_t>(0xC000 + i), 0);
+                auto registers = f.board.cpu().registers();
+                registers.pc = 0xC000;
+                f.board.cpu().reset(registers);
+                for (unsigned i = 0; i < alignment; ++i)
+                    f.board.step();
+                const auto doubled = f.board.saveState();
+                sawHalfDot = sawHalfDot || doubled.at(doubled.size() - 142) != 0;
+                f.board.loadState(doubled);
+                check(f.board.saveState() == doubled, "valid double-speed half-dot states must round trip");
+                f.board.write(0xFF4D, 1);
+                f.board.step(); // STOP returns to normal speed.
+                check(!f.board.doubleSpeed() && f.board.switchingSpeed(), "STOP must select normal speed");
+                const auto normal = f.board.saveState();
+                f.board.loadState(normal);
+                const auto base = f.board.baseClockCycles();
+                f.board.step();
+                check(f.board.baseClockCycles() - base == 4,
+                      "normal-speed stabilization must advance the base clock after fractional overclock");
+            }
+        check(sawHalfDot, "fractional speed-switch matrix must exercise valid half-dot states");
+    }
+
     void overclockDMAWaitRoutine()
     {
         for (unsigned mode = 0; mode < 4; ++mode)
@@ -517,6 +552,7 @@ int main()
         videoMemoryAndIRQs();
         cpuOverclock();
         fractionalCPUOverclock();
+        fractionalOverclockReturnToNormalSpeed();
         overclockDMAWaitRoutine();
         std::cout << "CGB speed switching, CPU overclock, clocks, DMA, video and state tests passed.\n";
     }

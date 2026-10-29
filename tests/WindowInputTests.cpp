@@ -7,6 +7,7 @@
 #include <SDL3/SDL.h>
 #include <cmath>
 #include <iostream>
+#include <fstream>
 #include <stdexcept>
 
 namespace
@@ -70,6 +71,63 @@ namespace
             check(ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup), "failed recent load must display selector with its error");
         }
         std::filesystem::remove(configPath);
+    }
+
+    void unsupportedNativeFileNames()
+    {
+#ifdef _WIN32
+        const auto directory = std::filesystem::temp_directory_path() /
+            ("r2boy-filename-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        std::filesystem::create_directories(directory);
+        const auto invalid = std::filesystem::path(std::wstring(1, wchar_t(0xD800)));
+        const auto invalidRom = directory / std::filesystem::path(invalid.native() + L".gb");
+        const auto invalidExtension = directory / std::filesystem::path(L"file." + invalid.native());
+        const auto invalidDirectory = directory / invalid;
+        const auto valid = directory / "valid.gb";
+        std::filesystem::create_directory(invalidDirectory);
+        for (const auto &path : {invalidRom, invalidExtension, valid})
+        {
+            std::ofstream out(path);
+            out << "test";
+            check(bool(out), "native filename fixture must be created");
+        }
+        {
+            R2BOY::Window::Window window;
+            check(window.open(), "filename test window must open");
+            R2BOY::Common::Framebuffer framebuffer{};
+            bool running = true;
+            check(window.renderFrame(running, false, framebuffer), "filename test frame must render");
+            R2BOY::Window::ConfigManager config(directory / "config.ini");
+            config.setLastRomPath(directory.u8string());
+            R2BOY::Window::FileManager files(config);
+            unsigned loads = 0;
+            files.setRomOpenHandler([&](const auto &path, const auto &)
+            {
+                check(path == valid, "valid filename must retain its native path");
+                ++loads;
+            });
+            const auto frame = [&]()
+            {
+                ImGui::NewFrame();
+                ImGui::Begin("Filename test");
+                files.draw();
+                ImGui::End();
+                ImGui::Render();
+            };
+            files.requestOpen();
+            frame();
+            frame();
+            check(loads == 0, "listing unsupported names must not load a ROM");
+            files.requestOpen(valid);
+            frame();
+            frame();
+            check(loads == 1 && config.getRecentRoms().front() == valid.u8string(),
+                  "valid ROMs must remain accessible alongside unsupported native names");
+        }
+        check(std::filesystem::equivalent(directory.parent_path(), std::filesystem::temp_directory_path()),
+              "filename fixture cleanup must stay in the temporary directory");
+        std::filesystem::remove_all(directory);
+#endif
     }
 
     void tileViewerLifecycle()
@@ -1031,6 +1089,7 @@ int main(int argc, char **argv)
             return 0;
         }
         recentFilesUseRomLoadingFlow();
+        unsupportedNativeFileNames();
         tileViewerLifecycle();
         capturesKeyboardOnlyForInterface();
         menusRequestTemporaryPause();

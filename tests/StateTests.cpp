@@ -115,6 +115,23 @@ namespace
         check(board.cartridge().hasBattery(), "rejected states must preserve cartridge battery persistence");
         invalid(wramBank, 255, "Invalid memory");
         invalid(modeFlag, color ? 0 : 1, "Invalid memory");
+        const auto timer = memory - 14;
+        check(original.at(timer + 13) == static_cast<std::uint8_t>(model == Core::Model::CGB),
+              "test must locate the timer hardware flag");
+        invalid(timer + 4, 8, "Invalid timer");
+        invalid(timer + 5, 5, "Invalid timer");
+        invalid(timer + 9, 255, "Invalid timer");
+        invalid(timer + 13, model == Core::Model::CGB ? 0 : 1, "Invalid timer");
+        auto overlappingReload = original;
+        overlappingReload.at(timer + 5) = overlappingReload.at(timer + 9) = 1;
+        checksum(overlappingReload);
+        rejects([&] { board.loadState(overlappingReload); });
+        check(board.saveState() == original, "overlapping timer phases must preserve the session on rejection");
+        const auto clockPhase = original.size() - 142;
+        check(original.at(clockPhase) == 0 && original.at(clockPhase + 1) == static_cast<std::uint8_t>(color),
+              "test must locate the base clock phase and KEY1 mode");
+        invalid(clockPhase, 1, "Invalid board clock");
+        invalid(clockPhase + 1, color ? 0 : 1, "Invalid CGB speed-switch");
         invalid(dma + 2, 255, "Invalid OAM DMA");
         invalid(dma + 6, 9, "Invalid OAM DMA");
         invalid(dma + 10, 5, "Invalid OAM DMA");
@@ -195,6 +212,35 @@ namespace
                 check(board.saveState() == original, "rejected fuzz case must preserve the session");
             }
         }
+    }
+
+    void clockPhaseCannotBlockDMA()
+    {
+        Core::Board board(Core::Model::CGB);
+        auto image = rom(true);
+        const std::array<std::uint8_t, 9> code{0x31, 0x56, 0xFF, 0x01, 0, 0, 0xC5, 0x18, 0xFE};
+        std::copy(code.begin(), code.end(), image.begin() + 0x100);
+        board.loadCartridge(image, "clock phase DMA regression");
+        board.step(); // LD SP,FF56
+        board.step(); // LD BC,0000
+        const auto before = board.saveState();
+        auto altered = before;
+        altered.at(altered.size() - 142) = 1;
+        constexpr std::size_t headerSize = 107;
+        const auto checksum = Common::RomFile::hash({altered.begin() + headerSize, altered.end()});
+        std::copy(checksum.begin(), checksum.end(), altered.begin() + headerSize - 8);
+        rejects([&] { board.loadState(altered); });
+        check(board.saveState() == before, "invalid clock phase must preserve the whole session");
+        // PUSH BC writes FF55 first, starting GDMA before its second write.
+        // Bound the diagnostic callback so a regression fails instead of hanging CTest.
+        unsigned ticks = 0;
+        board.setTickObserver([&](const Core::Board::Timing &)
+        {
+            check(++ticks < 1000, "DMA wait inside PUSH must finish");
+        });
+        const auto base = board.baseClockCycles();
+        check(board.step() == 52 && board.baseClockCycles() - base == 52,
+              "valid PUSH must finish GDMA and its second write at the original timing");
     }
 
     void roundTrip(Core::Model model, std::uint8_t type)
@@ -687,6 +733,7 @@ int main()
         maliciousStates(Core::Model::DMG, false);
         maliciousStates(Core::Model::CGB, false);
         maliciousStates(Core::Model::CGB, true);
+        clockPhaseCannotBlockDMA();
         dmaBusStates();
         ppuTransitionStates();
         windowFetchStates();
