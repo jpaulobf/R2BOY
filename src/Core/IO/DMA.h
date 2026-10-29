@@ -51,7 +51,11 @@ namespace R2BOY::Core::IO
         friend class R2BOY::Core::StateArchive;
         void state(StateArchive &archive)
         {
+            const bool expectedHardware = colorHardware_;
             archive(register_, sourcePage_, index_, startup_, phase_, active_, colorHardware_, data_);
+            if (archive.reading() && (colorHardware_ != expectedHardware || index_ > 160 || startup_ > 8 ||
+                                      phase_ > 4 || (active_ && phase_ == 0)))
+                throw std::runtime_error("Invalid OAM DMA state.");
         }
         std::uint8_t register_ = 0xFF;
         std::uint8_t sourcePage_ = 0;

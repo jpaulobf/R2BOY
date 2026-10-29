@@ -32,7 +32,7 @@ namespace R2BOY::Core::IO
         }
         if (!active_ || --phase_ != 0)
             return;
-        if (index_ == 160)
+        if (index_ >= 160)
         {
             // Mantém OAM bloqueada durante o M-cycle do último byte.
             active_ = false;
