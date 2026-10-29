@@ -19,7 +19,7 @@ namespace R2BOY::Window
     {
         constexpr int screenWidth = Common::Constants::ScreenWidth;
         constexpr int screenHeight = Common::Constants::ScreenHeight;
-        const char *emuTitle = "R2BOY v0.2.6";
+        const char *emuTitle = "R2BOY v0.3.0";
 
         struct PalettePreset
         {
@@ -45,7 +45,7 @@ namespace R2BOY::Window
             {0xFFD5EBE8, 0xFF76B5B6, 0xFF296D7C, 0xFF102E40},
         }};
 
-        constexpr std::array<PalettePreset, 11> palettePresets{{
+        constexpr std::array<PalettePreset, 12> palettePresets{{
             {"Default", {0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000}},
             {"Classic Green", {0xFF9BBC0F, 0xFF8BAC0F, 0xFF306230, 0xFF0F380F}},
             {"Pocket", {0xFFE0E8D8, 0xFFA8B8A0, 0xFF607058, 0xFF202820}},
@@ -57,6 +57,7 @@ namespace R2BOY::Window
             {"Yellow Neon", {0xFFFFFFCC, 0xFFFFF000, 0xFF9C8500, 0xFF000000}},
             {"Terracotta", terracottaPaletteColors[0], &terracottaPaletteColors},
             {"Petroleum Blue", petroleumBluePaletteColors[0], &petroleumBluePaletteColors},
+            {"Sameboy", {0xFFCBE59A, 0xFF7C9D3B, 0xFF3E5D1E, 0xFF0D200D}},
         }};
 
         enum class DisplayMode
