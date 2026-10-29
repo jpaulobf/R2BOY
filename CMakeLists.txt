@@ -75,6 +75,8 @@ file(GLOB_RECURSE R2BOY_CORE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/*.hpp"
 )
 list(APPEND R2BOY_CORE_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/System/AtomicFile.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/System/AtomicFile.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/System/SaveFile.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/System/SaveFile.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/System/StateFile.cpp"
@@ -112,7 +114,7 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
-    add_executable(config_manager_tests tests/ConfigManagerTests.cpp src/Window/ConfigManager.cpp)
+    add_executable(config_manager_tests tests/ConfigManagerTests.cpp src/Window/ConfigManager.cpp src/System/AtomicFile.cpp)
     target_compile_features(config_manager_tests PRIVATE cxx_std_17)
     target_include_directories(config_manager_tests PRIVATE src)
     add_test(NAME config_manager_tests COMMAND config_manager_tests)
@@ -162,7 +164,7 @@ if(BUILD_TESTING)
     add_executable(input_tests tests/InputTests.cpp src/System/Input.cpp)
     target_link_libraries(input_tests PRIVATE r2boy_core SDL3::SDL3-static)
     add_test(NAME input_tests COMMAND input_tests)
-    add_executable(window_input_tests tests/WindowInputTests.cpp src/Window/Window.cpp src/Window/FileManager.cpp src/Window/ConfigManager.cpp src/Window/TileViewer.cpp)
+    add_executable(window_input_tests tests/WindowInputTests.cpp src/Window/Window.cpp src/Window/FileManager.cpp src/Window/ConfigManager.cpp src/Window/TileViewer.cpp src/System/AtomicFile.cpp)
     target_link_libraries(window_input_tests PRIVATE r2boy_common r2boy_imgui)
     add_test(NAME window_input_tests COMMAND window_input_tests)
     add_test(NAME rewind_menu_tests COMMAND window_input_tests --rewind)
