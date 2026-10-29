@@ -52,8 +52,9 @@ namespace R2BOY::Core::IO
         friend class R2BOY::Core::StateArchive;
         void state(StateArchive &archive)
         {
+            const bool expectedMode = cgbMode_;
             archive(cgbMode_, doubleSpeed_, armed_, remaining_);
-            if (archive.reading() && (remaining_ > SwitchDelay || remaining_ % 4 != 0 ||
+            if (archive.reading() && (cgbMode_ != expectedMode || remaining_ > SwitchDelay || remaining_ % 4 != 0 ||
                                       (!cgbMode_ && (doubleSpeed_ || armed_ || remaining_ != 0))))
                 throw std::runtime_error("Invalid CGB speed-switch state.");
         }
