@@ -1,4 +1,5 @@
 #include "Engine.h"
+#include "Common/SafeText.h"
 
 #include "Window/Window.h"
 #include "Common/RomFile.h"
@@ -126,7 +127,7 @@ namespace R2BOY::System
         const auto flushSave = [&]()
         {
             if (saves.save(board.cartridge()))
-                std::cout << "SaveFile: Saved RAM -> " << saves.pathFor(board.cartridge()).u8string() << std::endl;
+                std::cout << "SaveFile: Saved RAM -> " << Common::escapeTerminal(saves.pathFor(board.cartridge()).u8string()) << std::endl;
         };
         // ROM nova, reset e restauração de estado começam sem entrada ou tempo pendente.
         const auto resetRuntime = [&]()
@@ -159,7 +160,7 @@ namespace R2BOY::System
             {
                 rewind.clear();
                 rewindFailed = true;
-                std::cerr << "Rewind: " << e.what() << std::endl;
+                std::cerr << "Rewind: " << Common::escapeTerminal(e.what()) << std::endl;
             }
         };
 
@@ -172,7 +173,7 @@ namespace R2BOY::System
             if (entry)
                 source += " :: " + entry->name;
 
-            std::cout << "Engine: Loading ROM -> " << source << std::endl;
+            std::cout << "Engine: Loading ROM -> " << Common::escapeTerminal(source) << std::endl;
             try
             {
                 auto rom = entry ? RomFile::read(fullPath, entry->index) : RomFile::read(fullPath);
@@ -189,7 +190,7 @@ namespace R2BOY::System
                                             : fullPath.filename().u8string());
 
                 // Só registra sucesso depois da validação e substituição do cartucho.
-                std::cout << "Cartridge '" << source << "' loaded successfully. ROM Hash (CRC32): "
+                std::cout << "Cartridge '" << Common::escapeTerminal(source) << "' loaded successfully. ROM Hash (CRC32): "
                           << romHash << std::endl;
                 std::cout << "Cartridge: RAM allocated -> " << board.cartridge().ram().size()
                           << " bytes; battery -> " << (board.cartridge().hasBattery() ? "yes" : "no") << std::endl;
@@ -205,7 +206,7 @@ namespace R2BOY::System
             }
             catch (const std::exception &e)
             {
-                std::cerr << "Engine: Failed to load ROM '" << source << "': " << e.what() << std::endl;
+                std::cerr << "Engine: Failed to load ROM '" << Common::escapeTerminal(source) << "': " << Common::escapeTerminal(e.what()) << std::endl;
                 throw; // O seletor também apresenta o erro ao usuário.
             } });
 
@@ -267,7 +268,7 @@ namespace R2BOY::System
                 }
                 catch (const std::exception &e)
                 {
-                    std::cerr << "SaveFile: " << e.what() << std::endl;
+                    std::cerr << "SaveFile: " << Common::escapeTerminal(e.what()) << std::endl;
                 }
                 nextSave = std::chrono::steady_clock::now() + std::chrono::seconds(5);
             }
@@ -302,7 +303,7 @@ namespace R2BOY::System
                 {
                     rewind.clear();
                     rewindFailed = true;
-                    std::cerr << "Rewind: " << e.what() << std::endl;
+                    std::cerr << "Rewind: " << Common::escapeTerminal(e.what()) << std::endl;
                 }
                 const auto interval = std::chrono::nanoseconds(
                     RewindBuffer::FrameCycles * rewind.interval() * 1000000000ull / 4194304);
@@ -355,7 +356,7 @@ namespace R2BOY::System
 
             const auto serialOutput = board.takeSerialOutput();
             if (window.isSerialOutputEnabled() && !serialOutput.empty())
-                std::cout << serialOutput << std::flush;
+                std::cout << Common::escapeTerminal(serialOutput, true) << std::flush;
             if (board.cpu().stopped() && !cpuStopReported)
             {
                 std::cout << "\nCPU: STOP entered; waiting for wake-up."
@@ -419,7 +420,7 @@ namespace R2BOY::System
                 {
                     if (action == Window::Window::RomAction::SaveState || action == Window::Window::RomAction::LoadState)
                     {
-                        std::cerr << "Save state: " << e.what() << std::endl;
+                        std::cerr << "Save state: " << Common::escapeTerminal(e.what()) << std::endl;
                         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Save State", e.what(), nullptr);
                         lastExecution = FramePacer::Clock::now();
                         framePacer.reset(lastExecution);
@@ -427,7 +428,7 @@ namespace R2BOY::System
                     else
                         std::cerr << "Engine: Failed to "
                                   << (action == Window::Window::RomAction::Unload ? "unload" : "reset")
-                                  << " ROM: " << e.what() << std::endl;
+                                  << " ROM: " << Common::escapeTerminal(e.what()) << std::endl;
                 }
             }
 
@@ -458,7 +459,7 @@ namespace R2BOY::System
         }
         catch (const std::exception &e)
         {
-            std::cerr << "SaveFile: " << e.what() << std::endl;
+            std::cerr << "SaveFile: " << Common::escapeTerminal(e.what()) << std::endl;
             return 1;
         }
         return renderFailed ? 1 : 0;
