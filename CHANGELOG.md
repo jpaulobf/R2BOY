@@ -4,6 +4,11 @@ Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
 ## Em desenvolvimento
 
+- Estados validam a fase do relógio base, o modo de KEY1 e os contadores/modelo
+  do timer, evitando esperas de DMA sem conclusão e bloqueios artificiais de TIMA.
+  A volta à velocidade normal descarta meio dot de double speed com overclock
+  fracionário. O seletor ignora nomes nativos que não podem ser convertidos para
+  UTF-8 e mantém a navegação disponível.
 - Saves de bateria e estados usam SHA-256 da ROM como identidade; estados usam
   somente o formato 17, sem importação dos formatos anteriores. A verificação de
   CRC32 do conteúdo dos estados não é autenticação.
