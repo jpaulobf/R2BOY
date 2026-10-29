@@ -2,6 +2,19 @@
 
 Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
+## Em desenvolvimento
+
+- Saves de bateria e estados usam SHA-256 da ROM como identidade; estados usam
+  somente o formato 17, sem importação dos formatos anteriores. A verificação de
+  CRC32 do conteúdo dos estados não é autenticação.
+- Gravações usam temporários criados exclusivamente; restaurações verificam
+  limites e consistência da memória, DMA e PPU. A configuração aceita apenas
+  caminhos UTF-8 válidos e limita seu tamanho. Logs escapam controles de terminal
+  e nomes com `##` não ocultam parte do nome no seletor.
+- Estados salvos não podem alterar o tipo do controlador, RAM, bateria ou rumble
+  definidos pela ROM. HDMA rejeita blocos vazios sem atraso de conclusão e protege
+  o contador contra underflow, preservando os tempos das transferências válidas.
+
 ## [0.2.6] - 2026-10-27
 
 - Apresentação sem VSync passa de 60 Hz para a frequência nativa de aproximadamente
