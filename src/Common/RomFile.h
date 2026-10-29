@@ -49,5 +49,8 @@ namespace R2BOY::Common
         // Identifica os bytes da ROM por CRC32, em oito dígitos hexadecimais maiúsculos.
         // Para ZIPs, recebe o conteúdo extraído, garantindo o mesmo hash da ROM simples.
         static std::string hash(const std::vector<std::uint8_t> &rom);
+
+        // Identidade SHA-256 para associar saves à imagem exata da ROM.
+        static std::string identity(const std::vector<std::uint8_t> &rom);
     };
 }
