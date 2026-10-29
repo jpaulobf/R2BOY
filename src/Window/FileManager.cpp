@@ -16,6 +16,21 @@
 
 namespace R2BOY::Window
 {
+    namespace
+    {
+        std::string displayPath(const std::filesystem::path &path)
+        {
+            try
+            {
+                return path.u8string();
+            }
+            catch (const std::filesystem::filesystem_error &)
+            {
+                return "[Unsupported filename encoding]";
+            }
+        }
+    }
+
     void FileManager::setRomOpenHandler(RomOpenHandler handler)
     {
         open = std::move(handler);
@@ -54,8 +69,10 @@ namespace R2BOY::Window
 
     void FileManager::setDirectory(const std::filesystem::path &path)
     {
+        // Converte antes de mudar a pasta: uma falha não deixa a navegação parcial.
+        const auto encoded = path.u8string();
         directory = path;
-        config.setLastRomPath(directory.u8string());
+        config.setLastRomPath(encoded);
     }
 
     FileManager::FileManager(ConfigManager &settings) : config(settings)
@@ -72,7 +89,7 @@ namespace R2BOY::Window
     void FileManager::drawDriveSelector()
     {
 #ifdef _WIN32
-        const auto current = directory.root_name().u8string();
+        const auto current = displayPath(directory.root_name());
         if (!ImGui::BeginCombo("Drive", current.empty() ? "Select a drive" : current.c_str()))
             return;
 
@@ -186,20 +203,27 @@ namespace R2BOY::Window
         }
 
         drawDriveSelector();
-        ImGui::TextWrapped("%s", (chooseArchive ? archive : directory).u8string().c_str());
+        ImGui::TextWrapped("%s", displayPath(chooseArchive ? archive : directory).c_str());
         ImGui::Separator();
         if (ImGui::Button("Up"))
         {
-            if (chooseArchive)
-                chooseArchive = false;
-            else
+            try
             {
-                const auto parent = directory.parent_path();
-                if (!parent.empty())
-                    setDirectory(parent);
+                if (chooseArchive)
+                    chooseArchive = false;
+                else
+                {
+                    const auto parent = directory.parent_path();
+                    if (!parent.empty())
+                        setDirectory(parent);
+                }
+                selectedFile.clear();
+                error.clear();
             }
-            selectedFile.clear();
-            error.clear();
+            catch (const std::filesystem::filesystem_error &)
+            {
+                error = "Unable to open directory: unsupported filename encoding.";
+            }
         }
         ImGui::SameLine();
         if (ImGui::Button("Cancel"))
@@ -222,29 +246,46 @@ namespace R2BOY::Window
         {
             ImGui::BeginChild("Files", ImVec2(0, -45), true);
             std::error_code ec;
-            std::vector<std::filesystem::directory_entry> files;
+            struct ListedFile
+            {
+                std::filesystem::directory_entry entry;
+                std::string label;
+            };
+            std::vector<ListedFile> files;
+            bool unsupportedNames = false;
             std::filesystem::directory_iterator it(directory, ec), end;
             for (; !ec && it != end; it.increment(ec))
             {
-                std::error_code status;
-                if (it->is_directory(status) || (it->is_regular_file(status) &&
-                                                 (Common::RomFile::isRom(it->path()) || Common::RomFile::isZip(it->path()))))
-                    files.push_back(*it);
+                try
+                {
+                    std::error_code status;
+                    const bool isDirectory = it->is_directory(status);
+                    if (isDirectory || (it->is_regular_file(status) &&
+                                        (Common::RomFile::isRom(it->path()) || Common::RomFile::isZip(it->path()))))
+                    {
+                        const auto name = it->path().filename().u8string();
+                        files.push_back({*it, (isDirectory ? "[DIR] " : "") + Common::safeLabel(name)});
+                    }
+                }
+                catch (const std::filesystem::filesystem_error &)
+                {
+                    unsupportedNames = true;
+                }
             }
             if (ec)
                 ImGui::TextWrapped("Unable to list directory: %s", ec.message().c_str());
+            if (unsupportedNames)
+                ImGui::TextWrapped("Some entries have unsupported file names and were skipped.");
             std::sort(files.begin(), files.end(), [](const auto &a, const auto &b)
-                      { return a.path() < b.path(); });
+                      { return a.entry.path() < b.entry.path(); });
             int fileIndex = 0;
             for (const auto &file : files)
             {
-                std::error_code status;
-                const auto label = (file.is_directory(status) ? "[DIR] " : "") + Common::safeLabel(file.path().filename().u8string());
                 ImGui::PushID(fileIndex++);
-                if (ImGui::Selectable(label.c_str(), selectedFile == file.path()))
+                if (ImGui::Selectable(file.label.c_str(), selectedFile == file.entry.path()))
                 {
-                    selectedFile = file.path();
-                    if (select(file.path()))
+                    selectedFile = file.entry.path();
+                    if (select(file.entry.path()))
                         ImGui::CloseCurrentPopup();
                     ImGui::PopID();
                     break; // A navegação atualiza a lista no próximo frame.
