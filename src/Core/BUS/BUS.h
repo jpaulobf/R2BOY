@@ -91,7 +91,11 @@ namespace R2BOY::Core::BUS
         // Roteia a leitura sem os bloqueios da CPU; mantém o bloqueio de VRAM pela PPU.
         std::uint8_t readDMA(std::uint16_t address) const;
         // Porta de escrita do DMA: atinge OAM sem passar pelos bloqueios da CPU.
-        void writeOAM(std::uint16_t address, std::uint8_t value) { memory_.write(address, value); }
+        void writeOAM(std::uint16_t address, std::uint8_t value)
+        {
+            if (address >= 0xFE00 && address < 0xFEA0)
+                memory_.write(address, value);
+        }
         Cartridge::Cartridge &cartridge_;
         Memory::Memory &memory_;
         IO::Interrupts &interrupts_;
