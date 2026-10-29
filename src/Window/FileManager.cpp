@@ -1,5 +1,6 @@
 #include "FileManager.h"
 #include "ConfigManager.h"
+#include "Common/SafeText.h"
 #include <imgui.h>
 #include <algorithm>
 #include <stdexcept>
@@ -37,10 +38,11 @@ namespace R2BOY::Window
         const auto &roms = config.getRecentRoms();
         if (!ImGui::BeginMenu("Recent Files", !roms.empty()))
             return;
+        int recentIndex = 0;
         for (const auto &rom : roms)
         {
-            const auto label = std::filesystem::u8path(rom).filename().u8string();
-            ImGui::PushID(rom.c_str());
+            const auto label = Common::safeLabel(std::filesystem::u8path(rom).filename().u8string());
+            ImGui::PushID(recentIndex++);
             if (ImGui::MenuItem(label.c_str()))
                 requestOpen(std::filesystem::u8path(rom));
             if (ImGui::IsItemHovered())
@@ -209,7 +211,8 @@ namespace R2BOY::Window
             for (const auto &entry : entries)
             {
                 ImGui::PushID(static_cast<int>(entry.index));
-                if (ImGui::Selectable(entry.name.c_str()) && load(archive, entry))
+                const auto label = Common::safeLabel(entry.name);
+                if (ImGui::Selectable(label.c_str()) && load(archive, entry))
                     ImGui::CloseCurrentPopup();
                 ImGui::PopID();
             }
@@ -232,11 +235,12 @@ namespace R2BOY::Window
                 ImGui::TextWrapped("Unable to list directory: %s", ec.message().c_str());
             std::sort(files.begin(), files.end(), [](const auto &a, const auto &b)
                       { return a.path() < b.path(); });
+            int fileIndex = 0;
             for (const auto &file : files)
             {
                 std::error_code status;
-                const auto label = (file.is_directory(status) ? "[DIR] " : "") + file.path().filename().u8string();
-                ImGui::PushID(file.path().u8string().c_str());
+                const auto label = (file.is_directory(status) ? "[DIR] " : "") + Common::safeLabel(file.path().filename().u8string());
+                ImGui::PushID(fileIndex++);
                 if (ImGui::Selectable(label.c_str(), selectedFile == file.path()))
                 {
                     selectedFile = file.path();
