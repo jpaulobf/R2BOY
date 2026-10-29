@@ -2,8 +2,11 @@
 
 Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
-## Em desenvolvimento
+## [0.3.0] - 2026-10-29
 
+- Tile Viewer limita a paleta também na edição por teclado e valida os índices
+  antes de decodificar VRAM, evitando leituras fora dos limites com valores negativos
+  ou acima da quantidade de paletas.
 - Estados validam a fase do relógio base, o modo de KEY1 e os contadores/modelo
   do timer, evitando esperas de DMA sem conclusão e bloqueios artificiais de TIMA.
   A volta à velocidade normal descarta meio dot de double speed com overclock
