@@ -132,9 +132,12 @@ namespace R2BOY::Core
     {
         if (!cartridge_.loaded())
             return 0;
-        if (vramDMA_.cpuHeld() && !cpu_.stopped())
-            return cpu_.stall();
-        return cpu_.step();
+        const auto cycles = vramDMA_.cpuHeld() && !cpu_.stopped() ? cpu_.stall() : cpu_.step();
+        // STOP pode voltar de double speed após um número ímpar de ticks nativos
+        // com overclock fracionário. A velocidade normal não mantém meio dot.
+        if (!speedSwitch_.doubleSpeed())
+            baseClockPhase_ = false;
+        return cycles;
     }
 
     std::uint8_t Board::tickMachineCycle(CPU::CPU::CycleType type, std::uint16_t address, std::uint8_t value)
@@ -248,6 +251,8 @@ namespace R2BOY::Core
     {
         archive(clockCycles_, buttons_, cartridge_, dma_, interrupts_, joypad_, serial_, timer_, memory_, ppu_, cpu_);
         archive(baseClockCycles_, baseClockPhase_, speedSwitch_);
+        if (archive.reading() && baseClockPhase_ && !speedSwitch_.doubleSpeed())
+            throw std::runtime_error("Invalid board clock state.");
         archive(apu_);
         archive(vramDMA_);
     }
