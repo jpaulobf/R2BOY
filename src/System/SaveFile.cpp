@@ -1,4 +1,5 @@
 #include "SaveFile.h"
+#include "AtomicFile.h"
 #include "Common/RomFile.h"
 #include <fstream>
 #include <stdexcept>
@@ -19,7 +20,7 @@ namespace R2BOY::System
     {
         if (!cartridge.loaded())
             throw std::runtime_error("Cannot identify save for an empty cartridge.");
-        return directory / (Common::RomFile::hash(cartridge.rom()) + ".sav");
+        return directory / (cartridge.identity() + ".sav");
     }
 
     bool SaveFile::load(Core::Cartridge::Cartridge &cartridge) const
@@ -54,28 +55,8 @@ namespace R2BOY::System
         if (!cartridge.hasBattery() || cartridge.ram().empty() || !cartridge.ramDirty())
             return false;
 
-        std::filesystem::create_directories(directory);
         const auto path = pathFor(cartridge);
-        auto temporary = path;
-        // O arquivo definitivo só é substituído após gravar e fechar o temporário.
-        temporary += ".tmp";
-        std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
-
-        if (!file)
-            throw std::runtime_error("Unable to create save RAM: " + temporary.u8string());
-        file.write(reinterpret_cast<const char *>(cartridge.ram().data()),
-                   static_cast<std::streamsize>(cartridge.ram().size()));
-        file.close();
-
-        if (!file)
-            throw std::runtime_error("Unable to write complete save RAM: " + temporary.u8string());
-        // No Windows, rename não substitui um arquivo existente; usa a operação nativa.
-#ifdef _WIN32
-        if (!MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-            throw std::runtime_error("Unable to replace save RAM: " + path.u8string());
-#else
-        std::filesystem::rename(temporary, path);
-#endif
+        writeAtomicFile(path, cartridge.ram());
         cartridge.markRamSaved();
 
         return true;
