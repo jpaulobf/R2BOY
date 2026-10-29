@@ -19,7 +19,7 @@ namespace R2BOY::Window
     {
         constexpr int screenWidth = Common::Constants::ScreenWidth;
         constexpr int screenHeight = Common::Constants::ScreenHeight;
-        const char *emuTitle = "R2BOY v0.3.0";
+        const char *emuTitle = "R2BOY v0.3.0.1";
 
         struct PalettePreset
         {
