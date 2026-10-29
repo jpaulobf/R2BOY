@@ -28,15 +28,18 @@ namespace R2BOY::Core::IO
         friend class R2BOY::Core::StateArchive;
         void state(StateArchive &archive)
         {
+            const bool expectedEnabled = enabled_;
             archive(enabled_, active_, source_, destination_, remaining_, startup_, phase_, tail_, bank_,
                     busy_, hblankMode_, inHblank_, blockLeft_, requestDelay_);
             if (archive.reading() && (destination_ < 0x8000 || destination_ > 0xA000 ||
+                                      enabled_ != expectedEnabled ||
                                       remaining_ > 0x800 || startup_ > 2 || phase_ > 1 || tail_ > 2 || bank_ > 1 ||
                                       requestDelay_ > 2 || (requestDelay_ && (!active_ || !hblankMode_ || busy_)) ||
                                       blockLeft_ > remaining_ || (!enabled_ && (active_ || busy_)) ||
                                       (!active_ && (busy_ || startup_ || phase_ || tail_)) ||
                                       (!busy_ && (blockLeft_ || startup_ || phase_ || tail_)) ||
                                       (active_ && !remaining_ && !tail_) || (busy_ && !active_) ||
+                                      (busy_ && !blockLeft_ && !tail_) || (startup_ && !blockLeft_) ||
                                       (hblankMode_ && blockLeft_ > 16) ||
                                       (active_ && !hblankMode_ && !busy_) ||
                                       (active_ && remaining_ && ((source_ ^ destination_) & 15))))

@@ -97,7 +97,7 @@ namespace R2BOY::Core::IO
         }
         if (!blockLeft_)
         {
-            if (--tail_ == 0)
+            if (tail_ == 0 || --tail_ == 0)
                 release();
             return;
         }
