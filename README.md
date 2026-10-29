@@ -16,11 +16,16 @@ improving.
 - Play with a keyboard or gamepad, with turbo buttons and fast-forward.
 - Automatic battery saves and three save state slots.
 - Windowed and fullscreen display, color palettes, scanlines and bilinear filtering.
-- Optional CPU overclock and unlimited sprites.
+- Optional CPU overclock with an adjustable 1.00x–2.00x multiplier, and unlimited sprites.
 - Complete audio: two pulse channels (with sweep), wave and noise channels,
-  stereo mixing, played through the default output device.
+  stereo mixing, played through the default output device. Master and per-channel
+  volume controls are available in the **Sound** menu.
 
 ## Getting started
+
+Download a Windows x64 or Linux x64 package from [Releases](https://github.com/jpaulobf/R2BOY/releases)
+and extract it before running. Keep the Windows runtime DLLs beside `R2BOY.exe`.
+On Linux, launch the extracted executable with `./R2BOY`.
 
 Launch R2BOY, choose **File > Open ROM...** (or press **Ctrl+O**) and select a
 game. If a ZIP contains multiple games, choose one from the list.
@@ -62,8 +67,14 @@ Battery saves are stored automatically in the `saves/` folder beside the
 executable. Save states use the same folder; choose one of three slots in
 **File > Save State Slot**, then press **F5** to save or **F6** to load.
 
-Save states may become incompatible after an update. Battery saves remain
-compatible.
+Starting with 0.3.0, save filenames use the SHA-256 of the ROM contents, so
+different ROMs with the same name keep separate saves. Older filenames are not
+imported automatically. Battery save data remains compatible; to reuse an older
+`.sav`, back it up and rename a copy to the new filename for the same ROM in
+`saves/`, with R2BOY closed.
+
+Version 0.3.0 loads only save state format 17. States from earlier versions must
+be recreated; renaming them does not make them compatible.
 
 Enable **Hacks > Enable Rewind** to keep up to ten seconds of emulated history
 in memory. Hold **Caps Lock** to go back; release it to resume from that point.
@@ -76,6 +87,8 @@ ROMs clears the history. Rewind is disabled by default.
 
 Some games may show graphical glitches or fail to run correctly. Cartridge clocks (RTC) and parts of Game Boy Color support are still pending.
 Optional hacks can affect compatibility and can be toggled in the **Hacks** menu.
+Enable **Hacks > Enable CPU Overclock**, then adjust **CPU Multiplier** from
+1.00x to 2.00x (2.00x by default).
 
 ## Building
 
@@ -89,8 +102,29 @@ cmake --build build --config Debug
 
 The executable is generated in `bin/` or `bin/Debug/`, depending on your build
 setup. For MinGW with Ninja on Windows, add `-G Ninja` to the first command.
-Linux also requires X11 or Wayland development packages; Linux builds have not
-been validated yet.
+
+### Linux
+
+Linux builds have been tested. The release workflow builds on Ubuntu 22.04.
+On Ubuntu 22.04, install the build dependencies used by the workflow:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y build-essential cmake git pkg-config \
+  libpulse-dev libasound2-dev libpipewire-0.3-dev \
+  libx11-dev libxext-dev libxcursor-dev libxi-dev libxrandr-dev libxss-dev libxfixes-dev libxtst-dev \
+  libxkbcommon-dev libwayland-dev wayland-protocols libdecor-0-dev \
+  libegl1-mesa-dev libgl1-mesa-dev libgles-dev libdrm-dev libgbm-dev \
+  libdbus-1-dev libudev-dev
+cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+cmake --build build-linux --target R2BOY --parallel 2
+./bin/R2BOY
+```
+
+Omit `-DBUILD_TESTING=OFF` and `--target R2BOY` to also build the tests, then run
+`ctest --test-dir build-linux --output-on-failure`.
+
+See [CHANGELOG.md](CHANGELOG.md) for version history and compatibility fixes.
 
 ## License
 
