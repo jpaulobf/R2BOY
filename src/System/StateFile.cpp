@@ -1,4 +1,5 @@
 #include "StateFile.h"
+#include "AtomicFile.h"
 #include "Common/RomFile.h"
 #include <fstream>
 #include <stdexcept>
@@ -21,29 +22,14 @@ namespace R2BOY::System
             throw std::runtime_error("Invalid save state slot.");
         if (!board.cartridge().loaded())
             throw std::runtime_error("No ROM loaded.");
-        return directory / (Common::RomFile::hash(board.cartridge().rom()) + ".slot" + std::to_string(slot) + ".state");
+        return directory / (board.cartridge().identity() + ".slot" + std::to_string(slot) + ".state");
     }
 
     void StateFile::save(Core::Board &board, int slot) const
     {
         const auto path = pathFor(board, slot);
         auto data = board.saveState();
-        std::filesystem::create_directories(directory);
-        auto temporary = path;
-        temporary += ".tmp";
-        std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
-        if (!file)
-            throw std::runtime_error("Unable to create save state: " + temporary.u8string());
-        file.write(reinterpret_cast<const char *>(data.data()), static_cast<std::streamsize>(data.size()));
-        file.close();
-        if (!file)
-            throw std::runtime_error("Unable to write save state: " + temporary.u8string());
-#ifdef _WIN32
-        if (!MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-            throw std::runtime_error("Unable to replace save state: " + path.u8string());
-#else
-        std::filesystem::rename(temporary, path);
-#endif
+        writeAtomicFile(path, data);
     }
 
     void StateFile::load(Core::Board &board, int slot) const
