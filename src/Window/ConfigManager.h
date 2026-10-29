@@ -26,5 +26,6 @@ namespace R2BOY::Window
         std::list<std::string> recentRoms;
         std::string lastRomPath;
         std::map<std::string, std::string> configValues;
+        bool canSave = true;
     };
 }

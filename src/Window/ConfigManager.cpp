@@ -1,6 +1,9 @@
 #include "ConfigManager.h"
+#include "Common/SafeText.h"
+#include "System/AtomicFile.h"
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <utility>
 
 namespace R2BOY::Window
@@ -28,7 +31,23 @@ namespace R2BOY::Window
         configValues.clear();
         recentRoms.clear();
         lastRomPath.clear();
-        std::ifstream file(configFilePath);
+        canSave = true;
+        std::ifstream file(configFilePath, std::ios::binary | std::ios::ate);
+        if (!file)
+        {
+            std::error_code ec;
+            if (std::filesystem::exists(configFilePath, ec) || ec)
+                canSave = false;
+            return;
+        }
+        const auto size = file.tellg();
+        if (size < 0 || size > 1024 * 1024)
+        {
+            canSave = false;
+            std::cerr << "ConfigManager: Configuration is too large or unreadable.\n";
+            return;
+        }
+        file.seekg(0);
         std::string line;
         while (std::getline(file, line))
         {
@@ -40,29 +59,29 @@ namespace R2BOY::Window
             if (delimiter != std::string::npos)
                 configValues[line.substr(0, delimiter)] = line.substr(delimiter + 1);
         }
+        if (file.bad())
+        {
+            configValues.clear();
+            canSave = false;
+            return;
+        }
         // Insere do mais antigo ao mais recente para também eliminar duplicatas.
         for (int i = 10; i >= 1; --i)
         {
             const auto found = configValues.find("f" + std::to_string(i));
-            if (found != configValues.end())
+            if (found != configValues.end() && Common::validUtf8Path(found->second))
                 addRomToList(found->second);
         }
         const auto found = configValues.find("last_rom_path");
-        if (found != configValues.end())
+        if (found != configValues.end() && Common::validUtf8Path(found->second))
             lastRomPath = found->second;
     }
 
     void ConfigManager::saveConfigFile() const
     {
-        std::error_code ec;
-        if (configFilePath.has_parent_path())
-            std::filesystem::create_directories(configFilePath.parent_path(), ec);
-        if (ec)
-        {
-            std::cerr << "ConfigManager: Unable to create configuration directory: " << ec.message() << '\n';
+        if (!canSave)
             return;
-        }
-        std::ofstream file(configFilePath);
+        std::ostringstream file;
         file << "# Last Opened Files\n";
         auto rom = recentRoms.begin();
         for (int i = 1; i <= 10; ++i)
@@ -76,9 +95,15 @@ namespace R2BOY::Window
         for (const auto &[key, value] : configValues)
             if (!isRecentKey(key) && key != "last_rom_path")
                 file << key << '=' << value << '\n';
-        file.flush();
-        if (!file)
-            std::cerr << "ConfigManager: Unable to save configuration.\n";
+        try
+        {
+            const auto text = file.str();
+            System::writeAtomicFile(configFilePath, std::vector<std::uint8_t>(text.begin(), text.end()));
+        }
+        catch (const std::exception &error)
+        {
+            std::cerr << "ConfigManager: Unable to save configuration: " << Common::escapeTerminal(error.what()) << '\n';
+        }
     }
 
     void ConfigManager::addRomToList(const std::string &romPath)
