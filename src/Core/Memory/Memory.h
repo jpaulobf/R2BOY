@@ -37,7 +37,11 @@ namespace R2BOY::Core::Memory
         friend class R2BOY::Core::StateArchive;
         void state(StateArchive &archive)
         {
+            const bool expectedCgbMode = cgbMode_;
             archive(vram_, wram_, oam_, hram_, cgbMode_, vramBank_, wramBank_);
+            if (archive.reading() && (cgbMode_ != expectedCgbMode || vramBank_ > 1 || wramBank_ > 7 ||
+                                      (!cgbMode_ && (vramBank_ != 0 || wramBank_ != 1))))
+                throw std::runtime_error("Invalid memory save state.");
         }
         std::array<std::uint8_t, 0x4000> vram_{};
         std::array<std::uint8_t, 0x8000> wram_{};

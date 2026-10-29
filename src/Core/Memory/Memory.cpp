@@ -28,11 +28,11 @@ namespace R2BOY::Core::Memory
     std::uint8_t Memory::read(std::uint16_t address) const
     {
         if (address >= 0x8000 && address < 0xA000)
-            return vram_[vramBank_ * 0x2000 + address - 0x8000];
+            return vram_.at(vramBank_ * 0x2000 + address - 0x8000);
         if (address >= 0xC000 && address < 0xD000)
             return wram_[address - 0xC000];
         if (address >= 0xD000 && address < 0xE000)
-            return wram_[(wramBank_ == 0 ? 1 : wramBank_) * 0x1000 + address - 0xD000];
+            return wram_.at((wramBank_ == 0 ? 1 : wramBank_) * 0x1000 + address - 0xD000);
         // E000–FDFF espelha C000–DDFF; não inclui os últimos 512 bytes de WRAM.
         if (address >= 0xE000 && address < 0xFE00)
             return read(address - 0x2000);
@@ -51,11 +51,11 @@ namespace R2BOY::Core::Memory
     void Memory::write(std::uint16_t address, std::uint8_t value)
     {
         if (address >= 0x8000 && address < 0xA000)
-            vram_[vramBank_ * 0x2000 + address - 0x8000] = value;
+            vram_.at(vramBank_ * 0x2000 + address - 0x8000) = value;
         else if (address >= 0xC000 && address < 0xD000)
             wram_[address - 0xC000] = value;
         else if (address >= 0xD000 && address < 0xE000)
-            wram_[(wramBank_ == 0 ? 1 : wramBank_) * 0x1000 + address - 0xD000] = value;
+            wram_.at((wramBank_ == 0 ? 1 : wramBank_) * 0x1000 + address - 0xD000) = value;
         else if (address >= 0xE000 && address < 0xFE00)
             write(address - 0x2000, value);
         else if (address >= 0xFE00 && address < 0xFEA0)
