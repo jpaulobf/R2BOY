@@ -73,6 +73,17 @@ namespace R2BOY::Test
             const std::vector<std::uint8_t> crcReference = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
             check(RomFile::hash(crcReference) == "CBF43926", "standard CRC32 reference");
             check(RomFile::hash({}) == "00000000", "CRC32 zero padding");
+            check(RomFile::identity({}) == "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+                  "SHA-256 empty reference");
+            check(RomFile::identity({'a', 'b', 'c'}) == "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD",
+                  "SHA-256 abc reference");
+            const std::string longMessage = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+            check(RomFile::identity({longMessage.begin(), longMessage.end()}) ==
+                      "248D6A61D20638B8E5C026930C3E6039A33CE45964FF2167F6ECEDD419DB06C1",
+                  "SHA-256 multi-block reference");
+            check(RomFile::identity(std::vector<std::uint8_t>(1000000, 'a')) ==
+                      "CDC76E5C9914FB9281A1C7E284D73E67F1809A48A497200E046D39CCC7112CD0",
+                  "SHA-256 million-byte reference");
             std::vector<std::uint8_t> rom(32768);
             const std::string title = "SYNTHETIC";
             std::copy(title.begin(), title.end(), rom.begin() + 0x134);

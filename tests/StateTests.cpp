@@ -1,5 +1,8 @@
 #include "Core/Board.h"
+#include "Common/RomFile.h"
 #include "System/StateFile.h"
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -39,6 +42,159 @@ namespace
             return;
         }
         throw std::runtime_error("Invalid state must be rejected");
+    }
+
+    void maliciousStates(Core::Model model, bool color)
+    {
+        Core::Board board(model);
+        board.loadCartridge(rom(color), "malicious state test");
+        board.write(0xFF40, 0);
+        const std::array<std::uint8_t, 16> marker{0xB9, 0x37, 0xF2, 0x51, 0xA6, 0xE4, 0x0D, 0x7C,
+                                                  0x31, 0x9F, 0x62, 0xD8, 0x43, 0xAE, 0x16, 0x75};
+        for (unsigned i = 0; i < marker.size(); ++i)
+            board.write(static_cast<std::uint16_t>(0x8000 + i), marker[i]);
+        board.write(0xFF40, 0x91);
+        while (board.timing().ppu.line < 1 || board.timing().ppu.mode != 3 || board.timing().ppu.x < 10)
+            board.step();
+        const auto original = board.saveState();
+        constexpr std::size_t headerSize = 11 + 64 + 8 + 6 * 4;
+        const auto found = std::search(original.begin() + headerSize, original.end(), marker.begin(), marker.end());
+        check(found != original.end(), "state test must locate its VRAM marker");
+        const std::size_t memory = static_cast<std::size_t>(found - original.begin());
+        check(std::search(found + 1, original.end(), marker.begin(), marker.end()) == original.end(),
+              "VRAM marker must be unique in this test state");
+        const std::size_t modeFlag = memory + 0x4000 + 0x8000 + 0xA0 + 0x7F;
+        const std::size_t vramBank = modeFlag + 1, wramBank = modeFlag + 2, ppu = modeFlag + 3;
+        constexpr std::size_t frameBytes = 160 * 144 * 4;
+        const std::size_t bgFifo = ppu + 2 * frameBytes + 128;
+        const std::size_t objFifo = bgFifo + 16 * 3;
+        const std::size_t lcdc = objFifo + 8 * 5 + 10 * 5 + 5;
+        const std::size_t line = lcdc + 6 + 7 + 7 + 6;
+        const std::size_t dot = line + 4, ppuMode = dot + 4, x = ppuMode + 4;
+        const std::size_t colorHardware = line + 20 + 33 + 24;
+        const std::size_t colorMode = colorHardware + 1;
+        const std::size_t dma = headerSize + 8 + 1 + 13 + board.cartridge().ram().size();
+        check(original.at(modeFlag) == static_cast<std::uint8_t>(color) && original.at(ppuMode) == 3 &&
+                  original.at(line) == board.timing().ppu.line && original.at(x) == board.timing().ppu.x &&
+                  original.at(colorHardware) == static_cast<std::uint8_t>(model == Core::Model::CGB) &&
+                  original.at(colorMode) == static_cast<std::uint8_t>(color),
+              "state test offsets must identify actual mode and coordinates");
+        const auto checksum = [&](std::vector<std::uint8_t> &state)
+        {
+            const std::vector<std::uint8_t> payload(state.begin() + headerSize, state.end());
+            const auto hash = Common::RomFile::hash(payload);
+            check(hash.size() == 8, "CRC32 hash must occupy eight characters");
+            std::copy(hash.begin(), hash.end(), state.begin() + headerSize - 8);
+        };
+        const auto invalid = [&](std::size_t offset, std::uint8_t value, const char *expected)
+        {
+            auto altered = original;
+            altered.at(offset) = value;
+            checksum(altered);
+            bool rejected = false;
+            try
+            {
+                board.loadState(altered);
+            }
+            catch (const std::runtime_error &error)
+            {
+                rejected = true;
+                check(std::string(error.what()).find(expected) != std::string::npos,
+                      "corrupt state must reach the relevant semantic validation");
+            }
+            check(rejected, "semantically invalid state with correct CRC must be rejected");
+            check(board.saveState() == original, "rejected state must leave the entire session unchanged");
+        };
+        invalid(vramBank, 255, "Invalid memory");
+        const std::size_t mbc = headerSize + 8 + 1;
+        invalid(mbc, 255, "Invalid cartridge controller");
+        invalid(mbc + 4, 0, "Invalid cartridge controller");
+        invalid(mbc + 5, 0, "Invalid cartridge controller");
+        invalid(mbc + 6, 1, "Invalid cartridge controller");
+        invalid(mbc + 7, 1, "Invalid cartridge controller");
+        check(board.cartridge().hasBattery(), "rejected states must preserve cartridge battery persistence");
+        invalid(wramBank, 255, "Invalid memory");
+        invalid(modeFlag, color ? 0 : 1, "Invalid memory");
+        invalid(dma + 2, 255, "Invalid OAM DMA");
+        invalid(dma + 6, 9, "Invalid OAM DMA");
+        invalid(dma + 10, 5, "Invalid OAM DMA");
+        invalid(dma + 14, 1, "Invalid OAM DMA");
+        invalid(dma + 15, model == Core::Model::CGB ? 0 : 1, "Invalid OAM DMA");
+        invalid(colorHardware, model == Core::Model::CGB ? 0 : 1, "Invalid PPU save state");
+        invalid(colorMode, color ? 0 : 1, "Invalid PPU save state");
+        if (!color)
+        {
+            invalid(vramBank, 1, "Invalid memory");
+            invalid(wramBank, 0, "Invalid memory");
+        }
+        invalid(line, 144, "Invalid PPU save state");
+        invalid(x, 160, "Invalid PPU save state");
+        invalid(dot, 79, "Invalid PPU save state");
+        invalid(lcdc, static_cast<std::uint8_t>(original[lcdc] & 0x7F), "Invalid PPU save state");
+        invalid(bgFifo, 255, "background FIFO");
+        invalid(bgFifo + 1, color ? 8 : 1, "background FIFO");
+        invalid(bgFifo + 2, 2, "background FIFO");
+        invalid(objFifo, 255, "object FIFO");
+        invalid(objFifo + 1, color ? 8 : 2, "object FIFO");
+        invalid(bgFifo + 15 * 3, 4, "background FIFO");
+        invalid(objFifo + 7 * 5, 4, "object FIFO");
+        const auto hdma = original.size() - 34;
+        check(original.at(hdma) == static_cast<std::uint8_t>(color), "test must locate VRAM DMA enable flag");
+        invalid(hdma, color ? 0 : 1, "Invalid CGB VRAM DMA");
+        if (color)
+        {
+            auto stalled = original;
+            stalled[hdma + 1] = 1;  // active
+            stalled[hdma + 6] = 16; // remaining
+            stalled[hdma + 23] = 1; // busy
+            stalled[hdma + 24] = 1; // HBlank, com bloco vazio e tail zero.
+            checksum(stalled);
+            rejects([&]
+                    { board.loadState(stalled); });
+            check(board.saveState() == original, "empty HDMA tail must be rejected without changing the session");
+            stalled[hdma + 14] = 1; // phase=1 não torna a combinação válida.
+            checksum(stalled);
+            rejects([&]
+                    { board.loadState(stalled); });
+            check(board.saveState() == original, "HDMA validation must cover both transfer phases");
+        }
+
+        // Limites válidos também precisam retomar a execução após o carregamento.
+        auto boundary = original;
+        boundary[line] = 143;
+        boundary[x] = 159;
+        boundary[bgFifo] = boundary[objFifo] = 3;
+        boundary[bgFifo + 1] = color ? 7 : 0;
+        boundary[objFifo + 1] = color ? 7 : 1;
+        checksum(boundary);
+        board.loadState(boundary);
+        for (unsigned i = 0; i < 32; ++i)
+            board.step();
+        board.loadState(original);
+
+        // Fuzz determinístico dos campos de maior risco, com CRC válido e retomada.
+        const std::array<std::size_t, 7> fields{vramBank, wramBank, line, x, bgFifo, bgFifo + 1, objFifo + 1};
+        std::uint32_t random = 0x6C8E9CF5;
+        for (unsigned i = 0; i < 200; ++i)
+        {
+            auto altered = original;
+            random = random * 1664525u + 1013904223u;
+            const auto field = fields[(random >> 16) % fields.size()];
+            random = random * 1664525u + 1013904223u;
+            altered[field] = static_cast<std::uint8_t>(random >> 24);
+            checksum(altered);
+            try
+            {
+                board.loadState(altered);
+                for (unsigned step = 0; step < 8; ++step)
+                    board.step();
+                board.loadState(original);
+            }
+            catch (const std::runtime_error &)
+            {
+                check(board.saveState() == original, "rejected fuzz case must preserve the session");
+            }
+        }
     }
 
     void roundTrip(Core::Model model, std::uint8_t type)
@@ -84,6 +240,20 @@ namespace
         rejects([&]
                 { board.loadState(corrupt); });
         check(board.saveState() == unchanged, "Rejected loads must preserve running hardware");
+        // Toda família mantém tipo, RAM, bateria e rumble definidos pelo header.
+        constexpr std::size_t currentHeader = 11 + 64 + 8 + 6 * 4;
+        constexpr std::size_t controller = currentHeader + 8 + 1;
+        for (const unsigned field : {0u, 4u, 5u, 6u})
+        {
+            auto invalidController = unchanged;
+            invalidController[controller + field] ^= 1;
+            const std::vector<std::uint8_t> invalidPayload(invalidController.begin() + currentHeader, invalidController.end());
+            const auto crc = Common::RomFile::hash(invalidPayload);
+            std::copy(crc.begin(), crc.end(), invalidController.begin() + currentHeader - 8);
+            rejects([&]
+                    { board.loadState(invalidController); });
+            check(board.saveState() == unchanged, "controller metadata rejection must preserve the whole session");
+        }
         Core::Board other(model);
         auto different = rom(model == Core::Model::CGB, type);
         different[0x150] = 1;
@@ -511,9 +681,12 @@ int main()
     try
     {
         for (auto model : {Core::Model::DMG, Core::Model::CGB})
-            for (std::uint8_t type : {0x03, 0x06, 0x13, 0x1B})
+            for (std::uint8_t type : {0x02, 0x03, 0x06, 0x13, 0x1B, 0x1E})
                 roundTrip(model, type);
         files();
+        maliciousStates(Core::Model::DMG, false);
+        maliciousStates(Core::Model::CGB, false);
+        maliciousStates(Core::Model::CGB, true);
         dmaBusStates();
         ppuTransitionStates();
         windowFetchStates();

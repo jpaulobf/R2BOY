@@ -1,5 +1,7 @@
 #include "Core/Board.h"
 #include "System/SaveFile.h"
+#include "System/StateFile.h"
+#include "Common/RomFile.h"
 #include <algorithm>
 #include <chrono>
 #include <fstream>
@@ -271,6 +273,56 @@ namespace R2BOY::Test
                 }
             } cleanup{root};
             System::SaveFile saves(root / "saves");
+            std::vector<std::uint8_t> collisionA(32768), collisionB;
+            collisionA[0x147] = 3;
+            collisionA[0x149] = 2;
+            collisionB = collisionA;
+            collisionB[0x200] = 0x42;
+            collisionB[32764] = 0x51;
+            collisionB[32765] = 0xC6;
+            collisionB[32766] = 0x95;
+            collisionB[32767] = 0xFF;
+            check(Common::RomFile::hash(collisionA) == Common::RomFile::hash(collisionB), "CRC collision fixture");
+            Core::Cartridge::Cartridge first, second;
+            first.load(collisionA, "first");
+            second.load(collisionB, "second");
+            check(saves.pathFor(first) != saves.pathFor(second), "CRC collision must not share the SHA-256 save");
+            Core::Board firstBoard, secondBoard;
+            firstBoard.loadCartridge(collisionA, "first");
+            secondBoard.loadCartridge(collisionB, "second");
+            System::StateFile stateFiles(root / "state");
+            check(stateFiles.pathFor(firstBoard, 1) != stateFiles.pathFor(secondBoard, 1),
+                  "CRC collision must not share a state slot");
+            const auto firstState = firstBoard.saveState();
+            rejects([&]
+                    { secondBoard.loadState(firstState); }, "colliding ROM must not accept another ROM's state");
+            System::SaveFile legacy(root / "legacy");
+            std::filesystem::create_directories(root / "legacy");
+            const auto oldSave = root / "legacy" / (Common::RomFile::hash(collisionA) + ".sav");
+            {
+                std::ofstream out(oldSave, std::ios::binary);
+                std::vector<char> bytes(8192, 0x47);
+                out.write(bytes.data(), bytes.size());
+            }
+            check(!legacy.load(first), "legacy CRC save must never be loaded automatically");
+
+            const auto target = root / "protected.txt";
+            {
+                std::ofstream file(target);
+                file << "protected";
+            }
+            auto oldTemp = saves.pathFor(second);
+            oldTemp += ".tmp";
+            std::filesystem::create_directories(oldTemp.parent_path());
+            std::filesystem::create_hard_link(target, oldTemp);
+            second.write(0, 0x0A);
+            second.write(0xA000, 0x42);
+            check(saves.save(second), "save should not use the predictable legacy temporary");
+            std::ifstream protectedFile(target);
+            std::string protectedContent;
+            protectedFile >> protectedContent;
+            check(protectedContent == "protected", "saving must not truncate a pre-existing hard link");
+            protectedFile.close();
             Core::Cartridge::Cartridge cart;
             const auto image = rom(3, 2, 2);
             cart.load(image, "raw.gb");

@@ -1,4 +1,5 @@
 #include "Window/ConfigManager.h"
+#include "Common/SafeText.h"
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -51,11 +52,55 @@ namespace
 int main()
 {
     const auto directory = std::filesystem::temp_directory_path() /
-        ("r2boy-config-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                           ("r2boy-config-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try
     {
         std::filesystem::create_directories(directory);
         persistence(directory / "config.ini");
+        check(R2BOY::Common::escapeTerminal("game\x1B[2J\n") == "game\\x1B[2J\\x0A",
+              "terminal control bytes must be escaped");
+        check(R2BOY::Common::escapeTerminal("text\n", true) == "text\n", "serial newlines must remain usable");
+        check(R2BOY::Common::escapeTerminal("\xC2\x9B") == "\\xC2\\x9B", "UTF-8 C1 controls must be escaped");
+        check(R2BOY::Common::safeLabel("Game.gb##Other.gb") == "Game.gb#\\x23Other.gb",
+              "file names must not hide their suffix through ImGui identifiers");
+        const auto invalid = directory / "invalid.ini";
+        {
+            std::ofstream out(invalid, std::ios::binary);
+            out << "last_rom_path=";
+            out.put(static_cast<char>(0xFF));
+            out << "\nf1=";
+            out.put(static_cast<char>(0xFF));
+            out << '\n';
+        }
+        {
+            R2BOY::Window::ConfigManager config(invalid);
+            check(config.getLastRomPath().empty() && config.getRecentRoms().empty(), "invalid UTF-8 paths must be ignored");
+        }
+        const auto oversized = directory / "oversized.ini";
+        {
+            std::ofstream out(oversized, std::ios::binary);
+            out << std::string(1024 * 1024 + 1, 'x');
+        }
+        {
+            R2BOY::Window::ConfigManager config(oversized);
+        }
+        check(std::filesystem::file_size(oversized) == 1024 * 1024 + 1,
+              "oversized configuration must remain intact after rejection");
+        const auto protectedFile = directory / "protected.txt";
+        const auto linkedConfig = directory / "linked.ini";
+        {
+            std::ofstream out(protectedFile);
+            out << "protected=original\n";
+        }
+        std::filesystem::create_hard_link(protectedFile, linkedConfig);
+        {
+            R2BOY::Window::ConfigManager config(linkedConfig);
+            config.setLastRomPath("folder");
+        }
+        std::ifstream protectedInput(protectedFile);
+        const std::string protectedContents{std::istreambuf_iterator<char>(protectedInput), {}};
+        check(protectedContents == "protected=original\n", "config save must not truncate a linked file");
+        protectedInput.close();
         const auto fresh = directory / "nested" / "config.ini";
         {
             R2BOY::Window::ConfigManager config(fresh);
