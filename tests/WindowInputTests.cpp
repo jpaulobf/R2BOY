@@ -8,6 +8,8 @@
 #include <cmath>
 #include <iostream>
 #include <fstream>
+#include <cstring>
+#include <limits>
 #include <stdexcept>
 
 namespace
@@ -128,6 +130,74 @@ namespace
               "filename fixture cleanup must stay in the temporary directory");
         std::filesystem::remove_all(directory);
 #endif
+    }
+
+    void tileViewerPaletteBounds()
+    {
+        R2BOY::Common::TileSnapshot snapshot;
+        snapshot.loaded = snapshot.color = true;
+        const R2BOY::Window::TileViewer::Pixels empty{};
+        const auto maximum = std::numeric_limits<unsigned>::max();
+        const std::array<std::array<unsigned, 3>, 6> invalidSelections{{
+            {2, 0, 0}, {maximum, 0, 0}, {0, 2, 0}, {0, maximum, 0}, {0, 0, 8}, {0, 0, maximum}}};
+        for (const auto &selection : invalidSelections)
+            check(R2BOY::Window::TileViewer::decode(snapshot, selection[0], selection[1], selection[2]) == empty,
+                  "invalid bank/type/palette must return an empty image without reading outside the snapshot");
+
+        R2BOY::Window::Window window;
+        check(window.open(), "palette test window must open");
+        R2BOY::Window::TileViewer viewer;
+        check(viewer.open(), "palette test viewer must open");
+        auto *mainContext = ImGui::GetCurrentContext();
+        ImGuiContext *viewerContext = nullptr;
+        bool activateInput = false;
+        const auto frame = [&]()
+        {
+            check(viewer.render([&]()
+            {
+                viewerContext = ImGui::GetCurrentContext();
+                if (activateInput)
+                {
+                    // Same text-edit path as Ctrl+Click or keyboard activation.
+                    viewerContext->NavActivateId = ImGui::GetID("Palette");
+                    viewerContext->NavActivateFlags = ImGuiActivateFlags_PreferInput;
+                }
+                return snapshot;
+            }), "palette test viewer must render");
+            check(ImGui::GetCurrentContext() == mainContext, "viewer must restore the main context after palette input");
+        };
+        const auto key = [&](ImGuiKey code, bool down)
+        {
+            ImGui::SetCurrentContext(viewerContext);
+            ImGui::GetIO().AddKeyEvent(code, down);
+            ImGui::SetCurrentContext(mainContext);
+            frame();
+        };
+        frame();
+        for (const char *input : {"-1", "999999", "-2147483648", "2147483647", "3"})
+        {
+            activateInput = true;
+            frame();
+            activateInput = false;
+            ImGui::SetCurrentContext(viewerContext);
+            ImGui::GetIO().AddInputCharactersUTF8(input);
+            ImGui::SetCurrentContext(mainContext);
+            frame();
+            key(ImGuiKey_Enter, true);
+            key(ImGuiKey_Enter, false);
+            activateInput = true;
+            frame();
+            activateInput = false;
+            int confirmed = -1;
+            std::memcpy(&confirmed, viewerContext->ActiveIdValueOnActivation.Data, sizeof(confirmed));
+            const int expected = input[0] == '-' ? 0 : std::string(input) == "3" ? 3 : 7;
+            check(confirmed == expected, "typed palette must clamp to the CGB range and preserve valid values");
+            key(ImGuiKey_Escape, true);
+            key(ImGuiKey_Escape, false);
+        }
+        // Changing to a DMG snapshot must also reduce the existing CGB selection.
+        snapshot.color = false;
+        frame();
     }
 
     void tileViewerLifecycle()
@@ -1090,6 +1160,7 @@ int main(int argc, char **argv)
         }
         recentFilesUseRomLoadingFlow();
         unsupportedNativeFileNames();
+        tileViewerPaletteBounds();
         tileViewerLifecycle();
         capturesKeyboardOnlyForInterface();
         menusRequestTemporaryPause();
