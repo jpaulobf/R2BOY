@@ -274,8 +274,21 @@ namespace R2BOY::Window
                     }
                     if (ImGui::BeginMenu("Hacks"))
                     {
-                        if (ImGui::MenuItem("Enable Fast Forward", nullptr, &fastForwardEnabled) && fastForwardCallback)
+                        if (ImGui::MenuItem("Enable Fast Forward", "Tab / R2 (hold)", &fastForwardEnabled) && fastForwardCallback)
                             fastForwardCallback(fastForwardEnabled);
+                        ImGui::MenuItem("Enable Rewind", "Caps Lock / L2 (hold)", &rewindEnabled);
+                        if (ImGui::BeginMenu("Rewind Level", rewindEnabled))
+                        {
+                            constexpr const char *levels[] = {"Light", "Normal", "Precise"};
+                            for (int level = 0; level < 3; ++level)
+                                if (ImGui::MenuItem(levels[level], nullptr, rewindLevel == level))
+                                    rewindLevel = level;
+                            ImGui::EndMenu();
+                        }
+                        ImGui::Separator();
+                        if (ImGui::MenuItem("Enable Unlimited Sprites", nullptr, &unlimitedSpritesEnabled) && unlimitedSpritesCallback)
+                            unlimitedSpritesCallback(unlimitedSpritesEnabled);
+                        ImGui::Separator();   
                         if (ImGui::MenuItem("Enable CPU Overclock", nullptr, &cpuOverclockEnabled) && cpuOverclockCallback)
                             cpuOverclockCallback(cpuOverclockEnabled);
                         ImGui::BeginDisabled(!cpuOverclockEnabled);
@@ -292,17 +305,6 @@ namespace R2BOY::Window
                             }
                         }
                         ImGui::EndDisabled();
-                        if (ImGui::MenuItem("Enable Unlimited Sprites", nullptr, &unlimitedSpritesEnabled) && unlimitedSpritesCallback)
-                            unlimitedSpritesCallback(unlimitedSpritesEnabled);
-                        ImGui::MenuItem("Enable Rewind", nullptr, &rewindEnabled);
-                        if (ImGui::BeginMenu("Rewind Level", rewindEnabled))
-                        {
-                            constexpr const char *levels[] = {"Light", "Normal", "Precise"};
-                            for (int level = 0; level < 3; ++level)
-                                if (ImGui::MenuItem(levels[level], nullptr, rewindLevel == level))
-                                    rewindLevel = level;
-                            ImGui::EndMenu();
-                        }
                         ImGui::Separator();
                         ImGui::MenuItem("Enable Serial Output", nullptr, &serialOutputEnabled);
                         ImGui::EndMenu();
