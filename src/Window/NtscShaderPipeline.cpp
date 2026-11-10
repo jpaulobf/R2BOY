@@ -406,7 +406,7 @@ namespace R2BOY::Window
             for (size_t i = 0; i < passes.size(); ++i)
             {
                 // Atualiza as dimensões e o contador esperados por este passe.
-                Constants c = {{float(previous.width), float(previous.height)}, {float(previous.width), float(previous.height)}, {float(sizes[i].width), float(sizes[i].height)}, float(passes[i].frameCountMod ? frame % passes[i].frameCountMod : frame), 1.0f};
+                Constants c = {{float(previous.width), float(previous.height)}, {float(previous.width), float(previous.height)}, {float(sizes[i].width), float(sizes[i].height)}, float(passes[i].frameCountMod ? frame % passes[i].frameCountMod : frame), 1.0f, 0.0f, {0.0f, 0.0f, 0.0f}};
                 context->UpdateSubresource(constants.get(), 0, nullptr, &c, 0, 0);
                 D3D11_VIEWPORT vp{0, 0, float(sizes[i].width), float(sizes[i].height), 0, 1};
                 context->RSSetViewports(1, &vp);
