@@ -16,6 +16,7 @@
 /roms/
 /bootroms/
 docs/*
+!docs/SHADERS.md
 TODO.md
 tests/*.py
 tests/reference/*.c
