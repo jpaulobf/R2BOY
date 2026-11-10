@@ -2,8 +2,22 @@
 
 Todas as mudanças notáveis do R2BOY são documentadas aqui.
 
+## [0.4.0] - 2026-11-10
+
+### Imagem e interface
+
+- Novo submenu **Display > Shaders**, com os efeitos experimentais **Gauss
+  Scanlines**, **HQ2**, **CRT**, **CRT 3D** e **ScaleFX**, além de **None**
+  para desativá-los.
+- Os shaders usam Direct3D 11 no Windows. No Linux ou em caso de falha ao
+  carregar ou aplicar um efeito, a apresentação normal continua disponível.
+- Menus **Display** e **Hacks** reorganizados; fast-forward e rewind exibem
+  seus atalhos de teclado e controle no menu.
+- Testes para os presets e o pipeline de shaders, além da seleção no menu.
+
 ## [0.3.0] - 2026-10-29
 
+- Nova paleta **Sameboy** em **Display > Palette Preset** para jogos DMG.
 - Tile Viewer limita a paleta também na edição por teclado e valida os índices
   antes de decodificar VRAM, evitando leituras fora dos limites com valores negativos
   ou acima da quantidade de paletas.
