@@ -1,6 +1,7 @@
 #include "Window.h"
 #include "ConfigManager.h"
 #include "TileViewer.h"
+#include "NtscShaderPipeline.h"
 #include "Common/Constants.h"
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -67,6 +68,16 @@ namespace R2BOY::Window
             Fullscreen
         };
 
+        enum class ShaderType
+        {
+            None,
+            Gauss,
+            HQ2,
+            CRT,
+            CRT3D,
+            ScaleFX
+        };
+
         struct DisplaySettings
         {
             int scale = 4;
@@ -75,6 +86,8 @@ namespace R2BOY::Window
             std::size_t palettePreset = 2;
             DisplayMode mode = DisplayMode::Windowed;
             bool pending = true;
+            ShaderType shader = ShaderType::None;
+            int imageWidth = screenWidth * 4, imageHeight = screenHeight * 4;
         };
 
         struct SDLSession
@@ -98,7 +111,7 @@ namespace R2BOY::Window
         };
 
         void drawInterface(bool &running, bool gameLoaded, FileManager &fileManager,
-                           SDL_Texture *texture, bool &bilinearFilter, bool &invertBAYB,
+                           SDL_Texture *texture, bool shaderActive, bool &bilinearFilter, bool &invertBAYB,
                            const Window::InvertBAYBCallback &invertBAYBCallback, DisplaySettings &display,
                            Window::RomAction &romAction, int &stateSlot,
                            bool vsyncEnabled, const std::function<void()> &toggleVSync,
@@ -161,6 +174,7 @@ namespace R2BOY::Window
                         }
                         ImGui::Separator();
                         fileManager.drawRecentMenu();
+                        ImGui::Separator();
                         if (ImGui::MenuItem("Exit"))
                             running = false;
                         ImGui::EndMenu();
@@ -169,20 +183,6 @@ namespace R2BOY::Window
                     {
                         if (ImGui::MenuItem("VSync", nullptr, vsyncEnabled))
                             toggleVSync();
-                        ImGui::Separator();
-                        ImGui::MenuItem("Bilinear Filter", nullptr, &bilinearFilter);
-                        ImGui::MenuItem("Scanlines", nullptr, &display.scanlines);
-                        if (ImGui::BeginMenu("Scanlines Level", display.scanlines))
-                        {
-                            for (int level = 5; level <= 25; level += 5)
-                            {
-                                char label[8];
-                                SDL_snprintf(label, sizeof(label), "%d%%", level);
-                                if (ImGui::MenuItem(label, nullptr, display.scanlinesLevel == level))
-                                    display.scanlinesLevel = level;
-                            }
-                            ImGui::EndMenu();
-                        }
                         ImGui::Separator();
                         for (int scale = 1; scale <= 5; ++scale)
                         {
@@ -209,6 +209,20 @@ namespace R2BOY::Window
                         fullscreenItem("Borderless Fullscreen Stretched", DisplayMode::FullscreenStretched);
                         fullscreenItem("Borderless Fullscreen", DisplayMode::Fullscreen);
                         ImGui::Separator();
+                        ImGui::MenuItem("Bilinear Filter", nullptr, &bilinearFilter);
+                        ImGui::MenuItem("Scanlines", nullptr, &display.scanlines);
+                        if (ImGui::BeginMenu("Scanlines Level", display.scanlines))
+                        {
+                            for (int level = 5; level <= 25; level += 5)
+                            {
+                                char label[8];
+                                SDL_snprintf(label, sizeof(label), "%d%%", level);
+                                if (ImGui::MenuItem(label, nullptr, display.scanlinesLevel == level))
+                                    display.scanlinesLevel = level;
+                            }
+                            ImGui::EndMenu();
+                        }
+                        ImGui::Separator();
                         if (ImGui::MenuItem("Render Tiles", nullptr, &renderTiles) && renderLayersCallback)
                             renderLayersCallback(renderTiles, renderSprites, renderWindow);
                         if (ImGui::MenuItem("Render Sprites", nullptr, &renderSprites) && renderLayersCallback)
@@ -221,6 +235,15 @@ namespace R2BOY::Window
                             for (std::size_t preset = 0; preset < palettePresets.size(); ++preset)
                                 if (ImGui::MenuItem(palettePresets[preset].name, nullptr, display.palettePreset == preset))
                                     display.palettePreset = preset;
+                            ImGui::EndMenu();
+                        }
+                        if (ImGui::BeginMenu("Shaders"))
+                        {
+                            const std::pair<ShaderType, const char *> presets[] = {
+                                {ShaderType::None, "None"}, {ShaderType::Gauss, "Gauss Scanlines"}, {ShaderType::HQ2, "HQ2"}, {ShaderType::CRT, "CRT"}, {ShaderType::CRT3D, "CRT 3D"}, {ShaderType::ScaleFX, "ScaleFX"}};
+                            for (const auto &[type, label] : presets)
+                                if (ImGui::MenuItem(label, nullptr, display.shader == type))
+                                    display.shader = type;
                             ImGui::EndMenu();
                         }
                         ImGui::EndMenu();
@@ -288,7 +311,7 @@ namespace R2BOY::Window
                         ImGui::Separator();
                         if (ImGui::MenuItem("Enable Unlimited Sprites", nullptr, &unlimitedSpritesEnabled) && unlimitedSpritesCallback)
                             unlimitedSpritesCallback(unlimitedSpritesEnabled);
-                        ImGui::Separator();   
+                        ImGui::Separator();
                         if (ImGui::MenuItem("Enable CPU Overclock", nullptr, &cpuOverclockEnabled) && cpuOverclockCallback)
                             cpuOverclockCallback(cpuOverclockEnabled);
                         ImGui::BeginDisabled(!cpuOverclockEnabled);
@@ -321,6 +344,9 @@ namespace R2BOY::Window
                     const ImVec2 size = display.mode == DisplayMode::FullscreenStretched
                                             ? available
                                             : ImVec2(screenWidth * scale, screenHeight * scale);
+                    const auto density = ImGui::GetIO().DisplayFramebufferScale;
+                    display.imageWidth = std::max(1, static_cast<int>(std::lround(size.x * density.x)));
+                    display.imageHeight = std::max(1, static_cast<int>(std::lround(size.y * density.y)));
                     const ImVec2 cursor = ImGui::GetCursorScreenPos();
                     const ImVec2 topLeft(cursor.x + (available.x - size.x) * 0.5f,
                                          cursor.y + (available.y - size.y) * 0.5f);
@@ -330,8 +356,8 @@ namespace R2BOY::Window
                         const ImGuiPlatformIO &platform = ImGui::GetPlatformIO();
                         // O backend sobrescreve o scale mode da textura; a escolha
                         // deve acompanhar o comando de desenho do framebuffer.
-                        drawList->AddCallback(bilinearFilter ? platform.DrawCallback_SetSamplerLinear
-                                                             : platform.DrawCallback_SetSamplerNearest);
+                        drawList->AddCallback(!shaderActive && bilinearFilter ? platform.DrawCallback_SetSamplerLinear
+                                                                              : platform.DrawCallback_SetSamplerNearest);
                         drawList->AddImage(ImTextureRef(reinterpret_cast<ImTextureID>(texture)),
                                            topLeft, ImVec2(topLeft.x + size.x, topLeft.y + size.y));
                         drawList->AddCallback(platform.DrawCallback_SetSamplerLinear);
@@ -354,6 +380,11 @@ namespace R2BOY::Window
         std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> window{nullptr, SDL_DestroyWindow};
         std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)> renderer{nullptr, SDL_DestroyRenderer};
         std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)> texture{nullptr, SDL_DestroyTexture};
+        std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)> shaderTexture{nullptr, SDL_DestroyTexture};
+        std::unique_ptr<NtscShaderPipeline> shaderPipeline;
+        ShaderType initializedShader = ShaderType::None;
+        int shaderWidth = 0, shaderHeight = 0;
+        std::vector<std::uint32_t> shaderPixels;
         ImGuiSession gui;
         TileViewer tileViewer;
         TileSnapshotProvider tileSnapshotProvider;
@@ -813,9 +844,53 @@ namespace R2BOY::Window
             std::cerr << "Failed to update display mode: " << SDL_GetError() << '\n';
             return false;
         }
+        const ShaderType selectedShader = impl_->display.shader;
+        bool shaderActive = selectedShader != ShaderType::None && gameLoaded;
+        if (shaderActive && impl_->initializedShader != selectedShader)
+        {
+            const char *preset = selectedShader == ShaderType::Gauss ? "shaders/ntsc/ntsc-160px-gauss-scanline.cgp" : selectedShader == ShaderType::HQ2 ? "shaders/hqx/hq2x-visual.cgp"
+                                                                                                                  : selectedShader == ShaderType::CRT   ? "shaders/crt/crt-hyllian-3d-nes.cgp"
+                                                                                                                  : selectedShader == ShaderType::CRT3D ? "shaders/crt/crt-lottes.cgp"
+                                                                                                                                                        : "shaders/scalefx/scalefx-visual.cgp";
+            auto candidate = std::make_unique<NtscShaderPipeline>();
+            std::string error;
+            const char *base = SDL_GetBasePath();
+            if (!candidate->initialize(std::filesystem::path(base ? base : "") / preset, error))
+            {
+                SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Shaders", error.c_str(), impl_->window.get());
+                impl_->display.shader = ShaderType::None;
+                shaderActive = false;
+            }
+            else
+            {
+                impl_->shaderPipeline = std::move(candidate);
+                impl_->initializedShader = selectedShader;
+            }
+        }
+        if (shaderActive && (!impl_->shaderTexture || impl_->shaderWidth != impl_->display.imageWidth || impl_->shaderHeight != impl_->display.imageHeight))
+        {
+            auto replacement = std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)>(
+                SDL_CreateTexture(impl_->renderer.get(), SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
+                                  impl_->display.imageWidth, impl_->display.imageHeight),
+                SDL_DestroyTexture);
+            // Alguns shaders retornam apenas RGB e deixam o alfa em zero.
+            // A imagem do jogo é opaca, portanto não deve usar esse alfa na composição.
+            if (!replacement || !SDL_SetTextureBlendMode(replacement.get(), SDL_BLENDMODE_NONE))
+            {
+                SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Shaders", SDL_GetError(), impl_->window.get());
+                impl_->display.shader = ShaderType::None;
+                shaderActive = false;
+            }
+            else
+            {
+                impl_->shaderTexture = std::move(replacement);
+                impl_->shaderWidth = impl_->display.imageWidth;
+                impl_->shaderHeight = impl_->display.imageHeight;
+            }
+        }
         bool titleChanged = impl_->gameWasLoaded != gameLoaded;
         const bool wasOverclockEnabled = impl_->cpuOverclockEnabled;
-        drawInterface(running, gameLoaded, impl_->fileManager, impl_->texture.get(), impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
+        drawInterface(running, gameLoaded, impl_->fileManager, shaderActive ? impl_->shaderTexture.get() : impl_->texture.get(), shaderActive, impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
                       { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->cpuOverclockPercent, impl_->cpuOverclockPercentCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled, impl_->rewindEnabled, impl_->rewindLevel, impl_->renderTiles, impl_->renderSprites, impl_->renderWindow, impl_->renderLayersCallback, impl_->tileViewerOpen);
         titleChanged |= wasOverclockEnabled != impl_->cpuOverclockEnabled;
         const Common::Framebuffer *textureFrame = &framebuffer;
@@ -874,6 +949,25 @@ namespace R2BOY::Window
         {
             std::cerr << "Failed to update display texture: " << SDL_GetError() << '\n';
             return false;
+        }
+        if (shaderActive)
+        {
+            std::string error;
+            const bool rendered = impl_->shaderPipeline->render(textureFrame->data(), screenWidth, {screenWidth, screenHeight},
+                                                                {impl_->shaderWidth, impl_->shaderHeight}, impl_->shaderPixels, error);
+            if (rendered)
+            {
+                // A tela do jogo é opaca, inclusive quando o shader retorna RGB sem alfa.
+                for (auto &pixel : impl_->shaderPixels)
+                    pixel |= 0xff000000u;
+            }
+            if (!rendered || !SDL_UpdateTexture(impl_->shaderTexture.get(), nullptr, impl_->shaderPixels.data(), impl_->shaderWidth * sizeof(std::uint32_t)))
+            {
+                if (error.empty())
+                    error = SDL_GetError();
+                SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Shaders", error.c_str(), impl_->window.get());
+                impl_->display.shader = ShaderType::None;
+            }
         }
         ImGui::Render();
         const ImGuiIO &io = ImGui::GetIO();
