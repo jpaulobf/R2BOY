@@ -1,6 +1,7 @@
 #include "Window/Window.h"
 #include "Window/ConfigManager.h"
 #include "Window/TileViewer.h"
+#include <algorithm>
 #include <chrono>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -23,7 +24,7 @@ namespace
     void recentFilesUseRomLoadingFlow()
     {
         const auto configPath = std::filesystem::temp_directory_path() /
-            ("r2boy-recent-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".ini");
+                                ("r2boy-recent-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".ini");
         {
             R2BOY::Window::Window window;
             check(window.open(), "recent files test window must open");
@@ -34,13 +35,12 @@ namespace
             R2BOY::Window::FileManager files(config);
             int loads = 0;
             files.setRomOpenHandler([&](const auto &path, const auto &entry)
-            {
+                                    {
                 check(path.is_absolute(), "recent loads must use an absolute path");
                 check(!entry, "plain ROM must not supply a ZIP entry");
                 if (path.filename() == "missing.gb")
                     throw std::runtime_error("Missing ROM");
-                ++loads;
-            });
+                ++loads; });
             const auto frame = [&]()
             {
                 ImGui::NewFrame();
@@ -79,7 +79,7 @@ namespace
     {
 #ifdef _WIN32
         const auto directory = std::filesystem::temp_directory_path() /
-            ("r2boy-filename-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                               ("r2boy-filename-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         std::filesystem::create_directories(directory);
         const auto invalid = std::filesystem::path(std::wstring(1, wchar_t(0xD800)));
         const auto invalidRom = directory / std::filesystem::path(invalid.native() + L".gb");
@@ -104,10 +104,9 @@ namespace
             R2BOY::Window::FileManager files(config);
             unsigned loads = 0;
             files.setRomOpenHandler([&](const auto &path, const auto &)
-            {
+                                    {
                 check(path == valid, "valid filename must retain its native path");
-                ++loads;
-            });
+                ++loads; });
             const auto frame = [&]()
             {
                 ImGui::NewFrame();
@@ -138,8 +137,7 @@ namespace
         snapshot.loaded = snapshot.color = true;
         const R2BOY::Window::TileViewer::Pixels empty{};
         const auto maximum = std::numeric_limits<unsigned>::max();
-        const std::array<std::array<unsigned, 3>, 6> invalidSelections{{
-            {2, 0, 0}, {maximum, 0, 0}, {0, 2, 0}, {0, maximum, 0}, {0, 0, 8}, {0, 0, maximum}}};
+        const std::array<std::array<unsigned, 3>, 6> invalidSelections{{{2, 0, 0}, {maximum, 0, 0}, {0, 2, 0}, {0, maximum, 0}, {0, 0, 8}, {0, 0, maximum}}};
         for (const auto &selection : invalidSelections)
             check(R2BOY::Window::TileViewer::decode(snapshot, selection[0], selection[1], selection[2]) == empty,
                   "invalid bank/type/palette must return an empty image without reading outside the snapshot");
@@ -154,7 +152,7 @@ namespace
         const auto frame = [&]()
         {
             check(viewer.render([&]()
-            {
+                                {
                 viewerContext = ImGui::GetCurrentContext();
                 if (activateInput)
                 {
@@ -162,8 +160,8 @@ namespace
                     viewerContext->NavActivateId = ImGui::GetID("Palette");
                     viewerContext->NavActivateFlags = ImGuiActivateFlags_PreferInput;
                 }
-                return snapshot;
-            }), "palette test viewer must render");
+                return snapshot; }),
+                  "palette test viewer must render");
             check(ImGui::GetCurrentContext() == mainContext, "viewer must restore the main context after palette input");
         };
         const auto key = [&](ImGuiKey code, bool down)
@@ -190,7 +188,8 @@ namespace
             activateInput = false;
             int confirmed = -1;
             std::memcpy(&confirmed, viewerContext->ActiveIdValueOnActivation.Data, sizeof(confirmed));
-            const int expected = input[0] == '-' ? 0 : std::string(input) == "3" ? 3 : 7;
+            const int expected = input[0] == '-' ? 0 : std::string(input) == "3" ? 3
+                                                                                 : 7;
             check(confirmed == expected, "typed palette must clamp to the CGB range and preserve valid values");
             key(ImGuiKey_Escape, true);
             key(ImGuiKey_Escape, false);
@@ -209,7 +208,7 @@ namespace
         sample.palettes[1][3] = {0xFF000000, 0xFF111111, 0xFF222222, 0xFF333333};
         const auto pixels = R2BOY::Window::TileViewer::decode(sample, 1, 1, 3);
         check(pixels[0] == 0xFF111111 && pixels[1] == 0xFF222222 && pixels[2] == 0xFF333333 &&
-              pixels[3] == 0xFF000000 && pixels.back() == 0xFF111111,
+                  pixels[3] == 0xFF000000 && pixels.back() == 0xFF111111,
               "tiles must decode both bit planes, bank, palette and final tile in grid order");
         R2BOY::Window::Window window;
         check(window.open(), "tile viewer test window must open");
@@ -217,14 +216,13 @@ namespace
         bool running = true;
         unsigned snapshots = 0;
         window.setTileSnapshotProvider([&]()
-        {
+                                       {
             ++snapshots;
             R2BOY::Common::TileSnapshot data;
             data.loaded = true;
             data.banks[0][0] = 0x80;
             data.palettes[0][0] = {0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000};
-            return data;
-        });
+            return data; });
         const auto frame = [&]()
         {
             window.pollEvents(running);
@@ -243,7 +241,7 @@ namespace
         };
         const auto toggle = [&]()
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             check(main != nullptr, "main window must exist");
             ImGui::ActivateItemByID(ImHashStr("Debug", 0, main->GetID("##MenuBar")));
             frame();
@@ -272,11 +270,12 @@ namespace
             int mainX = 0, mainY = 0, mainWidth = 0, viewerX = 0, viewerY = 0;
             int mainTop = 0, mainRight = 0, viewerTop = 0, viewerLeft = 0;
             check(SDL_GetWindowPosition(mainWindow, &mainX, &mainY) && SDL_GetWindowSize(mainWindow, &mainWidth, nullptr) &&
-                  SDL_GetWindowPosition(findViewer(), &viewerX, &viewerY), "window positions must be readable");
+                      SDL_GetWindowPosition(findViewer(), &viewerX, &viewerY),
+                  "window positions must be readable");
             SDL_GetWindowBordersSize(mainWindow, &mainTop, nullptr, nullptr, &mainRight);
             SDL_GetWindowBordersSize(findViewer(), &viewerTop, &viewerLeft, nullptr, nullptr);
             check(viewerX - viewerLeft == mainX + mainWidth + mainRight + 1 &&
-                  viewerY - viewerTop == mainY - mainTop,
+                      viewerY - viewerTop == mainY - mainTop,
                   "viewer must align outer top edges with one pixel after main window");
         };
         checkSnap();
@@ -351,7 +350,7 @@ namespace
 
         // Fecha o modal e verifica que o foco devolvido à janela libera o teclado.
         ImGui::NewFrame();
-        ImGui::Begin("R2BOY v0.2.6", nullptr, ImGuiWindowFlags_NoNavInputs);
+        ImGui::Begin("R2BOY v0.3.0.1", nullptr, ImGuiWindowFlags_NoNavInputs);
         check(ImGui::BeginPopupModal("Open ROM"), "ROM selector must be open");
         ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
@@ -386,7 +385,7 @@ namespace
         };
         for (const auto *label : {"File", "Display", "Sound", "Input", "Debug", "Hacks"})
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             ImGui::ActivateItemByID(ImHashStr(label, 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -433,7 +432,7 @@ namespace
               "rewind defaults to disabled with Normal granularity");
         const auto openHacks = [&]()
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             check(main != nullptr, "main window exists");
             ImGui::ActivateItemByID(ImHashStr("Hacks", 0, main->GetID("##MenuBar")));
             frame();
@@ -444,7 +443,7 @@ namespace
         };
         const auto closeMenus = [&]()
         {
-            ImGui::ClosePopupsOverWindow(ImGui::FindWindowByName("R2BOY v0.2.6"), false);
+            ImGui::ClosePopupsOverWindow(ImGui::FindWindowByName("R2BOY v0.3.0.1"), false);
             frame();
         };
         auto *menu = openHacks();
@@ -489,12 +488,11 @@ namespace
         bool running = true, tiles = true, sprites = true, windowLayer = true;
         unsigned changes = 0;
         window.setRenderLayersCallback([&](bool renderTiles, bool renderSprites, bool renderWindow)
-        {
+                                       {
             tiles = renderTiles;
             sprites = renderSprites;
             windowLayer = renderWindow;
-            ++changes;
-        });
+            ++changes; });
         const auto frame = [&]()
         {
             window.pollEvents(running);
@@ -506,7 +504,7 @@ namespace
               "all three layers must start enabled");
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             ImGui::ActivateItemByID(ImHashStr("Display", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -517,7 +515,7 @@ namespace
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
             check(window.isRenderTilesEnabled() == tiles && window.isRenderSpritesEnabled() == sprites &&
-                  window.isRenderWindowEnabled() == windowLayer,
+                      window.isRenderWindowEnabled() == windowLayer,
                   "layer checkmarks must match callback values");
         };
         select("Render Tiles");
@@ -554,7 +552,7 @@ namespace
         check(window.isMasterSoundEnabled() && window.soundChannels() == 15, "sound starts fully enabled");
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             ImGui::ActivateItemByID(ImHashStr("Sound", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -599,7 +597,7 @@ namespace
         frame();
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             ImGui::ActivateItemByID(ImHashStr("File", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -649,7 +647,7 @@ namespace
         // Seleciona cada slot pelo submenu real do ImGui.
         for (int slot : {2, 3, 1})
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             ImGui::ActivateItemByID(ImHashStr("File", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -697,7 +695,7 @@ namespace
         frame();
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             ImGui::ActivateItemByID(ImHashStr("Display", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -714,7 +712,7 @@ namespace
         {
             int width = 0, height = 0;
             check(SDL_GetWindowSize(native, &width, &height), "shortcut window size must be available");
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             check(width == 160 * scale && height == 144 * scale + static_cast<int>(main->MenuBarHeight),
                   "Ctrl+1 through Ctrl+5 must size the game area, excluding the menu");
             check((SDL_GetWindowFlags(native) & SDL_WINDOW_FULLSCREEN) == 0 && main->MenuBarHeight > 0,
@@ -761,6 +759,131 @@ namespace
         checkScale(1);
     }
 
+#ifdef _WIN32
+    void shadersRenderThroughMenu()
+    {
+        R2BOY::Window::Window window;
+        check(window.open(), "shader menu window must open");
+        auto *native = SDL_GetWindowFromID(static_cast<SDL_WindowID>(
+            reinterpret_cast<intptr_t>(ImGui::GetMainViewport()->PlatformHandle)));
+        check(native != nullptr, "shader window must exist");
+        R2BOY::Common::Framebuffer framebuffer{};
+        for (int y = 0; y < 144; ++y)
+            for (int x = 0; x < 160; ++x)
+                framebuffer[y * 160 + x] = (x > y && x < y + 30) ? 0xffdd5511u : 0xff2277ccu;
+        const auto original = framebuffer;
+        bool running = true;
+        bool dmgMode = false;
+        const auto frame = [&]()
+        {
+            window.pollEvents(running);
+            check(window.renderFrame(running, true, framebuffer, dmgMode), "shader frame must render");
+        };
+        frame();
+        frame();
+        const auto hash = [&]()
+        {
+            std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> surface(
+                SDL_RenderReadPixels(SDL_GetRenderer(native), nullptr), SDL_DestroySurface);
+            check(surface != nullptr, "shader output must be readable");
+            Uint64 result = 1469598103934665603ULL;
+            for (int y = 40; y < surface->h; y += 7)
+                for (int x = 10; x < surface->w; x += 7)
+                {
+                    Uint8 r, g, b, a;
+                    check(SDL_ReadSurfacePixel(surface.get(), x, y, &r, &g, &b, &a), "shader pixel must be readable");
+                    result = (result ^ r) * 1099511628211ULL;
+                    result = (result ^ g) * 1099511628211ULL;
+                    result = (result ^ b) * 1099511628211ULL;
+                }
+            return result;
+        };
+        const auto select = [&](const char *label)
+        {
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
+            check(main != nullptr, "main ImGui window must exist");
+            ImGui::ActivateItemByID(ImHashStr("Display", 0, main->GetID("##MenuBar")));
+            frame();
+            frame();
+            auto *menu = ImGui::FindWindowByName("Display###Menu_00");
+            check(menu && menu->Active, "Display menu must open");
+            ImGui::ActivateItemByID(menu->GetID("Shaders"));
+            frame();
+            frame();
+            auto *submenu = ImGui::FindWindowByName("Shaders###Menu_01");
+            check(submenu && submenu->Active, "Shaders submenu must open");
+            ImGui::ActivateItemByID(submenu->GetID(label));
+            frame();
+            frame();
+            frame();
+        };
+        const Uint64 baseline = hash();
+        for (const char *label : {"Gauss Scanlines", "HQ2", "CRT", "CRT 3D", "ScaleFX"})
+        {
+            select(label);
+            check(hash() != baseline, "selected shader must change the rendered image");
+            check(framebuffer == original, "shader must preserve the Core framebuffer");
+            if (std::string(label) == "ScaleFX")
+            {
+                // Simula uma composição que usa o alfa da textura do jogo.
+                SDL_Texture *gameTexture = nullptr;
+                ImDrawData *drawData = ImGui::GetDrawData();
+                for (int i = 0; i < drawData->CmdListsCount; ++i)
+                    for (const ImDrawCmd &cmd : drawData->CmdLists[i]->CmdBuffer)
+                    {
+                        if (cmd.UserCallback || cmd.ElemCount == 0 || !cmd.GetTexID())
+                            continue;
+                        auto *texture = reinterpret_cast<SDL_Texture *>(static_cast<intptr_t>(cmd.GetTexID()));
+                        float width = 0, height = 0;
+                        if (SDL_GetTextureSize(texture, &width, &height) && width >= 160 && height >= 144 &&
+                            std::abs(width * 144 - height * 160) < 160)
+                            gameTexture = texture;
+                    }
+                check(gameTexture != nullptr, "ScaleFX game texture must be present");
+                check(SDL_SetTextureBlendMode(gameTexture, SDL_BLENDMODE_BLEND), "game texture blending must be configurable");
+                frame();
+                const auto checkVisible = [&]()
+                {
+                    std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> surface(
+                        SDL_RenderReadPixels(SDL_GetRenderer(native), nullptr), SDL_DestroySurface);
+                    check(surface != nullptr, "ScaleFX output must be readable");
+                    Uint8 r, g, b, a;
+                    check(SDL_ReadSurfacePixel(surface.get(), surface->w / 2, surface->h / 2, &r, &g, &b, &a),
+                          "ScaleFX center pixel must be readable");
+                    check(std::max({r, g, b}) > 50, "ScaleFX must display the game instead of a black screen");
+                    check(a == 255, "ScaleFX game image must be opaque");
+                };
+                checkVisible(); // CGB
+                framebuffer.fill(0xffffffffu);
+                dmgMode = true;
+                frame();
+                frame();
+                checkVisible(); // DMG, após aplicação da paleta selecionada.
+                framebuffer = original;
+                dmgMode = false;
+                frame();
+                frame();
+            }
+            if (std::string(label) == "HQ2")
+            {
+                int width = 0, height = 0;
+                check(SDL_GetWindowSize(native, &width, &height), "original shader window size must be readable");
+                check(SDL_SetWindowSize(native, width + 80, height + 72), "shader window resize must succeed");
+                frame();
+                frame();
+                frame();
+                check(SDL_SetWindowSize(native, width, height), "shader window size must be restorable");
+                frame();
+                frame();
+                frame();
+                check(framebuffer == original, "resizing must preserve the Core framebuffer");
+            }
+        }
+        select("None");
+        check(hash() == baseline, "None must restore the unfiltered image");
+    }
+#endif
+
     void displayMenuControlsWindow()
     {
         R2BOY::Window::Window window;
@@ -784,7 +907,7 @@ namespace
             int width = 0;
             int height = 0;
             check(SDL_GetWindowSize(native, &width, &height), "window size must be available");
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             check(main->MenuBarHeight > 0, "windowed mode must show the menu again");
             check(width == 160 * scale && height == 144 * scale + static_cast<int>(main->MenuBarHeight),
                   "scale must size the game area, excluding the menu");
@@ -793,7 +916,7 @@ namespace
         };
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             ImGui::ActivateItemByID(ImHashStr("Display", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -827,7 +950,7 @@ namespace
                   "fullscreen menu must enable fullscreen");
             check(SDL_GetWindowFullscreenMode(native) == nullptr,
                   "fullscreen must use the desktop without an exclusive display mode");
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             check(main->MenuBarHeight == 0, "fullscreen must not draw or reserve space for the menu");
             const auto &vertices = main->DrawList->VtxBuffer;
             check(vertices.Size >= 4, "game image must be drawn");
@@ -848,7 +971,7 @@ namespace
 
         const auto checkScanlines = [&](Uint8 brightness)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
             frame();
@@ -918,7 +1041,7 @@ namespace
             ++fastForwardChanges; });
         const auto selectHack = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
             ImGui::ActivateItemByID(ImHashStr("Hacks", 0, main->GetID("##MenuBar")));
@@ -966,7 +1089,7 @@ namespace
                           : position == std::string::npos,
                   "title must immediately append or remove the complete overclock warning");
             if (enabled)
-                check(title.find("R2BOY v0.2.6 | FPS: ") == 0,
+                check(title.find("R2BOY v0.3.0.1 | FPS: ") == 0,
                       "overclock warning must appear after the FPS value");
         };
         checkTitle(false);
@@ -983,7 +1106,7 @@ namespace
             ++multiplierChanges; });
         const auto clickMultiplier = [&](float fraction)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
             ImGui::ActivateItemByID(ImHashStr("Hacks", 0, main->GetID("##MenuBar")));
@@ -995,7 +1118,8 @@ namespace
             const auto &style = ImGui::GetStyle();
             const float rowHeight = ImGui::GetFontSize() + style.ItemSpacing.y;
             io.AddMousePosEvent(menu->DC.CursorStartPos.x + 1.0f + 148.0f * fraction,
-                                menu->DC.CursorStartPos.y + 2 * rowHeight + ImGui::GetFrameHeight() / 2);
+                                menu->DC.CursorStartPos.y + 5 * rowHeight +
+                                    2 * (style.SeparatorSize + style.ItemSpacing.y) + ImGui::GetFrameHeight() / 2);
             frame();
             io.AddMouseButtonEvent(0, true);
             frame();
@@ -1037,7 +1161,7 @@ namespace
         const auto originalFrame = framebuffer;
         const auto checkPalette = [&](const std::array<std::uint32_t, 4> &expected, unsigned brightness = 100)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.2.6");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.3.0.1");
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
             frame();
@@ -1152,6 +1276,14 @@ int main(int argc, char **argv)
 {
     try
     {
+#ifdef _WIN32
+        if (argc == 2 && std::string(argv[1]) == "--shaders")
+        {
+            shadersRenderThroughMenu();
+            std::cout << "Shader menu tests passed.\n";
+            return 0;
+        }
+#endif
         if (argc == 2 && std::string(argv[1]) == "--rewind")
         {
             rewindMenuControlsHistory();
