@@ -16,6 +16,7 @@ improving.
 - Play with a keyboard or gamepad, with turbo buttons and fast-forward.
 - Automatic battery saves and three save state slots.
 - Windowed and fullscreen display, color palettes, scanlines and bilinear filtering.
+- Experimental GPU shaders on Windows: Gauss Scanlines, HQ2, CRT, CRT 3D and ScaleFX.
 - Optional CPU overclock with an adjustable 1.00x–2.00x multiplier, and unlimited sprites.
 - Complete audio: two pulse channels (with sweep), wave and noise channels,
   stereo mixing, played through the default output device. Master and per-channel
@@ -31,6 +32,8 @@ Launch R2BOY, choose **File > Open ROM...** (or press **Ctrl+O**) and select a
 game. If a ZIP contains multiple games, choose one from the list.
 
 The **Display** menu provides window scales, fullscreen modes and visual options.
+The **Display > Shaders** effects currently require the Windows Direct3D 11 backend;
+the normal display remains available on Linux and if a shader cannot be loaded.
 Press **Esc** to leave fullscreen.
 
 ## Controls
