@@ -80,7 +80,7 @@ namespace R2BOY::System
         auto nextRewind = FramePacer::Clock::now();
         // A interface nunca altera a pausa manual de Pause/Break.
         const auto emulationPaused = [&]()
-        { return paused || menuPaused; };
+        { return paused || menuPaused || window.isMinimized(); };
         // Saldo de ciclos a executar; pode ficar negativo ao concluir uma instrução.
         double cycleCredit = 0;
         auto lastExecution = FramePacer::Clock::now();
@@ -276,6 +276,9 @@ namespace R2BOY::System
             if (window.isMinimized())
             {
                 // Reduz uso de CPU em segundo plano e descarta o tempo pausado.
+                audio.clear();
+                board.takeAudioSamples();
+                cycleCredit = 0;
                 window.renderTileViewer();
                 SDL_Delay(50);
                 lastExecution = FramePacer::Clock::now();
@@ -372,6 +375,16 @@ namespace R2BOY::System
             {
                 renderFailed = true;
                 break;
+            }
+
+            if (window.takeDisplayTransition())
+            {
+                audio.clear();
+                board.takeAudioSamples();
+                input.clear();
+                cycleCredit = 0;
+                lastExecution = FramePacer::Clock::now();
+                framePacer.reset(lastExecution);
             }
 
             // ImGui abre/fecha os menus durante renderFrame(). Descarta o tempo

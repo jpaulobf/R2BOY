@@ -52,6 +52,8 @@ namespace R2BOY::Window
         // Indica se a janela está minimizada, permitindo suspender a renderização.
         bool isMinimized() const;
 
+        bool takeDisplayTransition();
+
         // Callback síncrono: recebe o caminho e, para ZIP, o membro selecionado.
         // Exceções std::exception são capturadas pelo seletor e exibidas ao usuário.
         using RomOpenHandler = FileManager::RomOpenHandler;
@@ -154,10 +156,10 @@ namespace R2BOY::Window
 
         // Callback para o CPU Overclock Percent
         using CPUOverclockPercentCallback = std::function<void(int)>;
-        
+
         // Atualiza o callback do CPU Overclock Percent
         void setCPUOverclockPercentCallback(CPUOverclockPercentCallback callback);
-        
+
         // Retorna o percentual de overclock utilizado pela cpu
         int cpuOverclockPercent() const;
 

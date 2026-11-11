@@ -1,4 +1,5 @@
 #include "Window.h"
+#include "FullscreenResolution.h"
 #include "ConfigManager.h"
 #include "TileViewer.h"
 #include "NtscShaderPipeline.h"
@@ -20,7 +21,7 @@ namespace R2BOY::Window
     {
         constexpr int screenWidth = Common::Constants::ScreenWidth;
         constexpr int screenHeight = Common::Constants::ScreenHeight;
-        const char *emuTitle = "R2BOY v0.4.0";
+        const char *emuTitle = "R2BOY v0.5.0";
 
         struct PalettePreset
         {
@@ -80,6 +81,7 @@ namespace R2BOY::Window
 
         struct DisplaySettings
         {
+            FullscreenResolution resolution;
             int scale = 4;
             bool scanlines = false;
             int scanlinesLevel = 5;
@@ -110,7 +112,7 @@ namespace R2BOY::Window
             }
         };
 
-        void drawInterface(bool &running, bool gameLoaded, FileManager &fileManager,
+        void drawInterface(SDL_Window *nativeWindow, bool &running, bool gameLoaded, FileManager &fileManager,
                            SDL_Texture *texture, bool shaderActive, bool &bilinearFilter, bool &invertBAYB,
                            const Window::InvertBAYBCallback &invertBAYBCallback, DisplaySettings &display,
                            Window::RomAction &romAction, int &stateSlot,
@@ -198,16 +200,17 @@ namespace R2BOY::Window
                             }
                         }
                         ImGui::Separator();
+                        display.resolution.menu(nativeWindow);
                         const auto fullscreenItem = [&display](const char *label, DisplayMode mode)
                         {
-                            if (ImGui::MenuItem(label, nullptr, display.mode == mode))
+                            if (ImGui::MenuItem(label, mode == DisplayMode::Fullscreen ? "Ctrl+F ou Alt+Enter" : nullptr, display.mode == mode))
                             {
                                 display.mode = display.mode == mode ? DisplayMode::Windowed : mode;
                                 display.pending = true;
                             }
                         };
-                        fullscreenItem("Borderless Fullscreen Stretched", DisplayMode::FullscreenStretched);
-                        fullscreenItem("Borderless Fullscreen", DisplayMode::Fullscreen);
+                        fullscreenItem("Fullscreen Stretched", DisplayMode::FullscreenStretched);
+                        fullscreenItem("Fullscreen", DisplayMode::Fullscreen);
                         ImGui::Separator();
                         ImGui::MenuItem("Bilinear Filter", nullptr, &bilinearFilter);
                         ImGui::MenuItem("Scanlines", nullptr, &display.scanlines);
@@ -429,6 +432,7 @@ namespace R2BOY::Window
         DisplaySettings display;
         Common::Framebuffer filteredFrame{};
         DisplayMode appliedMode = DisplayMode::Windowed;
+        bool displayTransition = false;
 
         void updateTitle()
         {
@@ -456,10 +460,10 @@ namespace R2BOY::Window
                 const bool wasFullscreen = appliedMode != DisplayMode::Windowed;
                 if (fullscreen != wasFullscreen)
                 {
-                    // Modo nulo usa o desktop atual: nunca solicita fullscreen exclusivo.
-                    if ((fullscreen && !SDL_SetWindowFullscreenMode(nativeWindow, nullptr)) ||
-                        !SDL_SetWindowFullscreen(nativeWindow, fullscreen) || !SDL_SyncWindow(nativeWindow))
+                    if (fullscreen ? !display.resolution.enter(nativeWindow)
+                                   : (!SDL_SetWindowFullscreen(nativeWindow, false) || !SDL_SyncWindow(nativeWindow)))
                         return false;
+                    displayTransition = true;
                 }
                 if (!fullscreen)
                 {
@@ -610,6 +614,15 @@ namespace R2BOY::Window
             if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F12 &&
                 !event.key.repeat && impl_->gameWasLoaded)
                 impl_->romAction = RomAction::Reset;
+            if (event.type == SDL_EVENT_KEY_DOWN && event.key.windowID == SDL_GetWindowID(impl_->window.get()) &&
+                !event.key.repeat && !isMenuOpen() &&
+                ((event.key.key == SDLK_F && (event.key.mod & SDL_KMOD_CTRL) && !(event.key.mod & (SDL_KMOD_ALT | SDL_KMOD_SHIFT | SDL_KMOD_GUI))) ||
+                 (event.key.key == SDLK_RETURN && (event.key.mod & SDL_KMOD_ALT) && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_GUI)))))
+            {
+                impl_->display.mode = impl_->display.mode == DisplayMode::Windowed ? DisplayMode::Fullscreen : DisplayMode::Windowed;
+                impl_->display.pending = true;
+                continue;
+            }
             if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE &&
                 !event.key.repeat && impl_->display.mode != DisplayMode::Windowed)
             {
@@ -633,6 +646,11 @@ namespace R2BOY::Window
                  event.window.windowID == SDL_GetWindowID(impl_->window.get())))
                 running = false;
         }
+    }
+
+    bool Window::takeDisplayTransition()
+    {
+        return std::exchange(impl_->displayTransition, false);
     }
 
     bool Window::isMinimized() const
@@ -890,7 +908,7 @@ namespace R2BOY::Window
         }
         bool titleChanged = impl_->gameWasLoaded != gameLoaded;
         const bool wasOverclockEnabled = impl_->cpuOverclockEnabled;
-        drawInterface(running, gameLoaded, impl_->fileManager, shaderActive ? impl_->shaderTexture.get() : impl_->texture.get(), shaderActive, impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
+        drawInterface(impl_->window.get(), running, gameLoaded, impl_->fileManager, shaderActive ? impl_->shaderTexture.get() : impl_->texture.get(), shaderActive, impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
                       { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->cpuOverclockPercent, impl_->cpuOverclockPercentCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled, impl_->rewindEnabled, impl_->rewindLevel, impl_->renderTiles, impl_->renderSprites, impl_->renderWindow, impl_->renderLayersCallback, impl_->tileViewerOpen);
         titleChanged |= wasOverclockEnabled != impl_->cpuOverclockEnabled;
         const Common::Framebuffer *textureFrame = &framebuffer;
