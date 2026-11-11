@@ -1,5 +1,5 @@
 #include "Window.h"
-#include "FullscreenResolution.h"
+#include "FullscreenController.h"
 #include "ConfigManager.h"
 #include "TileViewer.h"
 #include "NtscShaderPipeline.h"
@@ -81,7 +81,7 @@ namespace R2BOY::Window
 
         struct DisplaySettings
         {
-            FullscreenResolution resolution;
+            FullscreenController resolution;
             int scale = 4;
             bool scanlines = false;
             int scanlinesLevel = 5;
@@ -200,7 +200,15 @@ namespace R2BOY::Window
                             }
                         }
                         ImGui::Separator();
-                        display.resolution.menu(nativeWindow);
+                        if (ImGui::BeginMenu("Fullscreen Resolution"))
+                        {
+                            if (ImGui::MenuItem("Desktop Resolution", nullptr, display.resolution.selected() < 0))
+                                display.resolution.selectDesktop();
+                            for (int i = 0; i < display.resolution.count(); ++i)
+                                if (ImGui::MenuItem(display.resolution.label(i), nullptr, display.resolution.selected() == i, display.resolution.available(i)))
+                                    display.resolution.select(nativeWindow, i);
+                            ImGui::EndMenu();
+                        }
                         const auto fullscreenItem = [&display](const char *label, DisplayMode mode)
                         {
                             if (ImGui::MenuItem(label, mode == DisplayMode::Fullscreen ? "Ctrl+F ou Alt+Enter" : nullptr, display.mode == mode))
@@ -461,7 +469,7 @@ namespace R2BOY::Window
                 if (fullscreen != wasFullscreen)
                 {
                     if (fullscreen ? !display.resolution.enter(nativeWindow)
-                                   : (!SDL_SetWindowFullscreen(nativeWindow, false) || !SDL_SyncWindow(nativeWindow)))
+                                   : !display.resolution.leave(nativeWindow))
                         return false;
                     displayTransition = true;
                 }

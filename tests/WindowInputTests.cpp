@@ -241,7 +241,7 @@ namespace
         };
         const auto toggle = [&]()
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             check(main != nullptr, "main window must exist");
             ImGui::ActivateItemByID(ImHashStr("Debug", 0, main->GetID("##MenuBar")));
             frame();
@@ -350,7 +350,7 @@ namespace
 
         // Fecha o modal e verifica que o foco devolvido à janela libera o teclado.
         ImGui::NewFrame();
-        ImGui::Begin("R2BOY v0.4.0", nullptr, ImGuiWindowFlags_NoNavInputs);
+        ImGui::Begin("R2BOY v0.5.0", nullptr, ImGuiWindowFlags_NoNavInputs);
         check(ImGui::BeginPopupModal("Open ROM"), "ROM selector must be open");
         ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
@@ -385,7 +385,7 @@ namespace
         };
         for (const auto *label : {"File", "Display", "Sound", "Input", "Debug", "Hacks"})
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             ImGui::ActivateItemByID(ImHashStr(label, 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -432,7 +432,7 @@ namespace
               "rewind defaults to disabled with Normal granularity");
         const auto openHacks = [&]()
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             check(main != nullptr, "main window exists");
             ImGui::ActivateItemByID(ImHashStr("Hacks", 0, main->GetID("##MenuBar")));
             frame();
@@ -443,7 +443,7 @@ namespace
         };
         const auto closeMenus = [&]()
         {
-            ImGui::ClosePopupsOverWindow(ImGui::FindWindowByName("R2BOY v0.4.0"), false);
+            ImGui::ClosePopupsOverWindow(ImGui::FindWindowByName("R2BOY v0.5.0"), false);
             frame();
         };
         auto *menu = openHacks();
@@ -504,7 +504,7 @@ namespace
               "all three layers must start enabled");
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             ImGui::ActivateItemByID(ImHashStr("Display", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -552,7 +552,7 @@ namespace
         check(window.isMasterSoundEnabled() && window.soundChannels() == 15, "sound starts fully enabled");
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             ImGui::ActivateItemByID(ImHashStr("Sound", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -597,7 +597,7 @@ namespace
         frame();
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             ImGui::ActivateItemByID(ImHashStr("File", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -647,7 +647,7 @@ namespace
         // Seleciona cada slot pelo submenu real do ImGui.
         for (int slot : {2, 3, 1})
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             ImGui::ActivateItemByID(ImHashStr("File", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -695,7 +695,7 @@ namespace
         frame();
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             ImGui::ActivateItemByID(ImHashStr("Display", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -712,7 +712,7 @@ namespace
         {
             int width = 0, height = 0;
             check(SDL_GetWindowSize(native, &width, &height), "shortcut window size must be available");
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             check(width == 160 * scale && height == 144 * scale + static_cast<int>(main->MenuBarHeight),
                   "Ctrl+1 through Ctrl+5 must size the game area, excluding the menu");
             check((SDL_GetWindowFlags(native) & SDL_WINDOW_FULLSCREEN) == 0 && main->MenuBarHeight > 0,
@@ -800,7 +800,7 @@ namespace
         };
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             check(main != nullptr, "main ImGui window must exist");
             ImGui::ActivateItemByID(ImHashStr("Display", 0, main->GetID("##MenuBar")));
             frame();
@@ -907,7 +907,7 @@ namespace
             int width = 0;
             int height = 0;
             check(SDL_GetWindowSize(native, &width, &height), "window size must be available");
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             check(main->MenuBarHeight > 0, "windowed mode must show the menu again");
             check(width == 160 * scale && height == 144 * scale + static_cast<int>(main->MenuBarHeight),
                   "scale must size the game area, excluding the menu");
@@ -916,7 +916,7 @@ namespace
         };
         const auto select = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             ImGui::ActivateItemByID(ImHashStr("Display", 0, main->GetID("##MenuBar")));
             frame();
             frame();
@@ -950,7 +950,7 @@ namespace
                   "fullscreen menu must enable fullscreen");
             check(SDL_GetWindowFullscreenMode(native) == nullptr,
                   "fullscreen must use the desktop without an exclusive display mode");
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             check(main->MenuBarHeight == 0, "fullscreen must not draw or reserve space for the menu");
             const auto &vertices = main->DrawList->VtxBuffer;
             check(vertices.Size >= 4, "game image must be drawn");
@@ -971,7 +971,7 @@ namespace
 
         const auto checkScanlines = [&](Uint8 brightness)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
             frame();
@@ -1041,7 +1041,7 @@ namespace
             ++fastForwardChanges; });
         const auto selectHack = [&](const char *label)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
             ImGui::ActivateItemByID(ImHashStr("Hacks", 0, main->GetID("##MenuBar")));
@@ -1089,7 +1089,7 @@ namespace
                           : position == std::string::npos,
                   "title must immediately append or remove the complete overclock warning");
             if (enabled)
-                check(title.find("R2BOY v0.4.0 | FPS: ") == 0,
+                check(title.find("R2BOY v0.5.0 | FPS: ") == 0,
                       "overclock warning must appear after the FPS value");
         };
         checkTitle(false);
@@ -1106,7 +1106,7 @@ namespace
             ++multiplierChanges; });
         const auto clickMultiplier = [&](float fraction)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
             ImGui::ActivateItemByID(ImHashStr("Hacks", 0, main->GetID("##MenuBar")));
@@ -1161,7 +1161,7 @@ namespace
         const auto originalFrame = framebuffer;
         const auto checkPalette = [&](const std::array<std::uint32_t, 4> &expected, unsigned brightness = 100)
         {
-            auto *main = ImGui::FindWindowByName("R2BOY v0.4.0");
+            auto *main = ImGui::FindWindowByName("R2BOY v0.5.0");
             ImGui::ClosePopupsOverWindow(main, false);
             frame();
             frame();

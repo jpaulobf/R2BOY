@@ -72,7 +72,6 @@ namespace R2BOY::System
         StateFile states(std::filesystem::u8path(basePath) / "saves");
         bool cpuFaultReported = false;
         bool cpuStopReported = false;
-        bool menuPaused = false;
         RewindBuffer rewind;
         bool rewindEnabled = window.isRewindEnabled();
         bool rewindFailed = false;
@@ -80,7 +79,7 @@ namespace R2BOY::System
         auto nextRewind = FramePacer::Clock::now();
         // A interface nunca altera a pausa manual de Pause/Break.
         const auto emulationPaused = [&]()
-        { return paused || menuPaused || window.isMinimized(); };
+        { return pause.paused(); };
         // Saldo de ciclos a executar; pode ficar negativo ao concluir uma instrução.
         double cycleCredit = 0;
         auto lastExecution = FramePacer::Clock::now();
@@ -138,7 +137,7 @@ namespace R2BOY::System
             audio.clear();
             board.takeAudioSamples();
             input.clear();
-            paused = false;
+            pause.setManual(false);
             setUncappedSpeed(false);
             cpuFaultReported = false;
             cpuStopReported = false;
@@ -229,14 +228,15 @@ namespace R2BOY::System
                 rewind.configure(window.rewindFrameInterval());
                 rewindFailed = false;
             }
+            pause.setMinimized(window.isMinimized());
             if (input.takePauseToggleRequest() && board.cartridge().loaded())
             {
-                paused = !paused;
+                pause.setManual(!pause.manual());
                 input.clear();
                 cycleCredit = 0;
                 lastExecution = FramePacer::Clock::now();
                 framePacer.reset(lastExecution);
-                std::cout << (paused ? "Emulation paused.\n" : "Emulation resumed.\n");
+                std::cout << (pause.manual() ? "Emulation paused.\n" : "Emulation resumed.\n");
             }
             const bool inputEnabled = window.acceptsGameInput();
             auto inputFrame = board.baseClockCycles() / 70224;
@@ -390,9 +390,9 @@ namespace R2BOY::System
             // ImGui abre/fecha os menus durante renderFrame(). Descarta o tempo
             // da interface nos dois sentidos, sem tocar na pausa manual.
             const bool menuOpen = window.isMenuOpen();
-            if (menuPaused != menuOpen)
+            if (pause.menu() != menuOpen)
             {
-                menuPaused = menuOpen;
+                pause.setMenu(menuOpen);
                 input.clear();
                 cycleCredit = 0;
                 lastExecution = FramePacer::Clock::now();

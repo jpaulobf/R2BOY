@@ -3,6 +3,7 @@
 #include "Core/Board.h"
 #include "Audio.h"
 #include "Input.h"
+#include "PauseState.h"
 
 namespace R2BOY::System
 {
@@ -27,6 +28,6 @@ namespace R2BOY::System
         bool vsyncEnabled = true;
         bool fastForwardEnabled = true;
         bool uncappedSpeed = false;
-        bool paused = false; // Pausa manual; a pausa temporária dos menus é independente.
+        PauseState pause;
     };
 }
