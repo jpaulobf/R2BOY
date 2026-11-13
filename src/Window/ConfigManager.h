@@ -15,7 +15,11 @@ namespace R2BOY::Window
         ~ConfigManager();
 
         void loadConfigFile();
-        void saveConfigFile() const;
+        // Grava a configuração atomicamente e informa se a operação foi concluída.
+        bool saveConfigFile() const;
+        // Consulta as demais preferências preservadas no arquivo INI.
+        std::string getValue(const std::string &key) const;
+        void setValue(const std::string &key, const std::string &value);
         void addRomToList(const std::string &romPath);
         const std::list<std::string> &getRecentRoms() const { return recentRoms; }
         const std::string &getLastRomPath() const { return lastRomPath; }

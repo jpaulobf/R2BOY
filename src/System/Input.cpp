@@ -8,12 +8,6 @@ namespace R2BOY::System
 
     Input::Input()
     {
-        mapKey(SDLK_W, BUTTON_UP);
-        mapKey(SDLK_S, BUTTON_DOWN);
-        mapKey(SDLK_A, BUTTON_LEFT);
-        mapKey(SDLK_D, BUTTON_RIGHT);
-        mapKey(SDLK_BACKSPACE, BUTTON_SELECT);
-        mapKey(SDLK_RETURN, BUTTON_START);
         mapGamepad(SDL_GAMEPAD_BUTTON_DPAD_UP, BUTTON_UP);
         mapGamepad(SDL_GAMEPAD_BUTTON_DPAD_DOWN, BUTTON_DOWN);
         mapGamepad(SDL_GAMEPAD_BUTTON_DPAD_LEFT, BUTTON_LEFT);
@@ -73,16 +67,29 @@ namespace R2BOY::System
 
     void Input::configureABBAButtons(bool invert)
     {
-        clear();
-        mapKey(SDLK_J, invert ? BUTTON_A : BUTTON_B);
-        mapKey(SDLK_K, BUTTON_A, invert);
-        mapKey(SDLK_I, invert ? BUTTON_B : BUTTON_A, true);
-        mapKey(SDLK_U, BUTTON_B, !invert);
-        // Posições SDL: South=A, East=B, West=X, North=Y no layout Xbox.
+        invert_ = invert;
+        setKeyboardMapping(keyboardMapping_);
         mapGamepad(SDL_GAMEPAD_BUTTON_SOUTH, invert ? BUTTON_A : BUTTON_B);
         mapGamepad(SDL_GAMEPAD_BUTTON_EAST, BUTTON_A, invert);
         mapGamepad(SDL_GAMEPAD_BUTTON_WEST, BUTTON_B, !invert);
         mapGamepad(SDL_GAMEPAD_BUTTON_NORTH, invert ? BUTTON_B : BUTTON_A, true);
+    }
+
+    void Input::setKeyboardMapping(const KeyboardMapping &mapping)
+    {
+        keyboardMapping_ = mapping;
+        clear();
+        keyMap_.clear();
+        constexpr GameBoyButtons buttons[] = {BUTTON_UP, BUTTON_DOWN, BUTTON_LEFT, BUTTON_RIGHT,
+                                              BUTTON_B, BUTTON_A, BUTTON_B, BUTTON_A, BUTTON_START, BUTTON_SELECT};
+        // Traduz os índices do layout armazenado para as funções após a inversão.
+        constexpr int inverted[] = {0, 1, 2, 3, 5, 7, 4, 6, 8, 9};
+        for (int i = 0; i < 10; ++i)
+        {
+            const int target = invert_ ? inverted[i] : i;
+            if (keyboardMapping_[i])
+                mapKey(keyboardMapping_[i], buttons[target], target == 6 || target == 7);
+        }
     }
 
     void Input::clear()

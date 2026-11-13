@@ -5,6 +5,7 @@
 #include <functional>
 #include <string>
 #include "FileManager.h"
+#include "System/KeyboardMapping.h"
 #include "Common/Framebuffer.h"
 #include "Common/TileSnapshot.h"
 
@@ -94,6 +95,10 @@ namespace R2BOY::Window
 
         // Substitui o callback do menu; não aplica o layout imediatamente.
         void setInvertBAYBCallback(InvertBAYBCallback callback);
+
+        // Entrega à Engine o mapeamento carregado e as alterações confirmadas.
+        using KeyboardMappingCallback = std::function<void(const System::KeyboardMapping &)>;
+        void setKeyboardMappingCallback(KeyboardMappingCallback callback);
 
         // Callback para notificar mudanças no estado do VSync.
         using VSyncCallback = std::function<void(bool)>;

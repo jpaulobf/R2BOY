@@ -4,6 +4,8 @@
 #include "VideoLayout.h"
 #include "VideoPresenter.h"
 #include "ConfigManager.h"
+#include "KeyboardDialog.h"
+#include "KeyboardConfig.h"
 #include "TileViewer.h"
 #include "NtscShaderPipeline.h"
 #include "Common/Constants.h"
@@ -92,7 +94,7 @@ namespace R2BOY::Window
                            std::array<int, 4> &channelVolumes, const Window::ChannelVolumeCallback &channelVolumeCallback,
                            bool &serialOutputEnabled, bool &rewindEnabled, int &rewindLevel,
                            bool &renderTiles, bool &renderSprites, bool &renderWindow, const Window::RenderLayersCallback &renderLayersCallback,
-                           bool &tileViewerOpen)
+                           bool &tileViewerOpen, KeyboardDialog &keyboardDialog, const KeyboardDialog::Saver &saveKeyboard)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -180,6 +182,12 @@ namespace R2BOY::Window
                     {
                         if (ImGui::MenuItem("Invert BA/YB Buttons", nullptr, &invertBAYB) && invertBAYBCallback)
                             invertBAYBCallback(invertBAYB);
+                        ImGui::Separator();
+                        if (ImGui::MenuItem("Configure Keyboard..."))
+                        {
+                            keyboardDialog.setInverted(invertBAYB);
+                            keyboardDialog.open();
+                        }
                         ImGui::EndMenu();
                     }
                     if (ImGui::BeginMenu("Debug"))
@@ -236,6 +244,7 @@ namespace R2BOY::Window
                     ImGui::EndMenuBar();
                 }
                 fileManager.draw();
+                keyboardDialog.draw(saveKeyboard);
 
                 // Frame completo, centralizado e com proporção nativa.
                 const ImVec2 available = ImGui::GetContentRegionAvail();
@@ -285,6 +294,9 @@ namespace R2BOY::Window
         bool tileViewerOpen = false;
         ConfigManager configManager;
         FileManager fileManager{configManager};
+        KeyboardConfig keyboardConfig{configManager};
+        KeyboardDialog keyboardDialog;
+        KeyboardMappingCallback keyboardMappingCallback;
         RomAction romAction = RomAction::None;
         int stateSlot = 1;
         bool bilinearFilter = false;
@@ -473,7 +485,7 @@ namespace R2BOY::Window
 
     bool Window::isMenuOpen() const
     {
-        return ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup);
+        return impl_->keyboardDialog.active() || ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup);
     }
 
     void Window::pollEvents(bool &running, const InputHandler &inputHandler)
@@ -490,6 +502,9 @@ namespace R2BOY::Window
                  event.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED) &&
                 event.window.windowID == SDL_GetWindowID(impl_->window.get()))
                 impl_->tileViewer.snapTo(impl_->window.get());
+            // A captura do diálogo tem prioridade sobre os atalhos e a entrada de jogo.
+            if (impl_->keyboardDialog.processEvent(event, SDL_GetWindowID(impl_->window.get())))
+                continue;
             ImGui_ImplSDL3_ProcessEvent(&event);
             if (inputHandler)
                 inputHandler(event, acceptsGameInput());
@@ -580,6 +595,15 @@ namespace R2BOY::Window
     {
         impl_->romFileName = std::move(name);
         impl_->updateTitle();
+    }
+
+    void Window::setKeyboardMappingCallback(KeyboardMappingCallback callback)
+    {
+        impl_->keyboardMappingCallback = std::move(callback);
+        const auto mapping = impl_->keyboardConfig.load();
+        impl_->keyboardDialog.setMapping(mapping);
+        if (impl_->keyboardMappingCallback)
+            impl_->keyboardMappingCallback(mapping);
     }
 
     void Window::setInvertBAYBCallback(InvertBAYBCallback callback)
@@ -751,7 +775,11 @@ namespace R2BOY::Window
         bool titleChanged = impl_->gameWasLoaded != gameLoaded;
         const bool wasOverclockEnabled = impl_->cpuOverclockEnabled;
         drawInterface(impl_->window.get(), running, gameLoaded, impl_->fileManager, impl_->video.texture(shaderActive), shaderActive, impl_->bilinearFilter, impl_->invertBAYB, impl_->invertBAYBCallback, impl_->display, impl_->romAction, impl_->stateSlot, impl_->vsyncEnabled, [this]()
-                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->cpuOverclockPercent, impl_->cpuOverclockPercentCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled, impl_->rewindEnabled, impl_->rewindLevel, impl_->renderTiles, impl_->renderSprites, impl_->renderWindow, impl_->renderLayersCallback, impl_->tileViewerOpen);
+                      { toggleVSync(); }, impl_->fastForwardEnabled, impl_->fastForwardCallback, impl_->cpuOverclockEnabled, impl_->cpuOverclockCallback, impl_->cpuOverclockPercent, impl_->cpuOverclockPercentCallback, impl_->unlimitedSpritesEnabled, impl_->unlimitedSpritesCallback, impl_->masterSound, impl_->soundChannels, impl_->soundCallback, impl_->soundVolume, impl_->volumeCallback, impl_->channelVolumes, impl_->channelVolumeCallback, impl_->serialOutputEnabled, impl_->rewindEnabled, impl_->rewindLevel, impl_->renderTiles, impl_->renderSprites, impl_->renderWindow, impl_->renderLayersCallback, impl_->tileViewerOpen, impl_->keyboardDialog, [this](const System::KeyboardMapping &mapping)
+                      {
+                          if (!impl_->keyboardConfig.save(mapping)) return false;
+                          if (impl_->keyboardMappingCallback) impl_->keyboardMappingCallback(mapping);
+                          return true; });
         titleChanged |= wasOverclockEnabled != impl_->cpuOverclockEnabled;
         if (!impl_->video.upload(impl_->window.get(), impl_->display, palettePresets[impl_->display.palettePreset],
                                  gameLoaded, dmgMode, shaderActive, framebuffer))

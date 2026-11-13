@@ -56,6 +56,10 @@ namespace R2BOY::System
                                             board.setAudioOutputVolume(channel, percent);
                                             audio.clear(); });
 
+        // A Engine conecta o mapeamento confirmado à entrada do sistema emulado.
+        window.setKeyboardMappingCallback([this](const KeyboardMapping &mapping)
+                                          { input.setKeyboardMapping(mapping); });
+
         // Configura a callback para inverter os botões A/B e B/A conforme a interface do usuário.
         window.setInvertBAYBCallback([this](bool invert)
                                      { input.configureABBAButtons(invert); });

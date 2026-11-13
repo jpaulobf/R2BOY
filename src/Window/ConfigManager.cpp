@@ -77,10 +77,10 @@ namespace R2BOY::Window
             lastRomPath = found->second;
     }
 
-    void ConfigManager::saveConfigFile() const
+    bool ConfigManager::saveConfigFile() const
     {
         if (!canSave)
-            return;
+            return false;
         std::ostringstream file;
         file << "# Last Opened Files\n";
         auto rom = recentRoms.begin();
@@ -99,11 +99,24 @@ namespace R2BOY::Window
         {
             const auto text = file.str();
             System::writeAtomicFile(configFilePath, std::vector<std::uint8_t>(text.begin(), text.end()));
+            return true;
         }
         catch (const std::exception &error)
         {
             std::cerr << "ConfigManager: Unable to save configuration: " << Common::escapeTerminal(error.what()) << '\n';
+            return false;
         }
+    }
+
+    std::string ConfigManager::getValue(const std::string &key) const
+    {
+        const auto found = configValues.find(key);
+        return found == configValues.end() ? std::string{} : found->second;
+    }
+
+    void ConfigManager::setValue(const std::string &key, const std::string &value)
+    {
+        configValues[key] = value;
     }
 
     void ConfigManager::addRomToList(const std::string &romPath)

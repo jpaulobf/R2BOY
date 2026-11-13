@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/IO/GameBoyButtons.h"
+#include "KeyboardMapping.h"
 #include <SDL3/SDL.h>
 #include <map>
 #include <set>
@@ -56,6 +57,9 @@ namespace R2BOY::System
         // Substitui a associação da tecla e remove seu eventual estado pressionado.
         void mapKey(SDL_Keycode key, Core::IO::GameBoyButtons button, bool turbo = false);
 
+        // Substitui os mapeamentos de teclado.
+        void setKeyboardMapping(const KeyboardMapping &mapping);
+
         // Substitui a associação de um botão físico, compartilhada por todos os controles.
         void mapGamepad(SDL_GamepadButton physical, Core::IO::GameBoyButtons button, bool turbo = false);
 
@@ -67,6 +71,8 @@ namespace R2BOY::System
         };
         // Abre um controle ainda não registrado; falhas são relatadas sem encerrar a aplicação.
         void openGamepad(SDL_JoystickID id);
+        KeyboardMapping keyboardMapping_ = defaultKeyboardMapping();
+        bool invert_ = false;
         std::map<SDL_Keycode, Binding> keyMap_;
         std::map<SDL_GamepadButton, Binding> gamepadMap_;
         std::set<SDL_Keycode> pressedKeys_;
