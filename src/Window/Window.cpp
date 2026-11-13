@@ -26,7 +26,7 @@ namespace R2BOY::Window
     {
         constexpr int screenWidth = Common::Constants::ScreenWidth;
         constexpr int screenHeight = Common::Constants::ScreenHeight;
-        const char *emuTitle = "R2BOY v0.5.0";
+        const char *emuTitle = "R2BOY v0.5.1";
 
         // Cada linha corresponde a uma posição do bloco, do tom claro ao escuro.
         // Creme, areia e rosa queimado convergem para sombras marrons e bordô.
