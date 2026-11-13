@@ -1,5 +1,6 @@
 #include "Window/Window.h"
 #include "Window/ConfigManager.h"
+#include "Window/KeyboardDialog.h"
 #include "Window/TileViewer.h"
 #include <algorithm>
 #include <chrono>
@@ -19,6 +20,73 @@ namespace
     {
         if (!condition)
             throw std::runtime_error(message);
+    }
+
+    // Confirma que captura, falha, nova tentativa, Cancel e Default respeitam o rascunho.
+    void keyboardDialogEditsTransactionally()
+    {
+        R2BOY::Window::Window window;
+        check(window.open(), "keyboard test window must open");
+        R2BOY::Common::Framebuffer framebuffer{};
+        bool running = true;
+        check(window.renderFrame(running, false, framebuffer), "initial frame must render");
+        R2BOY::Window::KeyboardDialog dialog;
+        bool allowSave = false;
+        int attempts = 0;
+        auto applied = R2BOY::System::defaultKeyboardMapping();
+        const auto frame = [&]()
+        {
+            ImGui::NewFrame();
+            ImGui::Begin("Keyboard test");
+            dialog.draw([&](const auto &mapping)
+                        {
+                ++attempts;
+                if (!allowSave) return false;
+                applied = mapping;
+                return true; });
+            ImGui::End();
+            ImGui::Render();
+        };
+        dialog.open();
+        frame();
+        ImGuiWindow *child = nullptr;
+        for (auto *candidate : ImGui::GetCurrentContext()->Windows)
+            if (std::strstr(candidate->Name, "Configure Keyboard/bindings"))
+                child = candidate;
+        check(child != nullptr, "keyboard binding list must be visible");
+        ImGui::ActivateItemByID(ImHashStr("###key", 0, child->GetID(0)));
+        frame();
+        SDL_Event event{};
+        event.type = SDL_EVENT_KEY_DOWN;
+        event.key.windowID = 123;
+        event.key.key = SDLK_Q;
+        check(dialog.processEvent(event, 123), "mapping must capture key");
+        frame();
+        auto *popup = ImGui::FindWindowByName("Configure Keyboard");
+        check(popup != nullptr, "keyboard dialog must exist");
+        ImGui::ActivateItemByID(popup->GetID("Save"));
+        frame();
+        check(dialog.active() && attempts == 1 && applied[0] == SDLK_W, "failed save must keep draft open and not apply it");
+        allowSave = true;
+        ImGui::ActivateItemByID(popup->GetID("Save"));
+        frame();
+        check(!dialog.active() && attempts == 2 && applied[0] == SDLK_Q, "successful retry must apply captured key");
+        dialog.open();
+        frame();
+        popup = ImGui::FindWindowByName("Configure Keyboard");
+        ImGui::ActivateItemByID(popup->GetID("Default"));
+        frame();
+        ImGui::ActivateItemByID(popup->GetID("Cancel"));
+        frame();
+        check(!dialog.active() && applied[0] == SDLK_Q, "cancel must discard the default draft");
+        dialog.open();
+        frame();
+        popup = ImGui::FindWindowByName("Configure Keyboard");
+        ImGui::ActivateItemByID(popup->GetID("Default"));
+        frame();
+        ImGui::ActivateItemByID(popup->GetID("Save"));
+        frame();
+        check(applied == R2BOY::System::defaultKeyboardMapping(), "default must restore factory bindings");
     }
 
     void recentFilesUseRomLoadingFlow()
@@ -1290,6 +1358,7 @@ int main(int argc, char **argv)
             std::cout << "Rewind menu tests passed.\n";
             return 0;
         }
+        keyboardDialogEditsTransactionally();
         recentFilesUseRomLoadingFlow();
         unsupportedNativeFileNames();
         tileViewerPaletteBounds();
