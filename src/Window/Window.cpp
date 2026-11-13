@@ -97,6 +97,7 @@ namespace R2BOY::Window
                            bool &tileViewerOpen, KeyboardDialog &keyboardDialog, const KeyboardDialog::Saver &saveKeyboard)
         {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
+            bool openAbout = false;
             ImGui::SetNextWindowPos(viewport->WorkPos);
             ImGui::SetNextWindowSize(viewport->WorkSize);
             const bool showMenu = display.mode == DisplayMode::Windowed;
@@ -241,7 +242,24 @@ namespace R2BOY::Window
                         ImGui::MenuItem("Enable Serial Output", nullptr, &serialOutputEnabled);
                         ImGui::EndMenu();
                     }
+                    if (ImGui::BeginMenu("About"))
+                    {
+                        openAbout = ImGui::MenuItem("About R2BOY");
+                        ImGui::EndMenu();
+                    }
                     ImGui::EndMenuBar();
+                }
+                if (openAbout)
+                    ImGui::OpenPopup("About R2BOY");
+                ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+                bool aboutVisible = true;
+                if (ImGui::BeginPopupModal("About R2BOY", &aboutVisible, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
+                {
+                    ImGui::TextUnformatted("Software livre e aberto para a comunidade.");
+                    ImGui::TextUnformatted("Ver licen\xC3\xA7" "a de uso.");
+                    ImGui::Spacing();
+                    ImGui::TextUnformatted("Vers\xC3\xA3" "o: " R2_APP_VERSION " - Data: 13/11/2026");
+                    ImGui::EndPopup();
                 }
                 fileManager.draw();
                 keyboardDialog.draw(saveKeyboard);
